@@ -58,7 +58,6 @@ module.exports = {
 };
 
 async function handlePrefixCommand(message) {
-  // Uses the local PREFIX variable instead of message.client.prefix
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const commandName = args.shift().toLowerCase();
 
@@ -69,6 +68,7 @@ async function handlePrefixCommand(message) {
   try {
     // Convert to interaction-like object for prefix commands
     const fakeInteraction = {
+      client: message.client, // 👈 ADD THIS LINE HERE TO FIX THE ERROR
       user: message.author,
       member: message.member,
       guild: message.guild,
@@ -97,4 +97,3 @@ async function handlePrefixCommand(message) {
     message.reply('❌ There was an error executing this command!');
   }
 }
-
