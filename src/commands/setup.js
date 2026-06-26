@@ -42,6 +42,7 @@ module.exports = {
         for (const channel of guild.channels.cache.values()) {
           try {
             await channel.delete();
+            await logAction(guild, 'Channel Deleted', interaction.user, `Channel: ${channel.name}`);
           } catch (e) {
             console.error(`Could not delete channel ${channel.name}`);
           }
@@ -54,20 +55,26 @@ module.exports = {
         name: 'General',
         type: 4,
       });
+      await logAction(guild, 'Category Created', interaction.user, 'Category: General');
       const voiceCategory = await guild.channels.create({
         name: 'Voice',
         type: 4,
       });
+      await logAction(guild, 'Category Created', interaction.user, 'Category: Voice');
       const staffCategory = await guild.channels.create({
         name: 'Staff',
         type: 4,
       });
+      await logAction(guild, 'Category Created', interaction.user, 'Category: Staff');
 
       // Create roles
       await interaction.editReply('👥 Creating roles...');
       const adminRole = await guild.roles.create({ name: 'Admin', color: '#FF0000' });
+      await logAction(guild, 'Role Created', interaction.user, 'Role: Admin');
       const modRole = await guild.roles.create({ name: 'Moderator', color: '#0099FF' });
+      await logAction(guild, 'Role Created', interaction.user, 'Role: Moderator');
       const memberRole = await guild.roles.create({ name: 'Member', color: '#00FF00' });
+      await logAction(guild, 'Role Created', interaction.user, 'Role: Member');
 
       // Create channels based on template
       await interaction.editReply('📢 Creating channels...');
@@ -102,6 +109,7 @@ module.exports = {
           type: channelData.type,
           parent: channelData.parent,
         });
+        await logAction(guild, 'Channel Created', interaction.user, `Channel: ${channelData.name}`);
       }
 
       // Save settings
