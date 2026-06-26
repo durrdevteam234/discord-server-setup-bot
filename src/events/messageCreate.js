@@ -62,21 +62,25 @@ async function handlePrefixCommand(message) {
   const commandName = args.shift().toLowerCase();
 
   const command = message.client.commands.get(commandName);
-
   if (!command) return;
 
   try {
-    // Convert to interaction-like object for prefix commands
+    // 1. Extract the mentioned user/member
+    const targetUser = message.mentions.users.first();
+    const targetMember = message.mentions.members.first();
+
+    // 2. Extract any text after the mention (like the reason for a ban/warn)
+    const textArgs = args.filter(arg => !arg.startsWith('<@') && !arg.startsWith('<#'));
+    const reasonText = textArgs.join(' ');
+
+    // Convert to a smarter interaction-like object for prefix commands
     const fakeInteraction = {
-      client: message.client, // 👈 ADD THIS LINE HERE TO FIX THE ERROR
+      client: message.client,
       user: message.author,
       member: message.member,
       guild: message.guild,
       channel: message.channel,
       reply: async (options) => {
-        if (typeof options === 'string') {
-          return message.reply(options);
-        }
         return message.reply(options);
       },
       deferReply: async () => {},
@@ -85,8 +89,11 @@ async function handlePrefixCommand(message) {
       },
       options: {
         getSubcommand: () => null,
-        getString: () => null,
-        getUser: () => null,
+        // Returns the text argument if the command asks for a string
+        getString: () => reasonText || null,
+        // Returns the actual tagged user instead of null!
+        getUser: () => targetUser || null,
+        getMember: () => targetMember || null,
         getBoolean: () => null,
       },
     };
