@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { readData } = require('../utils/database');
+const { formatCute } = require('../utils/textFormatter.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -19,16 +20,23 @@ module.exports = {
 
     try {
       const user = interaction.options.getUser('user');
+      const guildId = interaction.guildId;
+      
       const warnings = readData('warnings.json');
-      const userWarnings = warnings[interaction.guildId]?.[user.id] || [];
+      const userWarnings = warnings[guildId]?.[user.id] || [];
 
       if (userWarnings.length === 0) {
         return interaction.reply({ content: `✅ ${user.tag} has no warnings!`, ephemeral: true });
       }
 
+      // Check for cute mode styled layout text matching active configurations
+      const cuteData = readData('cute.json');
+      const cuteStyle = cuteData[guildId] || 'off';
+      const embedTitle = cuteStyle !== 'off' ? formatCute(`Warnings for ${user.username}`, cuteStyle, '📜') : `📜 Warnings for ${user.tag}`;
+
       const embed = new EmbedBuilder()
         .setColor('#FF6600')
-        .setTitle(`Warnings for ${user.tag}`)
+        .setTitle(embedTitle)
         .setDescription(`Total Warnings: ${userWarnings.length}`);
 
       userWarnings.forEach((warning, index) => {

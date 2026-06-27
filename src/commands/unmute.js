@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { logAction } = require('../utils/auditLog');
 const { readData, writeData } = require('../utils/database');
+const { formatCute } = require('../utils/textFormatter.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -20,19 +21,30 @@ module.exports = {
 
     try {
       const user = interaction.options.getUser('user');
-      const member = await interaction.guild.members.fetch(user.id);
+      const guildId = interaction.guildId;
+      
+      const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+      if (!member) {
+        return interaction.reply({ content: '❌ This user is not in the server.', ephemeral: true });
+      }
 
+      // Remove the native communications timeout
       await member.timeout(null);
 
-      // Remove from mutes data
+      // Remove from mutes data registry safely
       const mutes = readData('mutes.json');
-      if (mutes[interaction.guildId] && mutes[interaction.guildId][user.id]) {
-        delete mutes[interaction.guildId][user.id];
+      if (mutes[guildId] && mutes[guildId][user.id]) {
+        delete mutes[guildId][user.id];
         writeData('mutes.json', mutes);
       }
 
-      // Log to mod-logs
-      const modLogsChannel = interaction.guild.channels.cache.find(ch => ch.name === 'mod-logs');
+      // Check for cute mode styled channel name variants
+      const cuteData = readData('cute.json');
+      const cuteStyle = cuteData[guildId] || 'off';
+      const cuteChannelName = cuteStyle !== 'off' ? formatCute('mod-logs', cuteStyle, '🛡️') : 'mod-logs';
+
+      // Log to mod-logs channel
+      const modLogsChannel = interaction.guild.channels.cache.find(ch => ch.name === 'mod-logs' || ch.name === cuteChannelName);
       if (modLogsChannel) {
         const embed = new EmbedBuilder()
           .setColor('#00FF00')

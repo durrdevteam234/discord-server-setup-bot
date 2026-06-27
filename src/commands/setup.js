@@ -23,13 +23,21 @@ module.exports = {
         .setDescription('Delete all existing channels before setup')
         .setRequired(false)
     )
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    // Limits UI visibility in Discord to users who can manage the server or have admin access
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
   async execute(interaction) {
-    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-      return interaction.reply({ content: '❌ You need Administrator permissions!', ephemeral: true });
+    // Permission validation gate for both Slash and Prefix command configurations
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && 
+        !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+      return interaction.reply({ 
+        content: '❌ You need **Administrator** or **Manage Server** permissions to use the setup configurations!', 
+        ephemeral: true 
+      });
     }
 
+    // Since channel creation/deletion takes time, defer the reply to prevent timeout errors
+    if (interaction.deferred || interaction.replied) return;
     await interaction.deferReply({ ephemeral: true });
 
     const template = interaction.options.getString('template');
@@ -37,12 +45,10 @@ module.exports = {
     const guild = interaction.guild;
 
     try {
-      // Pull saved font profile style string ('wide', 'small-caps', 'bubbles', or 'off')
       const cuteData = readData('cute.json');
       const cuteStyle = cuteData[guild.id] || 'off'; 
       const isCuteActive = cuteStyle !== 'off';
 
-      // Clear existing channels if requested
       if (clear) {
         await interaction.editReply('🗑️ Clearing existing channels...');
         for (const channel of guild.channels.cache.values()) {
@@ -55,12 +61,10 @@ module.exports = {
         }
       }
 
-      // Generate dynamic Category Names with specific styles and icons
       const genCatName = formatCute('General', cuteStyle, '🎀');
       const vcCatName = formatCute('Voice', cuteStyle, '🔊');
       const staffCatName = formatCute('Staff', cuteStyle, '🔒');
 
-      // Create categories
       await interaction.editReply('📁 Creating categories...');
       const generalCategory = await guild.channels.create({ name: genCatName, type: 4 });
       await logAction(guild, 'Category Created', interaction.user, `Category: ${genCatName}`);
@@ -71,7 +75,6 @@ module.exports = {
       const staffCategory = await guild.channels.create({ name: staffCatName, type: 4 });
       await logAction(guild, 'Category Created', interaction.user, `Category: ${staffCatName}`);
 
-      // Create roles
       await interaction.editReply('👥 Creating roles...');
       const adminRole = await guild.roles.create({ name: 'Admin', color: '#FF0000' });
       await logAction(guild, 'Role Created', interaction.user, 'Role: Admin');
@@ -80,7 +83,6 @@ module.exports = {
       const memberRole = await guild.roles.create({ name: 'Member', color: '#00FF00' });
       await logAction(guild, 'Role Created', interaction.user, 'Role: Member');
 
-      // Create channels based on template
       await interaction.editReply('📢 Creating channels...');
       
       const channels = {
@@ -117,7 +119,6 @@ module.exports = {
         await logAction(guild, 'Channel Created', interaction.user, `Channel: ${channelData.name}`);
       }
 
-      // Save settings
       const settings = readData('settings.json');
       settings[guild.id] = { 
         template, 

@@ -1,6 +1,7 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ChannelType } = require('discord.js');
 const { logAction } = require('../utils/auditLog');
 const { readData, writeData } = require('../utils/database');
+const { formatCute } = require('../utils/textFormatter.js');
 
 let ticketCounter = 0;
 
@@ -20,94 +21,80 @@ module.exports = {
   async execute(interaction) {
     const subcommand = interaction.options.getSubcommand();
     const guild = interaction.guild;
+    const guildId = interaction.guildId;
 
-    if (subcommand === 'create') {
-      try {
+    try {
+      // Fetch the server's cute font choice
+      const cuteData = readData('cute.json');
+      const cuteStyle = cuteData[guildId] || 'off';
+
+      if (subcommand === 'create') {
         ticketCounter++;
-        const ticketName = `ticket-${ticketCounter}`;
+        
+        // Generate a stylized name if cute mode is active (e.g., 🎟️﹒ｔｉｃｋｅｔ－０００１)
+        const rawName = `ticket-${ticketCounter.toString().padStart(4, '0')}`;
+        const ticketChannelName = cuteStyle !== 'off' ? formatCute(rawName, cuteStyle, '🎟️') : rawName;
 
-        // Create ticket category if it doesn't exist
-        let ticketCategory = guild.channels.cache.find(ch => ch.name === 'Tickets' && ch.type === 4);
-        if (!ticketCategory) {
-          ticketCategory = await guild.channels.create({
-            name: 'Tickets',
-            type: 4,
-          });
-        }
-
-        // Create ticket channel
+        // Create a private text channel for support
         const ticketChannel = await guild.channels.create({
-          name: ticketName,
-          type: 0,
-          parent: ticketCategory.id,
+          name: ticketChannelName,
+          type: ChannelType.GuildText,
           permissionOverwrites: [
             {
-              id: guild.id,
-              deny: ['ViewChannel'],
+              id: guild.roles.everyone.id,
+              deny: [PermissionFlagsBits.ViewChannel], // Hide from normal members
             },
             {
               id: interaction.user.id,
-              allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'],
-            },
-            {
-              id: guild.roles.cache.find(r => r.name === 'Admin')?.id || guild.id,
-              allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'],
+              allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages], // Allow the creator to view
             },
           ],
         });
 
-        // Save ticket data
-        const tickets = readData('tickets.json');
-        if (!tickets[guild.id]) tickets[guild.id] = {};
-        tickets[guild.id][ticketCounter] = {
-          creator: interaction.user.id,
-          channel: ticketChannel.id,
-          created: new Date().toISOString(),
-        };
-        writeData('tickets.json', tickets);
-
-        // Log action
-        await logAction(guild, 'Ticket Created', interaction.user, `Ticket: ${ticketName}`);
-
+        const welcomeTitle = cuteStyle !== 'off' ? formatCute('Ticket Created', cuteStyle, '🎫') : '🎫 Ticket Created';
         const embed = new EmbedBuilder()
-          .setColor('#0099FF')
-          .setTitle('✅ Ticket Created')
-          .setDescription(`Your ticket has been created: ${ticketChannel}`);
+          .setColor('#00FF00')
+          .setTitle(welcomeTitle)
+          .setDescription(`Hello ${interaction.user}, thanks for opening a ticket! Support will be with you shortly.\nUse \`/ticket close\` to end this support session.`);
 
-        await interaction.reply({ embeds: [embed], ephemeral: true });
-      } catch (error) {
-        console.error('Ticket creation error:', error);
-        await interaction.reply({ content: `❌ Error creating ticket: ${error.message}`, ephemeral: true });
+        await ticketChannel.send({ content: `${interaction.user}`, embeds: [embed] });
+        await logAction(guild, 'Ticket Opened', interaction.user, `Channel: ${ticketChannel.name}`);
+
+        await interaction.reply({ content: `✅ Your ticket has been created: ${ticketChannel}`, ephemeral: true });
       }
-    } else if (subcommand === 'close') {
-      try {
-        const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
-        const tickets = readData('tickets.json');
-        const guildTickets = tickets[guild.id] || {};
 
-        let isCreator = false;
-        let ticketId = null;
+      if (subcommand === 'close') {
+        // Staff validation gate: Only people who can Manage Guild or are Admin can close support threads
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && 
+            !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+          return interaction.reply({ 
+            content: '❌ Only staff members with **Administrator** or **Manage Server** permissions can close tickets!', 
+            ephemeral: true 
+          });
+        }
 
-        for (const [id, ticket] of Object.entries(guildTickets)) {
-          if (ticket.channel === interaction.channelId && ticket.creator === interaction.user.id) {
-            isCreator = true;
-            ticketId = id;
-            break;
+        // Safety check to ensure they are inside a ticket channel
+        if (!interaction.channel.name.includes('ticket')) {
+          return interaction.reply({ content: '❌ This command can only be executed inside an active ticket channel!', ephemeral: true });
+        }
+
+        await interaction.reply({ content: '🔒 Closing ticket channel in 5 seconds...' });
+        await logAction(guild, 'Ticket Closed', interaction.user, `Channel: ${interaction.channel.name}`);
+
+        setTimeout(async () => {
+          try {
+            await interaction.channel.delete();
+          } catch (e) {
+            console.error('Failed to delete ticket channel:', e);
           }
-        }
-
-        if (!isAdmin && !isCreator) {
-          return interaction.reply({ content: '❌ Only admins or the ticket creator can close this ticket!', ephemeral: true });
-        }
-
-        // Log action
-        await logAction(guild, 'Ticket Closed', interaction.user, `Ticket ID: ${ticketId}`);
-
-        await interaction.reply({ content: '🗑️ Closing ticket in 5 seconds...' });
-        setTimeout(() => interaction.channel.delete(), 5000);
-      } catch (error) {
-        console.error('Ticket close error:', error);
-        await interaction.reply({ content: `❌ Error closing ticket: ${error.message}`, ephemeral: true });
+        }, 5000);
+      }
+    } catch (error) {
+      console.error('Ticket system error:', error);
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp({ content: `❌ Ticket error: ${error.message}`, ephemeral: true });
+      } else {
+        await interaction.reply({ content: `❌ Ticket error: ${error.message}`, ephemeral: true });
       }
     }
   },

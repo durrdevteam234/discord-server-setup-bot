@@ -1,20 +1,14 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { logAction } = require('../utils/auditLog');
+const { readData } = require('../utils/database');
+const { formatCute } = require('../utils/textFormatter.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('kick')
     .setDescription('Kick a user from the server')
-    .addUserOption(option =>
-      option.setName('user')
-        .setDescription('User to kick')
-        .setRequired(true)
-    )
-    .addStringOption(option =>
-      option.setName('reason')
-        .setDescription('Reason for kick')
-        .setRequired(false)
-    )
+    .addUserOption(option => option.setName('user').setDescription('User to kick').setRequired(true))
+    .addStringOption(option => option.setName('reason').setDescription('Reason for kick').setRequired(false))
     .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers),
 
   async execute(interaction) {
@@ -25,12 +19,26 @@ module.exports = {
     try {
       const user = interaction.options.getUser('user');
       const reason = interaction.options.getString('reason') || 'No reason provided';
-      const member = await interaction.guild.members.fetch(user.id);
+      const guildId = interaction.guildId;
+
+      const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+      if (!member) {
+        return interaction.reply({ content: '❌ This user is not in the server.', ephemeral: true });
+      }
+
+      if (!member.kickable) {
+        return interaction.reply({ content: '❌ I cannot kick this user! Their roles might be higher than mine or yours.', ephemeral: true });
+      }
 
       await member.kick(reason);
 
-      // Log to mod-logs
-      const modLogsChannel = interaction.guild.channels.cache.find(ch => ch.name === 'mod-logs');
+      // Check for cute mode styled channel name variants
+      const cuteData = readData('cute.json');
+      const cuteStyle = cuteData[guildId] || 'off';
+      const cuteChannelName = cuteStyle !== 'off' ? formatCute('mod-logs', cuteStyle, '🛡️') : 'mod-logs';
+
+      // Log to mod-logs channel
+      const modLogsChannel = interaction.guild.channels.cache.find(ch => ch.name === 'mod-logs' || ch.name === cuteChannelName);
       if (modLogsChannel) {
         const embed = new EmbedBuilder()
           .setColor('#FF9900')

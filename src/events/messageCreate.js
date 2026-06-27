@@ -1,5 +1,6 @@
 const { ChannelType, EmbedBuilder } = require('discord.js');
-const { readData, updateData } = require('../utils/database');
+const { readData, writeData } = require('../utils/database');
+const { formatCute } = require('../utils/textFormatter.js'); // Import to find styled channels
 
 const cooldowns = new Map();
 const PREFIX = '|'; // Set your prefix directly here
@@ -10,7 +11,6 @@ module.exports = {
     if (message.author.bot || message.channel.type === ChannelType.DM) return;
 
     // 1. CHECK FOR PREFIX COMMANDS FIRST
-    // This runs instantly on every message and avoids all leveling code
     if (message.content.startsWith(PREFIX)) {
       await handlePrefixCommand(message);
       return; // Stop here so commands don't trigger leveling XP
@@ -19,7 +19,12 @@ module.exports = {
     const guildId = message.guildId;
     const userId = message.author.id;
 
-    // 2. LEVELING SYSTEM & COOLDOWN
+    // 2. CHECK IF LEVELING IS TOGGLED ON FOR THIS SERVER
+    const settings = readData('settings.json');
+    const isLevelingEnabled = settings[guildId]?.levelingEnabled === true;
+    if (!isLevelingEnabled) return; // Ignore message for XP tracking if disabled
+
+    // 3. LEVELING SYSTEM & COOLDOWN
     const cooldownKey = `${guildId}-${userId}`;
     if (cooldowns.has(cooldownKey)) {
       const expirationTime = cooldowns.get(cooldownKey) + 10000;
@@ -35,22 +40,39 @@ module.exports = {
       if (!levels[guildId]) levels[guildId] = {};
       if (!levels[guildId][userId]) levels[guildId][userId] = { level: 1, xp: 0 };
 
+      const userProfile = levels[guildId][userId];
       const xpGain = Math.floor(Math.random() * 41) + 10;
-      levels[guildId][userId].xp += xpGain;
+      userProfile.xp += xpGain;
 
-      const requiredXp = levels[guildId][userId].level * 100;
-      if (levels[guildId][userId].xp >= requiredXp) {
-        levels[guildId][userId].level += 1;
-        levels[guildId][userId].xp = 0;
+      const requiredXp = userProfile.level * 100;
+      
+      if (userProfile.xp >= requiredXp) {
+        // Fix duplicate/previous calculation bug by deducting required XP instead of dropping to 0
+        userProfile.xp -= requiredXp; 
+        userProfile.level += 1;
 
-        const levelsChannel = message.guild.channels.cache.find(ch => ch.name === 'levels');
+        // Save immediately before attempting to send messages to prevent race conditions
+        levels[guildId][userId] = userProfile;
+        writeData('levels.json', levels);
+
+        // Determine the target level channel name depending on active cute styles
+        const cuteData = readData('cute.json');
+        const cuteStyle = cuteData[guildId] || 'off';
+        const targetChannelName = cuteStyle !== 'off' ? formatCute('levels', cuteStyle, '✨') : 'levels';
+
+        // Find the channel safely checking either normal or styled name configurations
+        const levelsChannel = message.guild.channels.cache.find(ch => 
+          ch.name === 'levels' || ch.name === targetChannelName
+        );
+
         if (levelsChannel) {
-          levelsChannel.send(`🎉 ${message.author} has reached level ${levels[guildId][userId].level}!`);
+          await levelsChannel.send(`🎉 ${message.author} has reached level ${userProfile.level}!`);
         }
+      } else {
+        // Save normal incremental XP updates
+        levels[guildId][userId] = userProfile;
+        writeData('levels.json', levels);
       }
-
-      const { writeData } = require('../utils/database');
-      writeData('levels.json', levels);
     } catch (error) {
       console.error('Error in leveling system:', error);
     }
@@ -65,15 +87,12 @@ async function handlePrefixCommand(message) {
   if (!command) return;
 
   try {
-    // 1. Extract the mentioned user/member
     const targetUser = message.mentions.users.first();
     const targetMember = message.mentions.members.first();
 
-    // 2. Extract any text after the mention (like the reason for a ban/warn)
     const textArgs = args.filter(arg => !arg.startsWith('<@') && !arg.startsWith('<#'));
     const reasonText = textArgs.join(' ');
 
-    // Convert to a smarter interaction-like object for prefix commands
     const fakeInteraction = {
       client: message.client,
       user: message.author,
@@ -89,9 +108,7 @@ async function handlePrefixCommand(message) {
       },
       options: {
         getSubcommand: () => null,
-        // Returns the text argument if the command asks for a string
         getString: () => reasonText || null,
-        // Returns the actual tagged user instead of null!
         getUser: () => targetUser || null,
         getMember: () => targetMember || null,
         getBoolean: () => null,
