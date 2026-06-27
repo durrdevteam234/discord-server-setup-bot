@@ -4,7 +4,7 @@
   "description": "Discord bot for server setup, ticketing, leveling, and moderation",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/deploy-commands.js && node src/index.js",
+    "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "deploy": "node src/deploy-commands.js"
   },
