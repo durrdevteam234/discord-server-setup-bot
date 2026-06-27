@@ -83,6 +83,11 @@ async function handlePrefixCommand(message) {
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const commandName = args.shift().toLowerCase();
 
+  // 🔥 BLOCK "CUTE" FROM BEING USED VIA PREFIX
+  if (commandName === 'cute') {
+    return message.reply('❌ The `|cute` command has been disabled. Please use the slash command `/cute` instead!');
+  }
+
   const command = message.client.commands.get(commandName);
   if (!command) return;
 
