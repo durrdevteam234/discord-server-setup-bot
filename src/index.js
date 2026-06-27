@@ -18,12 +18,13 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers // 🔥 REQUIRED to detect joins/leaves for welcome logs
+    GatewayIntentBits.MessageContent, // 🔥 REQUIRED: Make sure this toggle is turned ON in the Discord Developer Portal!
+    GatewayIntentBits.GuildMembers
   ]
 });
 
 client.commands = new Collection();
+client.prefix = '|'; // 🟢 FIX: Attaches the default prefix back to the engine
 
 // 1. LOAD SLASH COMMANDS DYNAMICALLY
 const commandsPath = path.join(__dirname, 'commands');
@@ -39,7 +40,7 @@ if (fs.existsSync(commandsPath)) {
   }
 }
 
-// 2. LOAD EVENT HANDLERS DYNAMICALLY (This safely handles interactionCreate.js!)
+// 2. LOAD EVENT HANDLERS DYNAMICALLY
 const eventsPath = path.join(__dirname, 'events');
 if (fs.existsSync(eventsPath)) {
   const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
