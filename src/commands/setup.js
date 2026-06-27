@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ChannelType } = require('discord.js'); // 1. Added ChannelType
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ChannelType } = require('discord.js');
 const { logAction } = require('../utils/auditLog');
 const { readData, writeData } = require('../utils/database');
 const { formatCute } = require('../utils/textFormatter.js'); 
@@ -46,14 +46,13 @@ module.exports = {
       const cuteStyle = cuteData[guild.id] || 'off'; 
       const isCuteActive = cuteStyle !== 'off';
 
-      // 2. Safely clear channels without deleting the command interaction channel immediately
       if (clear) {
         await interaction.editReply('🗑️ Clearing existing channels...');
         for (const channel of guild.channels.cache.values()) {
-          // Do NOT delete the channel the user is currently using to run this command yet
-          if (channel.id === interaction.channelId) continue; 
+          if (channel.id === interaction.channelId) continue; // Protect current channel
           try {
             await channel.delete();
+            try { await logAction(guild, 'Channel Deleted', interaction.user, `Channel: ${channel.name}`); } catch(e){}
           } catch (e) {
             console.error(`Could not delete channel ${channel.name}`);
           }
@@ -65,7 +64,6 @@ module.exports = {
       const staffCatName = formatCute('Staff', cuteStyle, '🔒');
 
       await interaction.editReply('📁 Creating categories...');
-      // 3. Updated 'type' to use ChannelType enums
       const generalCategory = await guild.channels.create({ name: genCatName, type: ChannelType.GuildCategory });
       try { await logAction(guild, 'Category Created', interaction.user, `Category: ${genCatName}`); } catch(e){}
       
@@ -85,7 +83,6 @@ module.exports = {
 
       await interaction.editReply('📢 Creating channels...');
       
-      // 3. Updated types to ChannelType.GuildText (0) and ChannelType.GuildVoice (2)
       const channels = {
         general: { name: formatCute('general', cuteStyle, '💬'), parent: generalCategory.id, type: ChannelType.GuildText },
         announcements: { name: formatCute('announcements', cuteStyle, '📢'), parent: generalCategory.id, type: ChannelType.GuildText },
@@ -111,12 +108,18 @@ module.exports = {
         channels['voice-meetings'] = { name: formatCute('voice-meetings', cuteStyle, '👔'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
       }
 
+      let createdGeneralChannelId = null;
+
       for (const [key, channelData] of Object.entries(channels)) {
-        await guild.channels.create({
+        const createdChannel = await guild.channels.create({
           name: channelData.name,
           type: channelData.type,
           parent: channelData.parent,
         });
+        
+        if (key === 'general') {
+          createdGeneralChannelId = createdChannel.id;
+        }
         try { await logAction(guild, 'Channel Created', interaction.user, `Channel: ${channelData.name}`); } catch(e){}
       }
 
@@ -124,6 +127,7 @@ module.exports = {
       settings[guild.id] = { 
         template, 
         channels: Object.keys(channels), 
+        welcomeChannelId: createdGeneralChannelId, // Saves the welcome channel destination dynamically
         roles: [adminRole.id, modRole.id, memberRole.id],
         setupComplete: true,
         setupDate: new Date().toISOString(),
@@ -146,7 +150,6 @@ module.exports = {
 
       await interaction.editReply({ embeds: [embed] });
 
-      // 4. Finally delete the initial interaction channel if clear was requested
       if (clear) {
         const originChannel = guild.channels.cache.get(interaction.channelId);
         if (originChannel) await originChannel.delete().catch(() => null);
@@ -154,10 +157,7 @@ module.exports = {
 
     } catch (error) {
       console.error('Setup error:', error);
-      // Suppress crash if interaction context is broken
-      await interaction.editReply(`❌ Setup failed: ${error.message}`).catch(() => {
-        console.log("Could not send interaction reply because the channel was deleted.");
-      });
+      await interaction.editReply(`❌ Setup failed: ${error.message}`).catch(() => null);
     }
   },
 };

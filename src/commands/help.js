@@ -8,16 +8,17 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      const cute = readData('cute.json');
-      const isCute = cute[interaction.guildId]?.[interaction.user.id] || false;
+      // 🔄 Fix: Reads the guild's cute text setting properly to match your setup.js logic
+      const cuteData = readData('cute.json');
+      const cuteStyle = cuteData[interaction.guildId] || 'off'; 
+      const isCute = cuteStyle !== 'off';
 
-      // Check if client has a prefix property, otherwise fallback to '|'
       const prefix = interaction.client.prefix || '|';
 
       // Categorized command structures with explicit permission hints
       const publicCommands = [
         { name: '/help', desc: 'View this help menu layout.' },
-        { name: '/ticket', desc: 'Create a private support ticket.' },
+        { name: '/ticket create', desc: 'Create a private support ticket.' }, // ✨ Updated to sub-command format
         { name: '/rank', desc: 'Check your level and XP progress.' },
         { name: '/leaderboard', desc: 'View top 10 users by level.' },
         { name: '/purpose', desc: 'Learn about the bot and see its profile picture.' },
@@ -25,7 +26,10 @@ module.exports = {
 
       const staffCommands = [
         { name: '/setup', desc: 'Set up server templates (Gaming/Community/Study/Business).' },
-        { name: '/ticket-staff close', desc: 'Close an active ticket.' },
+        { name: '/clear-channels', desc: '🗑️ Wipes all categories and channels from the server.' }, // ✨ Added new command
+        { name: '/welcome setup', desc: 'Configure the welcome channel and message layouts.' }, // ✨ Added welcome sub-commands
+        { name: '/welcome toggle', desc: 'Enable or disable the welcome/leave system.' },
+        { name: '/ticket close', desc: '🔒 Close an active ticket.' }, // ✨ Updated to sub-command format
         { name: '/ban', desc: 'Ban a user from the server.' },
         { name: '/kick', desc: 'Kick a user from the server.' },
         { name: '/mute', desc: 'Mute a user for a set duration.' },

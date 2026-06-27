@@ -1,27 +1,37 @@
 const fs = require('fs');
 const path = require('path');
 
-const dataPath = path.join(__dirname, '..', '..', 'data');
+const DATA_DIR = path.join(__dirname, '../data');
 
-function readData(file) {
-  const filePath = path.join(dataPath, file);
-  if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, '{}');
-  }
-  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+// Automatically recreate the 'data' folder on Railway startup if wiped
+if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-function writeData(file, data) {
-  const filePath = path.join(dataPath, file);
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+function readData(fileName) {
+    const filePath = path.join(DATA_DIR, fileName);
+    
+    // Guard: If Railway wiped the file, return empty data instead of crashing
+    if (!fs.existsSync(filePath)) {
+        return {}; 
+    }
+    
+    try {
+        const fileContent = fs.readFileSync(filePath, 'utf8');
+        return JSON.parse(fileContent);
+    } catch (error) {
+        console.error(`Error reading ${fileName}, resetting data:`, error.message);
+        return {};
+    }
 }
 
-function updateData(file, guildId, userId, data) {
-  const fileData = readData(file);
-  if (!fileData[guildId]) fileData[guildId] = {};
-  if (!fileData[guildId][userId]) fileData[guildId][userId] = {};
-  fileData[guildId][userId] = { ...fileData[guildId][userId], ...data };
-  writeData(file, fileData);
+function writeData(fileName, data) {
+    const filePath = path.join(DATA_DIR, fileName);
+    try {
+        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+    } catch (error) {
+        console.error(`Error writing to ${fileName}:`, error.message);
+    }
 }
 
-module.exports = { readData, writeData, updateData };
+module.exports = { readData, writeData };

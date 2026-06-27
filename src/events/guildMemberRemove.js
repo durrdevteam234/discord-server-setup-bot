@@ -1,42 +1,28 @@
-const { EmbedBuilder } = require('discord.js');
+const { Events } = require('discord.js');
 const { readData } = require('../utils/database');
-const { formatCute } = require('../utils/textFormatter.js');
 
 module.exports = {
-  name: 'guildMemberRemove',
+  name: Events.GuildMemberRemove,
+  once: false,
   async execute(member) {
-    const guildId = member.guild.id;
+    const guild = member.guild;
     const settings = readData('settings.json');
-    const config = settings[guildId];
+    const serverSettings = settings[guild.id];
 
-    if (!config || !config.welcomeEnabled || !config.welcomeChannel) return;
+    if (!serverSettings || !serverSettings.welcomeChannelId) return;
 
-    const channel = member.guild.channels.cache.get(config.welcomeChannel);
-    if (!channel) return;
+    const goodbyeChannel = guild.channels.cache.get(serverSettings.welcomeChannelId);
 
-    const rawText = config.leaveText || '{user} has left the server. 😢';
-    const formattedText = rawText
-      .replace(/{user}/g, `**${member.user.tag}**`)
-      .replace(/{server}/g, member.guild.name);
-
-    // Fetch the server's cute font choice
-    const cuteData = readData('cute.json');
-    const cuteStyle = cuteData[guildId] || 'off';
-    const embedTitle = cuteStyle !== 'off' ? formatCute('Member Left', cuteStyle, '👋') : '👋 Member Left';
-
-    const embed = new EmbedBuilder()
-      .setColor('#808080')
-      .setTitle(embedTitle)
-      .setDescription(formattedText)
-      .setThumbnail(member.user.displayAvatarURL({ forceStatic: false }))
-      .setTimestamp()
-      .setFooter({ text: `Total Members: ${member.guild.memberCount}` });
+    // Guard: Prevent trying to announce a departure in a non-existent wiped workspace
+    if (!goodbyeChannel) {
+      console.warn(`⚠️ Farewell announcement failed: Channel not found in ${guild.name}.`);
+      return; 
+    }
 
     try {
-      await channel.send({ embeds: [embed] });
-    } catch (err) {
-      console.error('Failed to send leave embed:', err);
+      await goodbyeChannel.send(`👋 Goodbye ${member.user.tag}... We will miss you!`);
+    } catch (error) {
+      console.error('Failed to send exit log message:', error.message);
     }
-  }
+  },
 };
-

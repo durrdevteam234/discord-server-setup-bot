@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, ChannelType } = require('discord.js');
 const { readData, writeData } = require('../utils/database');
 const { formatCute } = require('../utils/textFormatter.js');
 
@@ -6,12 +6,16 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('welcome')
     .setDescription('Configure welcome and leave system settings')
-    // Limits UI visibility in Discord to users who can manage the server or have admin access
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addSubcommand(sub =>
       sub.setName('setup')
         .setDescription('Set up channels and messages')
-        .addChannelOption(opt => opt.setName('channel').setDescription('The channel for welcome/leave logs').setRequired(true))
+        .addChannelOption(opt => 
+          opt.setName('channel')
+            .setDescription('The channel for welcome/leave logs')
+            .setRequired(true)
+            .addChannelTypes(ChannelType.GuildText) // 🛡️ Fix: Restrict to Text Channels only
+        )
         .addStringOption(opt => opt.setName('welcome_text').setDescription('Use {user} and {server} in text').setRequired(false))
         .addStringOption(opt => opt.setName('leave_text').setDescription('Use {user} and {server} in text').setRequired(false))
     )
@@ -22,7 +26,6 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    // Permission validation gate for both Slash and Prefix command configurations
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && 
         !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
       return interaction.reply({ 
@@ -42,14 +45,11 @@ module.exports = {
         const welcomeText = interaction.options.getString('welcome_text') || 'Welcome {user} to {server}! 🎉';
         const leaveText = interaction.options.getString('leave_text') || '{user} has left the server. 😢';
 
-        // Check if a cute text style is currently active
         const cuteData = readData('cute.json');
         const cuteStyle = cuteData[guildId] || 'off';
 
-        // If cute mode is on, attempt to rename the chosen channel to match the aesthetic style
         if (cuteStyle !== 'off') {
           try {
-            // Clean the name first (remove old emojis if any, just keep raw alphanumeric text)
             const cleanName = channel.name.replace(/[^a-zA-Z0-9-]/g, '').toLowerCase() || 'welcome';
             const cuteChannelName = formatCute(cleanName, cuteStyle, '👋');
             await channel.setName(cuteChannelName);
@@ -58,14 +58,14 @@ module.exports = {
           }
         }
 
-        settings[guildId].welcomeChannel = channel.id;
+        // 🔄 Fix: Standardized to welcomeChannelId to match setup.js and events folder
+        settings[guildId].welcomeChannelId = channel.id; 
         settings[guildId].welcomeText = welcomeText;
         settings[guildId].leaveText = leaveText;
         if (settings[guildId].welcomeEnabled === undefined) settings[guildId].welcomeEnabled = true;
 
         writeData('settings.json', settings);
 
-        // Format embed elements matching style
         const titleText = cuteStyle !== 'off' ? formatCute('Welcome System Configured', cuteStyle, '⚙️') : '⚙️ Welcome System Configured';
 
         const embed = new EmbedBuilder()

@@ -1,42 +1,42 @@
-const { EmbedBuilder } = require('discord.js');
+const { Events } = require('discord.js'); // Updated to use Events enum
 const { readData } = require('../utils/database');
-const { formatCute } = require('../utils/textFormatter.js');
 
 module.exports = {
-  name: 'guildMemberAdd',
+  name: Events.GuildMemberAdd,
+  once: false,
   async execute(member) {
-    const guildId = member.guild.id;
+    const guild = member.guild;
     const settings = readData('settings.json');
-    const config = settings[guildId];
+    const serverSettings = settings[guild.id];
 
-    if (!config || !config.welcomeEnabled || !config.welcomeChannel) return;
+    if (!serverSettings) return;
 
-    const channel = member.guild.channels.cache.get(config.welcomeChannel);
-    if (!channel) return;
-
-    const rawText = config.welcomeText || 'Welcome {user} to {server}! 🎉';
-    const formattedText = rawText
-      .replace(/{user}/g, `${member}`)
-      .replace(/{server}/g, member.guild.name);
-
-    // Fetch the server's cute font choice
-    const cuteData = readData('cute.json');
-    const cuteStyle = cuteData[guildId] || 'off';
-    const embedTitle = cuteStyle !== 'off' ? formatCute('New Member Joined!', cuteStyle, '✨') : '✨ New Member Joined! ✨';
-
-    const embed = new EmbedBuilder()
-      .setColor('#FF69B4')
-      .setTitle(embedTitle)
-      .setDescription(formattedText)
-      .setThumbnail(member.user.displayAvatarURL({ forceStatic: false }))
-      .setTimestamp()
-      .setFooter({ text: `Total Members: ${member.guild.memberCount}` });
-
-    try {
-      await channel.send({ content: `${member}`, embeds: [embed] });
-    } catch (err) {
-      console.error('Failed to send welcome embed:', err);
+    // 1. Guard: Safely verify that a welcome channel exists before writing to it
+    if (serverSettings.welcomeChannelId) {
+      const welcomeChannel = guild.channels.cache.get(serverSettings.welcomeChannelId);
+      
+      if (welcomeChannel) {
+        try {
+          await welcomeChannel.send(`✨ Welcome to the server, ${member}! We are glad to have you here. ✨`);
+        } catch (error) {
+          console.error('Failed to send welcome message:', error.message);
+        }
+      } else {
+        console.warn(`⚠️ Saved welcome channel ID was not found in cache for ${guild.name}. Channel was likely wiped.`);
+      }
     }
-  }
-};
 
+    // 2. Automember Role Assigner (v14 syntax check)
+    if (serverSettings.roles && serverSettings.roles[2]) { // index 2 corresponds to your "Member" role in setup.js
+      const memberRoleId = serverSettings.roles[2];
+      try {
+        const role = guild.roles.cache.get(memberRoleId);
+        if (role) {
+          await member.roles.add(role); // Updated role manager assignment
+        }
+      } catch (error) {
+        console.error(`Failed to automatically assign role to ${member.user.tag}:`, error.message);
+      }
+    }
+  },
+};
