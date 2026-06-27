@@ -7,31 +7,23 @@ module.exports = {
   name: Events.MessageCreate,
   once: false,
   async execute(message) {
-    // Ignore bots and webhooks
     if (message.author.bot || message.webhookId) return;
 
-    // Fetch prefix dynamically or fall back to '|'
     const prefix = message.client.prefix || '|';
-
-    // Check if the message starts with the prefix
     if (!message.content.startsWith(prefix)) return;
 
     const args = message.content.slice(prefix.length).trim().split(/ +/);
     const commandName = args.shift().toLowerCase();
 
-    // ==========================================
-    // 🛠️ PREFIX COMMAND: |setup [template] [clear]
-    // ==========================================
     if (commandName === 'setup') {
       const guild = message.guild;
 
-      // 1. Permission Check
       if (!message.member.permissions.has(PermissionFlagsBits.Administrator) && 
           !message.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
         return message.reply('❌ You need **Administrator** or **Manage Server** permissions to use the setup configurations!');
       }
 
-      // ✅ FIX: Extract parameters securely using exact array indexes
+      // 🟢 SAFE EXTRACTION: Double check that the user actually typed arguments before running toLowerCase
       const template = args[0] ? args[0].toLowerCase() : null;
       const clearArg = args[1] ? args[1].toLowerCase() : null;
       const clear = clearArg === 'clear' || clearArg === 'true';
@@ -41,7 +33,6 @@ module.exports = {
         return message.reply(`❌ Please specify a valid template! Usage: \`${prefix}setup <gaming|community|study|business> [clear]\``);
       }
 
-      // Send a status updates anchor message
       const statusMessage = await message.reply('⏳ Initializing prefix template configuration setup...').catch(() => null);
 
       try {
@@ -49,11 +40,10 @@ module.exports = {
         const cuteStyle = cuteData[guild.id] || 'off'; 
         const isCuteActive = cuteStyle !== 'off';
 
-        // 2. Safe Channel Clear Loop
         if (clear) {
           if (statusMessage) await statusMessage.edit('🗑️ Clearing existing channels...');
           for (const channel of guild.channels.cache.values()) {
-            if (channel.id === message.channelId) continue; // Protect current active chat window
+            if (channel.id === message.channelId) continue; 
             try {
               await channel.delete();
               try { await logAction(guild, 'Channel Deleted', message.author, `Channel: ${channel.name}`); } catch(e){}
@@ -69,7 +59,6 @@ module.exports = {
 
         if (statusMessage) await statusMessage.edit('📁 Creating categories...');
         
-        // 3. Category Creation using proper ChannelType constants
         const generalCategory = await guild.channels.create({ name: genCatName, type: ChannelType.GuildCategory });
         try { await logAction(guild, 'Category Created', message.author, `Category: ${genCatName}`); } catch(e){}
         
@@ -89,7 +78,6 @@ module.exports = {
 
         if (statusMessage) await statusMessage.edit('📢 Creating channels...');
         
-        // 4. Channel layout mapped with correct ChannelType text and voice parameters
         const channels = {
           general: { name: formatCute('general', cuteStyle, '💬'), parent: generalCategory.id, type: ChannelType.GuildText },
           announcements: { name: formatCute('announcements', cuteStyle, '📢'), parent: generalCategory.id, type: ChannelType.GuildText },
