@@ -31,7 +31,7 @@ module.exports = {
         return message.reply('❌ You need **Administrator** or **Manage Server** permissions to use the setup configurations!');
       }
 
-      // 🟢 FIX: Extract strings safely out of the argument text array
+      // ✅ FIX: Extract parameters securely using exact array indexes
       const template = args[0] ? args[0].toLowerCase() : null;
       const clearArg = args[1] ? args[1].toLowerCase() : null;
       const clear = clearArg === 'clear' || clearArg === 'true';
