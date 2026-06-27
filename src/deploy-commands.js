@@ -1,3 +1,9 @@
+const { ReadableStream } = require('stream/web');
+global.ReadableStream = ReadableStream;
+
+// ... rest of your existing deploy-commands.js code continues below
+
+
 const fs = require('fs');
 const path = require('path');
 const { REST, Routes } = require('discord.js');

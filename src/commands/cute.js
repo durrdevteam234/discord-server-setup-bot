@@ -4,36 +4,50 @@ const { readData, writeData } = require('../utils/database');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('cute')
-    .setDescription('Toggle cute mode on or off')
-    .addBooleanOption(option =>
-      option.setName('enabled')
-        .setDescription('Enable or disable cute mode')
+    .setDescription('Configure cute text layouts for server setup templates')
+    .addStringOption(option =>
+      option.setName('style')
+        .setDescription('Select an aesthetic font layout style')
         .setRequired(true)
+        .addChoices(
+          { name: 'Wide (ａｅｓｔｈｅｔｉｃ)', value: 'wide' },
+          { name: 'Small Caps (sᴍᴀʟʟ ᴄᴀᴘs)', value: 'small-caps' },
+          { name: 'Bubbles (ⓑⓤⓑⓑⓛⓔⓢ)', value: 'bubbles' },
+          { name: 'Turn Off (Normal Text)', value: 'off' }
+        )
     ),
 
   async execute(interaction) {
     try {
-      const enabled = interaction.options.getBoolean('enabled');
-      const userId = interaction.user.id;
+      const style = interaction.options.getString('style');
       const guildId = interaction.guildId;
 
-      const cute = readData('cute.json');
-      if (!cute[guildId]) cute[guildId] = {};
-      cute[guildId][userId] = enabled;
-      writeData('cute.json', cute);
+      const cuteData = readData('cute.json');
+      
+      // Store the choice directly under the server identity
+      cuteData[guildId] = style; 
+      writeData('cute.json', cuteData);
+
+      const isOff = style === 'off';
+      
+      const styleNames = {
+        'wide': 'Wide Text Layout (ａｅｓｔｈｅｔｉｃ)',
+        'small-caps': 'Small Caps Layout (sᴍᴀʟʟ ᴄᴀᴘs)',
+        'bubbles': 'Bubble Text Layout (ⓑⓤⓑⓑⓛⓔⓢ)'
+      };
 
       const embed = new EmbedBuilder()
-        .setColor(enabled ? '#FF69B4' : '#808080')
-        .setTitle(enabled ? '✨ Cute Mode Enabled! ✨' : '😢 Cute Mode Disabled')
-        .setDescription(enabled 
-          ? 'The bot will now use cute fonts and designs! (´｀)♡' 
-          : 'Cute mode has been turned off. Back to normal mode!'
+        .setColor(isOff ? '#808080' : '#FF69B4')
+        .setTitle(isOff ? '😢 Cute Mode Disabled' : '✨ Cute Mode Configured! ✨')
+        .setDescription(isOff 
+          ? 'Cute templates have been turned off. Setup layouts are back to standard Discord styles.' 
+          : `Templates will now build using the **${styleNames[style]}** configuration! (´｀)♡`
         );
 
       await interaction.reply({ embeds: [embed], ephemeral: true });
     } catch (error) {
-      console.error('Cute error:', error);
-      await interaction.reply({ content: `❌ Error: ${error.message}`, ephemeral: true });
+      console.error('Cute command configuration error:', error);
+      await interaction.reply({ content: `❌ Config Error: ${error.message}`, ephemeral: true });
     }
   },
 };

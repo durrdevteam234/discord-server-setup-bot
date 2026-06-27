@@ -4,3 +4,5 @@ node_modules/
 src/events/messageCreate.js.save*
 levels.json
 .DS_Store
+cute.json
+settings.json
