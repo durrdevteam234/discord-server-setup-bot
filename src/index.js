@@ -1,5 +1,12 @@
-const { ReadableStream } = require('stream/web');
-global.ReadableStream = ReadableStream; // Fixes High Sierra / Node v17 web stream compatibility
+// 🛑 SAFE COMPATIBILITY PATCH (Only runs locally on your Mac if needed)
+if (typeof globalThis.ReadableStream === 'undefined') {
+    try {
+        const { ReadableStream } = require('node:stream/web');
+        globalThis.ReadableStream = ReadableStream;
+    } catch (e) {
+        console.warn("Could not polyfill ReadableStream automatically.");
+    }
+}
 
 const fs = require('fs');
 const path = require('path');
@@ -12,13 +19,13 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers // 🔥 CRITICAL: Required to detect joins/leaves for welcome logs
+    GatewayIntentBits.GuildMembers // 🔥 REQUIRED to detect joins/leaves for welcome logs
   ]
 });
 
 client.commands = new Collection();
 
-// 1. LOAD SLASH COMMANDS
+// 1. LOAD SLASH COMMANDS DYNAMICALLY
 const commandsPath = path.join(__dirname, 'commands');
 if (fs.existsSync(commandsPath)) {
   const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
@@ -27,11 +34,12 @@ if (fs.existsSync(commandsPath)) {
     const command = require(filePath);
     if ('data' in command && 'execute' in command) {
       client.commands.set(command.data.name, command);
+      console.log(`Loaded Command: ${command.data.name}`);
     }
   }
 }
 
-// 2. LOAD EVENT HANDLERS
+// 2. LOAD EVENT HANDLERS DYNAMICALLY (This safely handles interactionCreate.js!)
 const eventsPath = path.join(__dirname, 'events');
 if (fs.existsSync(eventsPath)) {
   const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
@@ -43,27 +51,9 @@ if (fs.existsSync(eventsPath)) {
     } else {
       client.on(event.name, (...args) => event.execute(...args));
     }
+    console.log(`Loaded Event: ${event.name}`);
   }
 }
 
-// 3. HANDLE SLASH COMMAND INTERACTIONS
-client.on('interactionCreate', async interaction => {
-  if (!interaction.isChatInputCommand()) return;
-
-  const command = client.commands.get(interaction.commandName);
-  if (!command) return;
-
-  try {
-    await command.execute(interaction);
-  } catch (error) {
-    console.error(`Error executing /${interaction.commandName}:`, error);
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({ content: '❌ There was an error executing this command!', ephemeral: true });
-    } else {
-      await interaction.reply({ content: '❌ There was an error executing this command!', ephemeral: true });
-    }
-  }
-});
-
-// 4. LOG IN TO DISCORD
+// 3. LOG IN TO DISCORD USING RAILWAY ENV VARIABLES
 client.login(process.env.DISCORD_TOKEN);
