@@ -7,7 +7,7 @@ module.exports = {
   name: Events.MessageCreate,
   once: false,
   async execute(message) {
-    // 🟢 DIAGNOSTIC LOG: Watch this in your Railway logs to see if your bot is seeing messages!
+    // DIAGNOSTIC LOG: Confirmed working!
     console.log(`[DEBUG] Message from ${message.author.tag} in #${message.channel.name}: "${message.content}"`);
 
     // Ignore bots and webhooks
@@ -34,7 +34,7 @@ module.exports = {
         return message.reply('❌ You need **Administrator** or **Manage Server** permissions to use the setup configurations!');
       }
 
-      // ✅ FIX: Extract elements from the arguments array using secure array indexes before running toLowerCase()
+      // ✅ FIX: Using correct shifted array indexes (args[0] is template, args[1] is clear option)
       const template = args[0] ? args[0].toLowerCase() : null;
       const clearArg = args[1] ? args[1].toLowerCase() : null;
       const clear = clearArg === 'clear' || clearArg === 'true';
