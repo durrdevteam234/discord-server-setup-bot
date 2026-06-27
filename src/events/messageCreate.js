@@ -7,7 +7,7 @@ module.exports = {
   name: Events.MessageCreate,
   once: false,
   async execute(message) {
-    // DIAGNOSTIC LOG: Confirmed working!
+    // Diagnostic Log
     console.log(`[DEBUG] Message from ${message.author.tag} in #${message.channel.name}: "${message.content}"`);
 
     // Ignore bots and webhooks
@@ -34,10 +34,12 @@ module.exports = {
         return message.reply('❌ You need **Administrator** or **Manage Server** permissions to use the setup configurations!');
       }
 
-      // ✅ FIX: Using correct shifted array indexes (args[0] is template, args[1] is clear option)
-      const template = args[0] ? args[0].toLowerCase() : null;
-      const clearArg = args[1] ? args[1].toLowerCase() : null;
-      const clear = clearArg === 'clear' || clearArg === 'true';
+      // ✅ FIX: Use pure array destructuring to grab elements securely as strings
+      const [templateArg, clearArg] = args;
+      
+      const template = templateArg ? templateArg.toLowerCase() : null;
+      const finalClearArg = clearArg ? clearArg.toLowerCase() : null;
+      const clear = finalClearArg === 'clear' || finalClearArg === 'true';
 
       const validTemplates = ['gaming', 'community', 'study', 'business'];
       if (!template || !validTemplates.includes(template)) {
