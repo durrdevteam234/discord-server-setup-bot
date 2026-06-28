@@ -6,30 +6,33 @@ module.exports = {
     .setName('help')
     .setDescription('View all available commands and the bot prefix'),
 
-  async execute(interaction) {
+  async execute(context) {
+    const isInteraction = !!context.isChatInputCommand;
+    const guildId = context.guildId;
+    const client = context.client;
+
     try {
-      // 🔄 Fix: Reads the guild's cute text setting properly to match your setup.js logic
       const cuteData = readData('cute.json');
-      const cuteStyle = cuteData[interaction.guildId] || 'off'; 
+      const cuteStyle = cuteData[guildId] || 'off'; 
       const isCute = cuteStyle !== 'off';
 
-      const prefix = interaction.client.prefix || '|';
+      const prefix = client.prefix || '|';
 
-      // Categorized command structures with explicit permission hints
+      // 1. All member commands from your file tree included
       const publicCommands = [
         { name: '/help', desc: 'View this help menu layout.' },
-        { name: '/ticket create', desc: 'Create a private support ticket.' }, // ✨ Updated to sub-command format
+        { name: '/purpose', desc: 'Learn about the bot and see its profile picture.' },
         { name: '/rank', desc: 'Check your level and XP progress.' },
         { name: '/leaderboard', desc: 'View top 10 users by level.' },
-        { name: '/purpose', desc: 'Learn about the bot and see its profile picture.' },
+        { name: '/ticket', desc: 'Create a private support ticket for help.' },
       ];
 
+      // 2. All staff, setup, and system commands from your file tree included
       const staffCommands = [
         { name: '/setup', desc: 'Set up server templates (Gaming/Community/Study/Business).' },
-        { name: '/clear-channels', desc: '🗑️ Wipes all categories and channels from the server.' }, // ✨ Added new command
-        { name: '/welcome setup', desc: 'Configure the welcome channel and message layouts.' }, // ✨ Added welcome sub-commands
-        { name: '/welcome toggle', desc: 'Enable or disable the welcome/leave system.' },
-        { name: '/ticket close', desc: '🔒 Close an active ticket.' }, // ✨ Updated to sub-command format
+        { name: '/clear-channels', desc: '🗑️ Wipes all categories and channels from the server.' },
+        { name: '/welcome', desc: 'Configure or toggle the welcome/leave notification system.' },
+        { name: '/leveling', desc: 'Manage system settings for tracking server leveling.' },
         { name: '/ban', desc: 'Ban a user from the server.' },
         { name: '/kick', desc: 'Kick a user from the server.' },
         { name: '/mute', desc: 'Mute a user for a set duration.' },
@@ -59,18 +62,23 @@ module.exports = {
         )
         .setFooter({ text: isCute ? '✨ Made with love ✨' : 'Use /help for more info' });
 
-      // Check if it's a message or interaction reply to prevent crashes
-      if (typeof interaction.reply === 'function' && !interaction.author) {
-        await interaction.reply({ embeds: [embed] });
+      if (isInteraction) {
+        await context.reply({ embeds: [embed] });
       } else {
-        await interaction.channel.send({ embeds: [embed] });
+        await context.reply({ embeds: [embed] });
       }
     } catch (error) {
       console.error('Help error:', error);
-      if (interaction.replied || interaction.deferred) {
-        await interaction.followUp({ content: `❌ Error: ${error.message}`, ephemeral: true });
-      } else if (typeof interaction.reply === 'function' && !interaction.author) {
-        await interaction.reply({ content: `❌ Error: ${error.message}`, ephemeral: true });
+      const errMsg = `❌ Error: ${error.message}`;
+      
+      if (isInteraction) {
+        if (context.replied || context.deferred) {
+          await context.followUp({ content: errMsg, ephemeral: true });
+        } else {
+          await context.reply({ content: errMsg, ephemeral: true });
+        }
+      } else {
+        await context.reply({ content: errMsg });
       }
     }
   },
