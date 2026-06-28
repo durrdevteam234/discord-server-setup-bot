@@ -1,4 +1,3 @@
-// Node compatibility patch
 if (typeof globalThis.ReadableStream === 'undefined') {
     try {
         const { ReadableStream } = require('node:stream/web');
@@ -15,7 +14,7 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent, // REQUIRED for prefix commands!
+    GatewayIntentBits.MessageContent, 
     GatewayIntentBits.GuildMembers
   ]
 });
@@ -28,10 +27,14 @@ const commandsPath = path.join(__dirname, 'commands');
 if (fs.existsSync(commandsPath)) {
   const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
   for (const file of commandFiles) {
-    const filePath = path.join(commandsPath, file);
-    const command = require(filePath);
-    if ('data' in command && 'execute' in command) {
-      client.commands.set(command.data.name, command);
+    try {
+      const filePath = path.join(commandsPath, file);
+      const command = require(filePath);
+      if ('data' in command && 'execute' in command) {
+        client.commands.set(command.data.name, command);
+      }
+    } catch (cmdErr) {
+      console.error('[STARTUP ERROR] Failed to load command file ' + file + ':', cmdErr.message);
     }
   }
 }
@@ -46,19 +49,23 @@ if (fs.existsSync(eventsPath)) {
 
   for (const file of eventFiles) {
     const filePath = path.join(eventsPath, file);
-    const event = require(filePath);
     
-    // 🟢 CRITICAL STARTUP VERIFICATION LOG
-    console.log('[STARTUP] Successfully linked event handler file: ' + file + ' -> Event Name: ' + event.name);
+    // 🛡️ CRASH PROTECTION: Wrap each file link in a unique try/catch block
+    try {
+      const event = require(filePath);
+      console.log('[STARTUP] Successfully linked event handler file: ' + file + ' -> Event Name: ' + event.name);
 
-    if (event.once) {
-      client.once(event.name, (...args) => event.execute(...args));
-    } else {
-      client.on(event.name, (...args) => event.execute(...args));
+      if (event.once) {
+        client.once(event.name, (...args) => event.execute(...args));
+      } else {
+        client.on(event.name, (...args) => event.execute(...args));
+      }
+    } catch (eventErr) {
+      console.error('❌ [STARTUP ERROR] CRITICAL ERROR IN FILE "' + file + '":', eventErr.stack);
     }
   }
 } else {
-  console.error('[CRITICAL] The events folder path does not exist! Check your file hierarchy layout.');
+  console.error('[CRITICAL] The events folder path does not exist!');
 }
 
 client.login(process.env.DISCORD_TOKEN);
