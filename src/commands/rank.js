@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { readData } = require('../utils/database'); // 🟢 Uses your correct database import
+const { readData } = require('../utils/database');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -13,17 +13,21 @@ module.exports = {
 
   async execute(interactionOrMessage) {
     try {
-      // 1. Dual Execution Compatibility Check (Handles both /rank and |rank)
+      // 1. Check if the incoming payload is a Slash Command or a raw Prefix Message
       const isInteraction = typeof interactionOrMessage.reply === 'function' && !interactionOrMessage.author;
       
-      const guild = isInteraction ? interactionOrMessage.guild : interactionOrMessage.guild;
-      const user = isInteraction 
-        ? (interactionOrMessage.options.getUser('target') || interactionOrMessage.user) 
-        : (interactionOrMessage.mentions.users.first() || interactionOrMessage.author);
-
+      const guild = interactionOrMessage.guild;
       if (!guild) return;
 
-      // 2. Read the level data securely using your standard readData tool
+      // 2. 🎯 SECURE TARGET DETECTOR: Safely checks both Slash Options and raw Chat Mentions
+      let user;
+      if (isInteraction) {
+        user = interactionOrMessage.options.getUser('target') || interactionOrMessage.user;
+      } else {
+        user = interactionOrMessage.mentions.users.first() || interactionOrMessage.author;
+      }
+
+      // 3. Read the level data securely using your standard readData tool
       const levelsData = readData('levels.json') || {};
       const guildLevels = levelsData[guild.id] || {};
       const userStats = guildLevels[user.id] || { xp: 0, level: 1 };
@@ -31,7 +35,7 @@ module.exports = {
       // Calculate how much XP they need for the next milestone
       const nextLevelXp = userStats.level * 100; 
 
-      // 3. Format the Rank Embed Layout
+      // 4. Format the Rank Embed Layout
       const embed = new EmbedBuilder()
         .setColor('#0099FF')
         .setTitle(`✨ ${user.username}'s Rank Progress ✨`)
@@ -42,7 +46,7 @@ module.exports = {
         )
         .setFooter({ text: 'Keep chatting to earn more experience!' });
 
-      // 4. Send the response back cleanly depending on how it was invoked
+      // 5. Send the response back cleanly depending on how it was invoked
       if (isInteraction) {
         await interactionOrMessage.reply({ embeds: [embed] });
       } else {
