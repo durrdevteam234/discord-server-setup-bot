@@ -56,9 +56,11 @@ if (fs.existsSync(eventsPath)) {
       console.log('[STARTUP] Successfully linked event handler file: ' + file + ' -> Event Name: ' + event.name);
 
       if (event.once) {
-        client.once(event.name, (...args) => event.execute(...args));
+        // FIXED: Passes the client down alongside runtime event arguments
+        client.once(event.name, (...args) => event.execute(...args, client));
       } else {
-        client.on(event.name, (...args) => event.execute(...args));
+        // FIXED: Allows multiple components (like commands and XP engines) to listen safely
+        client.on(event.name, (...args) => event.execute(...args, client));
       }
     } catch (eventErr) {
       console.error('❌ [STARTUP ERROR] CRITICAL ERROR IN FILE "' + file + '":', eventErr.stack);
