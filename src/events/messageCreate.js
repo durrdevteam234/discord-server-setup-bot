@@ -1,169 +1,132 @@
-const { Events, ChannelType, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
-const { logAction } = require('../utils/auditLog');
-const { readData, writeData } = require('../utils/database');
-const { formatCute } = require('../utils/textFormatter.js');
+const discord = require('discord.js');
+const audit = require('../utils/auditLog');
+const db = require('../utils/database');
+const formatter = require('../utils/textFormatter.js');
 
 module.exports = {
-  name: Events.MessageCreate,
+  name: discord.Events.MessageCreate,
   once: false,
   async execute(message) {
-    // Diagnostic Log
-    console.log(`[DEBUG] Message from ${message.author.tag} in #${message.channel.name}: "${message.content}"`);
+    if (!message || !message.author || message.author.bot || message.webhookId) return;
 
-    // Ignore bots and webhooks
-    if (message.author.bot || message.webhookId) return;
-
-    // Fetch prefix dynamically or fall back to '|'
     const prefix = message.client.prefix || '|';
-
-    // Check if the message starts with the prefix
-    if (!message.content.startsWith(prefix)) return;
+    if (!message.content || !message.content.startsWith(prefix)) return;
 
     const args = message.content.slice(prefix.length).trim().split(/ +/);
+    if (args.length === 0) return;
+    
     const commandName = args.shift().toLowerCase();
 
-    // ==========================================
-    // 🛠️ PREFIX COMMAND: |setup [template] [clear]
-    // ==========================================
-        if (commandName === 'setup') {
+    if (commandName === 'setup') {
       const guild = message.guild;
+      if (!guild) return;
 
-      // 1. Permission Check (KEEP THIS!)
-      if (!message.member.permissions.has(PermissionFlagsBits.Administrator) && 
-          !message.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-        return message.reply('❌ You need **Administrator** or **Manage Server** permissions to use the setup configurations!');
+      const member = message.member;
+      if (!member) return;
+
+      if (!member.permissions.has(discord.PermissionFlagsBits.Administrator) && 
+          !member.permissions.has(discord.PermissionFlagsBits.ManageGuild)) {
+        return message.reply('❌ Admin permissions required!');
       }
 
-      // ✅ REPLACE ONLY THIS BLOCK BELOW THE PERMISSION CHECK:
-      const [templateArg, clearArg] = args;
-      
-      const template = templateArg ? templateArg.toLowerCase() : null;
-      const clear = clearArg ? (clearArg.toLowerCase() === 'clear' || clearArg.toLowerCase() === 'true') : false;
+      const firstArg = args[0];
+      const secondArg = args[1];
+
+      const templateArg = firstArg ? firstArg.toLowerCase() : null;
+      const clearArg = secondArg ? secondArg.toLowerCase() : null;
+      const clear = clearArg === 'clear' || clearArg === 'true';
 
       const validTemplates = ['gaming', 'community', 'study', 'business'];
-      if (!template || !validTemplates.includes(template)) {
-        return message.reply(`❌ Please specify a valid template! Usage: \`${prefix}setup <gaming|community|study|business> [clear]\``);
+      if (!templateArg || !validTemplates.includes(templateArg)) {
+        return message.reply('❌ Usage: ' + prefix + 'setup <gaming|community|study|business> [clear]');
       }
 
-      // Send a status updates anchor message
-      const statusMessage = await message.reply('⏳ Initializing prefix template configuration setup...').catch(() => null);
+      const statusMessage = await message.reply('⏳ Setting up server...');
 
       try {
-        const cuteData = readData('cute.json');
-        const cuteStyle = cuteData[guild.id] || 'off'; 
-        const isCuteActive = cuteStyle !== 'off';
+        const cuteData = db.readData('cute.json') || {};
+        const cuteStyle = cuteData[guild.id] || 'off';
 
-        // 2. Safe Channel Clear Loop
         if (clear) {
-          if (statusMessage) await statusMessage.edit('🗑️ Clearing existing channels...');
+          await statusMessage.edit('🗑️ Clearing channels...');
           for (const channel of guild.channels.cache.values()) {
-            if (channel.id === message.channelId) continue; // Protect current active chat window
-            try {
-              await channel.delete();
-              try { await logAction(guild, 'Channel Deleted', message.author, `Channel: ${channel.name}`); } catch(e){}
-            } catch (e) {
-              console.error(`Could not delete channel ${channel.name}`);
-            }
+            if (channel.id === message.channelId) continue;
+            await channel.delete().catch(() => null);
           }
         }
 
-        const genCatName = formatCute('General', cuteStyle, '🎀');
-        const vcCatName = formatCute('Voice', cuteStyle, '🔊');
-        const staffCatName = formatCute('Staff', cuteStyle, '🔒');
+        const genCatName = formatter.formatCute('General', cuteStyle, '🎀');
+        const vcCatName = formatter.formatCute('Voice', cuteStyle, '🔊');
+        const staffCatName = formatter.formatCute('Staff', cuteStyle, '🔒');
 
-        if (statusMessage) await statusMessage.edit('📁 Creating categories...');
-        
-        // 3. Category Creation using proper ChannelType constants
-        const generalCategory = await guild.channels.create({ name: genCatName, type: ChannelType.GuildCategory });
-        try { await logAction(guild, 'Category Created', message.author, `Category: ${genCatName}`); } catch(e){}
-        
-        const voiceCategory = await guild.channels.create({ name: vcCatName, type: ChannelType.GuildCategory });
-        try { await logAction(guild, 'Category Created', message.author, `Category: ${vcCatName}`); } catch(e){}
-        
-        const staffCategory = await guild.channels.create({ name: staffCatName, type: ChannelType.GuildCategory });
-        try { await logAction(guild, 'Category Created', message.author, `Category: ${staffCatName}`); } catch(e){}
+        await statusMessage.edit('📁 Creating categories...');
+        const generalCategory = await guild.channels.create({ name: genCatName, type: discord.ChannelType.GuildCategory });
+        const voiceCategory = await guild.channels.create({ name: vcCatName, type: discord.ChannelType.GuildCategory });
+        const staffCategory = await guild.channels.create({ name: staffCatName, type: discord.ChannelType.GuildCategory });
 
-        if (statusMessage) await statusMessage.edit('👥 Creating roles...');
+        await statusMessage.edit('👥 Creating roles...');
         const adminRole = await guild.roles.create({ name: 'Admin', color: '#FF0000' });
-        try { await logAction(guild, 'Role Created', message.author, 'Role: Admin'); } catch(e){}
         const modRole = await guild.roles.create({ name: 'Moderator', color: '#0099FF' });
-        try { await logAction(guild, 'Role Created', message.author, 'Role: Moderator'); } catch(e){}
         const memberRole = await guild.roles.create({ name: 'Member', color: '#00FF00' });
-        try { await logAction(guild, 'Role Created', message.author, 'Role: Member'); } catch(e){}
 
-        if (statusMessage) await statusMessage.edit('📢 Creating channels...');
-        
-        // 4. Channel layout mapped with correct ChannelType text and voice parameters
+        await statusMessage.edit('📢 Creating channels...');
         const channels = {
-          general: { name: formatCute('general', cuteStyle, '💬'), parent: generalCategory.id, type: ChannelType.GuildText },
-          announcements: { name: formatCute('announcements', cuteStyle, '📢'), parent: generalCategory.id, type: ChannelType.GuildText },
-          'audit-logs': { name: formatCute('audit-logs', cuteStyle, '📜'), parent: staffCategory.id, type: ChannelType.GuildText },
-          'mod-logs': { name: formatCute('mod-logs', cuteStyle, '🛡️'), parent: staffCategory.id, type: ChannelType.GuildText },
-          'staff-chat': { name: formatCute('staff-chat', cuteStyle, '💬'), parent: staffCategory.id, type: ChannelType.GuildText },
-          levels: { name: formatCute('levels', cuteStyle, '✨'), parent: generalCategory.id, type: ChannelType.GuildText },
-          commands: { name: formatCute('commands', cuteStyle, '🤖'), parent: generalCategory.id, type: ChannelType.GuildText },
+          general: { name: formatter.formatCute('general', cuteStyle, '💬'), parent: generalCategory.id, type: discord.ChannelType.GuildText },
+          announcements: { name: formatter.formatCute('announcements', cuteStyle, '📢'), parent: generalCategory.id, type: discord.ChannelType.GuildText },
+          'audit-logs': { name: formatter.formatCute('audit-logs', cuteStyle, '📜'), parent: staffCategory.id, type: discord.ChannelType.GuildText },
+          'mod-logs': { name: formatter.formatCute('mod-logs', cuteStyle, '🛡️'), parent: staffCategory.id, type: discord.ChannelType.GuildText },
+          'staff-chat': { name: formatter.formatCute('staff-chat', cuteStyle, '💬'), parent: staffCategory.id, type: discord.ChannelType.GuildText },
+          levels: { name: formatter.formatCute('levels', cuteStyle, '✨'), parent: generalCategory.id, type: discord.ChannelType.GuildText },
+          commands: { name: formatter.formatCute('commands', cuteStyle, '🤖'), parent: generalCategory.id, type: discord.ChannelType.GuildText }
         };
 
-        if (template === 'gaming') {
-          channels.gaming = { name: formatCute('gaming', cuteStyle, '🎮'), parent: generalCategory.id, type: ChannelType.GuildText };
-          channels['voice-chat'] = { name: formatCute('voice-chat', cuteStyle, '🎧'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
-        } else if (template === 'community') {
-          channels.introductions = { name: formatCute('introductions', cuteStyle, '👋'), parent: generalCategory.id, type: ChannelType.GuildText };
-          channels.events = { name: formatCute('events', cuteStyle, '📅'), parent: generalCategory.id, type: ChannelType.GuildText };
-          channels['voice-chat'] = { name: formatCute('voice-chat', cuteStyle, '🎧'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
-        } else if (template === 'study') {
-          channels['study-materials'] = { name: formatCute('study-materials', cuteStyle, '📚'), parent: generalCategory.id, type: ChannelType.GuildText };
-          channels['voice-study'] = { name: formatCute('voice-study', cuteStyle, '✏️'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
-        } else if (template === 'business') {
-          channels.meetings = { name: formatCute('meetings', cuteStyle, '💼'), parent: generalCategory.id, type: ChannelType.GuildText };
-          channels['voice-meetings'] = { name: formatCute('voice-meetings', cuteStyle, '👔'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
+        if (templateArg === 'gaming') {
+          channels.gaming = { name: formatter.formatCute('gaming', cuteStyle, '🎮'), parent: generalCategory.id, type: discord.ChannelType.GuildText };
+          channels['voice-chat'] = { name: formatter.formatCute('voice-chat', cuteStyle, '🎧'), parent: voiceCategory.id, type: discord.ChannelType.GuildVoice };
+        } else if (templateArg === 'community') {
+          channels.introductions = { name: formatter.formatCute('introductions', cuteStyle, '👋'), parent: generalCategory.id, type: discord.ChannelType.GuildText };
+          channels.events = { name: formatter.formatCute('events', cuteStyle, '📅'), parent: generalCategory.id, type: discord.ChannelType.GuildText };
+          channels['voice-chat'] = { name: formatter.formatCute('voice-chat', cuteStyle, '🎧'), parent: voiceCategory.id, type: discord.ChannelType.GuildVoice };
+        } else if (templateArg === 'study') {
+          channels['study-materials'] = { name: formatter.formatCute('study-materials', cuteStyle, '📚'), parent: generalCategory.id, type: discord.ChannelType.GuildText };
+          channels['voice-study'] = { name: formatter.formatCute('voice-study', cuteStyle, '✏️'), parent: voiceCategory.id, type: discord.ChannelType.GuildVoice };
+        } else if (templateArg === 'business') {
+          channels.meetings = { name: formatter.formatCute('meetings', cuteStyle, '💼'), parent: generalCategory.id, type: discord.ChannelType.GuildText };
+          channels['voice-meetings'] = { name: formatter.formatCute('voice-meetings', cuteStyle, '👔'), parent: voiceCategory.id, type: discord.ChannelType.GuildVoice };
         }
 
         let createdGeneralChannelId = null;
-
         for (const [key, channelData] of Object.entries(channels)) {
           const createdChannel = await guild.channels.create({
             name: channelData.name,
             type: channelData.type,
-            parent: channelData.parent,
+            parent: channelData.parent
           });
-          
-          if (key === 'general') {
-            createdGeneralChannelId = createdChannel.id;
-          }
-          try { await logAction(guild, 'Channel Created', message.author, `Channel: ${channelData.name}`); } catch(e){}
+          if (key === 'general') createdGeneralChannelId = createdChannel.id;
+          await audit.logAction(guild, 'Channel Created', message.author, 'Channel: ' + channelData.name).catch(() => null);
         }
 
-        const settings = readData('settings.json');
+        const settings = db.readData('settings.json') || {};
         settings[guild.id] = { 
-          template, 
+          template: templateArg, 
           channels: Object.keys(channels), 
           welcomeChannelId: createdGeneralChannelId,
           roles: [adminRole.id, modRole.id, memberRole.id],
           setupComplete: true,
-          setupDate: new Date().toISOString(),
+          setupDate: new Date().toISOString()
         };
-        writeData('settings.json', settings);
+        db.writeData('settings.json', settings);
 
-        try { await logAction(guild, 'Server Setup', message.author, `Template: ${template}, Style: ${cuteStyle}, Clear: ${clear}`); } catch(e){}
-
-        const embed = new EmbedBuilder()
-          .setColor(isCuteActive ? '#FF69B4' : '#00FF00')
-          .setTitle(isCuteActive ? '✨ Server Setup Complete! ✨' : '✅ Server Setup Complete!')
+        const embed = new discord.EmbedBuilder()
+          .setColor('#00FF00')
+          .setTitle('✅ Setup Complete!')
           .addFields(
-            { name: 'Template', value: template, inline: true },
-            { name: 'Categories Created', value: '3', inline: true },
-            { name: 'Channels Created', value: Object.keys(channels).length.toString(), inline: true },
-            { name: 'Roles Created', value: '3', inline: true },
-            { name: 'Prefix', value: prefix, inline: true },
-            { name: 'Next Steps', value: 'Use `/help` to see all commands!' }
+            { name: 'Template', value: templateArg, inline: true },
+            { name: 'Categories', value: '3', inline: true },
+            { name: 'Channels', value: Object.keys(channels).length.toString(), inline: true }
           );
 
-        if (statusMessage) {
-          await statusMessage.edit({ content: ' ', embeds: [embed] });
-        } else {
-          await message.channel.send({ embeds: [embed] });
-        }
+        await statusMessage.edit({ content: ' ', embeds: [embed] });
 
         if (clear) {
           const originChannel = guild.channels.cache.get(message.channelId);
@@ -171,13 +134,9 @@ module.exports = {
         }
 
       } catch (error) {
-        console.error('Prefix Setup Error:', error);
-        if (statusMessage) {
-          await statusMessage.edit(`❌ Setup failed: ${error.message}`).catch(() => null);
-        } else {
-          await message.channel.send(`❌ Setup failed: ${error.message}`).catch(() => null);
-        }
+        console.error(error);
+        await statusMessage.edit('❌ Setup failed: ' + error.message).catch(() => null);
       }
     }
-  },
+  }
 };
