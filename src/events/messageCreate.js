@@ -29,16 +29,17 @@ module.exports = {
         return message.reply('❌ Admin permissions required!');
       }
 
-      const firstArg = args[0];
-      const secondArg = args[1];
+            // Pull plain text words out of the array slots using secure string shifting
+      const plainTemplateText = args.length > 0 ? args[0] : null;
+      const plainClearText = args.length > 1 ? args[1] : null;
 
-      const templateArg = firstArg ? firstArg.toLowerCase() : null;
-      const clearArg = secondArg ? secondArg.toLowerCase() : null;
+      const templateArg = plainTemplateText ? plainTemplateText.toLowerCase() : null;
+      const clearArg = plainClearText ? plainClearText.toLowerCase() : null;
       const clear = clearArg === 'clear' || clearArg === 'true';
 
       const validTemplates = ['gaming', 'community', 'study', 'business'];
       if (!templateArg || !validTemplates.includes(templateArg)) {
-        return message.reply('❌ Usage: ' + prefix + 'setup <gaming|community|study|business> [clear]');
+        return message.reply('❌ Please specify a valid template! Usage: ' + prefix + 'setup <gaming|community|study|business> [clear]');
       }
 
       const statusMessage = await message.reply('⏳ Setting up server...');
