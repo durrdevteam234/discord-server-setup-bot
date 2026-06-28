@@ -6,30 +6,42 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('warnings')
     .setDescription('View warnings for a user')
-    .addUserOption(option =>
-      option.setName('user')
-        .setDescription('User to check')
-        .setRequired(true)
-    )
+    .addUserOption(option => option.setName('user').setDescription('User to check').setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
 
-  async execute(interaction) {
-    if (!interaction.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-      return interaction.reply({ content: '❌ You need Moderate Members permission!', ephemeral: true });
+  async execute(context, args = []) {
+    const isInteraction = !!context.isChatInputCommand;
+    const guild = context.guild;
+    const memberExecutor = context.member;
+    const guildId = context.guildId;
+
+    if (!memberExecutor.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+      const msg = '❌ You need Moderate Members permission!';
+      return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
     }
 
     try {
-      const user = interaction.options.getUser('user');
-      const guildId = interaction.guildId;
-      
+      let user;
+
+      if (isInteraction) {
+        user = context.options.getUser('user');
+      } else {
+        user = context.mentions.users.first() || (args[0] ? await context.client.users.fetch(args[0]).catch(() => null) : null);
+      }
+
+      if (!user) {
+        const msg = '❌ Please mention a valid user or provide a valid user ID.';
+        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
+      }
+
       const warnings = readData('warnings.json');
       const userWarnings = warnings[guildId]?.[user.id] || [];
 
       if (userWarnings.length === 0) {
-        return interaction.reply({ content: `✅ ${user.tag} has no warnings!`, ephemeral: true });
+        const msg = `✅ ${user.tag} has no warnings!`;
+        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
-      // Check for cute mode styled layout text matching active configurations
       const cuteData = readData('cute.json');
       const cuteStyle = cuteData[guildId] || 'off';
       const embedTitle = cuteStyle !== 'off' ? formatCute(`Warnings for ${user.username}`, cuteStyle, '📜') : `📜 Warnings for ${user.tag}`;
@@ -46,10 +58,19 @@ module.exports = {
         });
       });
 
-      await interaction.reply({ embeds: [embed], ephemeral: true });
+      if (isInteraction) {
+        await context.reply({ embeds: [embed], ephemeral: true });
+      } else {
+        await context.reply({ embeds: [embed] });
+      }
     } catch (error) {
       console.error('Warnings error:', error);
-      await interaction.reply({ content: `❌ Error fetching warnings: ${error.message}`, ephemeral: true });
+      const msg = `❌ Error fetching warnings: ${error.message}`;
+      if (isInteraction) {
+        await context.reply({ content: msg, ephemeral: true });
+      } else {
+        await context.reply(msg);
+      }
     }
   },
 };

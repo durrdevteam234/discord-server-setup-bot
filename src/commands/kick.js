@@ -11,58 +11,85 @@ module.exports = {
     .addStringOption(option => option.setName('reason').setDescription('Reason for kick').setRequired(false))
     .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers),
 
-  async execute(interaction) {
-    if (!interaction.member.permissions.has(PermissionFlagsBits.KickMembers)) {
-      return interaction.reply({ content: '❌ You need Kick Members permission!', ephemeral: true });
+  async execute(context, args = []) {
+    const isInteraction = !!context.isChatInputCommand;
+    const guild = context.guild;
+    const author = isInteraction ? context.user : context.author;
+    const memberExecutor = context.member;
+    const guildId = context.guildId;
+
+    if (!memberExecutor.permissions.has(PermissionFlagsBits.KickMembers)) {
+      const msg = '❌ You need Kick Members permission!';
+      return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
     }
 
     try {
-      const user = interaction.options.getUser('user');
-      const reason = interaction.options.getString('reason') || 'No reason provided';
-      const guildId = interaction.guildId;
+      let user;
+      let reason;
 
-      const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+      if (isInteraction) {
+        user = context.options.getUser('user');
+        reason = context.options.getString('reason') || 'No reason provided';
+      } else {
+        user = context.mentions.users.first() || (args[0] ? await context.client.users.fetch(args[0]).catch(() => null) : null);
+        reason = args.slice(1).join(' ') || 'No reason provided';
+      }
+
+      if (!user) {
+        const msg = '❌ Please mention a valid user or provide a valid user ID.';
+        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
+      }
+
+      const member = await guild.members.fetch(user.id).catch(() => null);
       if (!member) {
-        return interaction.reply({ content: '❌ This user is not in the server.', ephemeral: true });
+        const msg = '❌ This user is not in the server.';
+        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
       if (!member.kickable) {
-        return interaction.reply({ content: '❌ I cannot kick this user! Their roles might be higher than mine or yours.', ephemeral: true });
+        const msg = '❌ I cannot kick this user! Their roles might be higher than mine or yours.';
+        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
       await member.kick(reason);
 
-      // Check for cute mode styled channel name variants
       const cuteData = readData('cute.json');
       const cuteStyle = cuteData[guildId] || 'off';
       const cuteChannelName = cuteStyle !== 'off' ? formatCute('mod-logs', cuteStyle, '🛡️') : 'mod-logs';
 
-      // Log to mod-logs channel
-      const modLogsChannel = interaction.guild.channels.cache.find(ch => ch.name === 'mod-logs' || ch.name === cuteChannelName);
+      const modLogsChannel = guild.channels.cache.find(ch => ch.name === 'mod-logs' || ch.name === cuteChannelName);
       if (modLogsChannel) {
         const embed = new EmbedBuilder()
           .setColor('#FF9900')
           .setTitle('User Kicked')
           .addFields(
             { name: 'User', value: `${user.tag} (${user.id})` },
-            { name: 'Moderator', value: `${interaction.user.tag}` },
+            { name: 'Moderator', value: `${author.tag}` },
             { name: 'Reason', value: reason }
           );
         await modLogsChannel.send({ embeds: [embed] });
       }
 
-      // Log action
-      await logAction(interaction.guild, 'User Kicked', interaction.user, `User: ${user.tag}, Reason: ${reason}`);
+      await logAction(guild, 'User Kicked', author, `User: ${user.tag}, Reason: ${reason}`);
 
       const embed = new EmbedBuilder()
         .setColor('#FF9900')
         .setTitle('✅ User Kicked')
         .setDescription(`${user.tag} has been kicked.\nReason: ${reason}`);
 
-      await interaction.reply({ embeds: [embed], ephemeral: true });
+      if (isInteraction) {
+        await context.reply({ embeds: [embed], ephemeral: true });
+      } else {
+        await context.reply({ embeds: [embed] });
+      }
     } catch (error) {
       console.error('Kick error:', error);
-      await interaction.reply({ content: `❌ Error kicking user: ${error.message}`, ephemeral: true });
+      const msg = `❌ Error kicking user: ${error.message}`;
+      if (isInteraction) {
+        await context.reply({ content: msg, ephemeral: true });
+      } else {
+        await context.reply(msg);
+      }
     }
   },
 };

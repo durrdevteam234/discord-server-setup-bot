@@ -14,6 +14,7 @@ module.exports = {
       const args = message.content.slice(prefix.length).trim().split(/ +/);
       if (args.length === 0) return;
       const commandName = args.shift().toLowerCase();
+
       if (commandName === 'setup') {
         const guild = message.guild; if (!guild) return;
         const member = message.member || await guild.members.fetch(message.author.id).catch(() => null);
@@ -102,7 +103,8 @@ module.exports = {
         return message.reply({ embeds: [successEmbed] }).catch(() => null);
       } else {
         const targetCommand = message.client.commands.get(commandName);
-        if (targetCommand) await targetCommand.execute(message).catch(() => null);
+        // FIXED: Safely passes the extracted arguments array downward to your updated commands
+        if (targetCommand) await targetCommand.execute(message, args).catch(() => null);
       }
     } catch (globalError) { console.error(globalError); }
   },
