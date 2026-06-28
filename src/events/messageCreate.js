@@ -122,13 +122,21 @@ module.exports = {
       const guildId = message.guild?.id;
       if (!guildId) return;
 
-      // 1. CHECK LEVELING CONFIGURATION SAFETY
+      // 1. DUAL DATABASE SAFETY CONFIGURATION VERIFICATION
+      const mainSettings = db.readData('settings.json') || {};
       const levelingSettings = db.readData('leveling_settings.json') || {};
-      const guildSettings = levelingSettings[guildId] || {};
+      
+      const mainConfig = mainSettings[guildId] || {};
+      const levelConfig = levelingSettings[guildId] || {};
 
-      // Stops processing immediately if the settings register shows off or disabled
-      if (guildSettings.enabled === false || guildSettings.status === 'off' || guildSettings.status === 'disabled') {
-        return;
+      // Unified block checking all known toggle indicators across both files
+      const isExplicitlyDisabled = 
+        mainConfig.leveling === 'off' || mainConfig.leveling === false || mainConfig.leveling === 'disabled' ||
+        mainConfig.levelingEnabled === false ||
+        levelConfig.enabled === false || levelConfig.status === 'off' || levelConfig.status === 'disabled';
+
+      if (isExplicitlyDisabled) {
+        return; // Drops execution cleanly before generating any XP math or level cards
       }
 
       // 2. SPAM CHECK COOLDOWN (Once per minute per user profile)
