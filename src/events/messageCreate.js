@@ -38,8 +38,8 @@ module.exports = {
       const [templateArg, clearArg] = args;
       
       const template = args ? args.toLowerCase() : null;
-      const clearArg = args ? args.toLowerCase() : null;
-      const clear = clearArg === 'clear' || clearArg === 'true';
+      const finalClearArg = args ? args.toLowerCase() : null;
+      const clear = finalClearArg === 'clear' || finalClearArg === 'true';
 
       const validTemplates = ['gaming', 'community', 'study', 'business'];
       if (!template || !validTemplates.includes(template)) {
