@@ -25,21 +25,20 @@ module.exports = {
     // ==========================================
     // 🛠️ PREFIX COMMAND: |setup [template] [clear]
     // ==========================================
-    if (commandName === 'setup') {
+        if (commandName === 'setup') {
       const guild = message.guild;
 
-      // 1. Permission Check
+      // 1. Permission Check (KEEP THIS!)
       if (!message.member.permissions.has(PermissionFlagsBits.Administrator) && 
           !message.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
         return message.reply('❌ You need **Administrator** or **Manage Server** permissions to use the setup configurations!');
       }
 
-      // ✅ FIX: Use pure array destructuring to grab elements securely as strings
+      // ✅ REPLACE ONLY THIS BLOCK BELOW THE PERMISSION CHECK:
       const [templateArg, clearArg] = args;
       
-      const template = args ? args.toLowerCase() : null;
-      const finalClearArg = args ? args.toLowerCase() : null;
-      const clear = finalClearArg === 'clear' || finalClearArg === 'true';
+      const template = templateArg ? templateArg.toLowerCase() : null;
+      const clear = clearArg ? (clearArg.toLowerCase() === 'clear' || clearArg.toLowerCase() === 'true') : false;
 
       const validTemplates = ['gaming', 'community', 'study', 'business'];
       if (!template || !validTemplates.includes(template)) {
