@@ -16,12 +16,8 @@ module.exports = {
       const targetChannel = guild.channels.cache.get(channelId);
       if (!targetChannel) return;
 
-      // 🟢 MATCH FIX: Tries loading both possible database keys before falling back to your exact default string
-      let rawMessage = serverSettings.joinMessage || serverSettings.welcomeMessage || '✨ Welcome to the server, {user}! We are glad to have you here. ✨';
-
-      let finalMessage = rawMessage
-        .replace(/{user}/g, `${member}`)
-        .replace(/{server}/g, guild.name);
+      // 🔒 HARDCODED EMBED TEXT - Permanent layout
+      const finalMessage = `✨ Welcome to the server, ${member}! We are glad to have you here. ✨`;
 
       const embed = new EmbedBuilder()
         .setColor('#00FF00')
