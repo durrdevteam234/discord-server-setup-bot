@@ -1,28 +1,40 @@
-const { Events } = require('discord.js');
+const { Events, EmbedBuilder } = require('discord.js');
 const { readData } = require('../utils/database');
 
 module.exports = {
   name: Events.GuildMemberRemove,
   once: false,
   async execute(member) {
-    const guild = member.guild;
-    const settings = readData('settings.json');
-    const serverSettings = settings[guild.id];
-
-    if (!serverSettings || !serverSettings.welcomeChannelId) return;
-
-    const goodbyeChannel = guild.channels.cache.get(serverSettings.welcomeChannelId);
-
-    // Guard: Prevent trying to announce a departure in a non-existent wiped workspace
-    if (!goodbyeChannel) {
-      console.warn(`⚠️ Farewell announcement failed: Channel not found in ${guild.name}.`);
-      return; 
-    }
-
     try {
-      await goodbyeChannel.send(`👋 Goodbye ${member.user.tag}... We will miss you!`);
+      const guild = member.guild;
+      const settings = readData('settings.json') || {};
+      const serverSettings = settings[guild.id] || {};
+
+      const channelId = serverSettings.welcomeChannelId;
+      if (!channelId) return;
+
+      const targetChannel = guild.channels.cache.get(channelId);
+      if (!targetChannel) return;
+
+      // 🟢 MATCH FIX: Tries loading both possible database keys before falling back to your exact default string
+      let rawMessage = serverSettings.leaveMessage || serverSettings.goodbyeMessage || '👋 Goodbye {user}... We will miss you!';
+
+      let finalMessage = rawMessage
+        .replace(/{user}/g, `**${member.user.username}**`)
+        .replace(/{server}/g, guild.name);
+
+      const embed = new EmbedBuilder()
+        .setColor('#FF0000')
+        .setTitle('👋 Goodbye')
+        .setDescription(finalMessage)
+        .setThumbnail(member.user.displayAvatarURL({ size: 128 }))
+        .setFooter({ text: `Member Count: ${guild.memberCount}` })
+        .setTimestamp();
+
+      await targetChannel.send({ embeds: [embed] }).catch(() => null);
+
     } catch (error) {
-      console.error('Failed to send exit log message:', error.message);
+      console.error('Welcome leave listener error:', error.message);
     }
   },
 };
