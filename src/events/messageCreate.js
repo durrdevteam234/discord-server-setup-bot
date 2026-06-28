@@ -37,9 +37,9 @@ module.exports = {
       // ✅ FIX: Use pure array destructuring to grab elements securely as strings
       const [templateArg, clearArg] = args;
       
-      const template = templateArg ? templateArg.toLowerCase() : null;
-      const finalClearArg = clearArg ? clearArg.toLowerCase() : null;
-      const clear = finalClearArg === 'clear' || finalClearArg === 'true';
+      const template = args ? args.toLowerCase() : null;
+      const clearArg = args ? args.toLowerCase() : null;
+      const clear = clearArg === 'clear' || clearArg === 'true';
 
       const validTemplates = ['gaming', 'community', 'study', 'business'];
       if (!template || !validTemplates.includes(template)) {
