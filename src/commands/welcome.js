@@ -4,11 +4,16 @@ const { readData, writeData } = require('../utils/database');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('welcome')
-    .setDescription('Configure the join/leave welcome announcement logs channel')
+    .setDescription('Configure the welcome/goodbye system toggle and logs channel')
+    .addBooleanOption(option =>
+      option.setName('enabled')
+        .setDescription('Turn the welcome/goodbye announcement system ON or OFF')
+        .setRequired(true)
+    )
     .addChannelOption(option =>
       option.setName('channel')
         .setDescription('The channel where welcome and goodbye embeds will be posted')
-        .setRequired(true)
+        .setRequired(false)
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
@@ -22,20 +27,32 @@ module.exports = {
     }
 
     try {
+      const enabled = interaction.options.getBoolean('enabled');
       const channel = interaction.options.getChannel('channel');
       const guildId = interaction.guildId;
 
       const settings = readData('settings.json') || {};
       if (!settings[guildId]) settings[guildId] = {};
       
-      // Save ONLY the channel ID
-      settings[guildId].welcomeChannelId = channel.id;
+      // Save settings flags securely
+      settings[guildId].welcomeEnabled = enabled;
+      if (channel) {
+        settings[guildId].welcomeChannelId = channel.id;
+      }
+      
       writeData('settings.json', settings);
 
+      // Get current channel configuration or fall back to saved settings text label
+      const savedChannelId = settings[guildId].welcomeChannelId;
+      const displayChannelText = channel ? channel : (savedChannelId ? `<#${savedChannelId}>` : '**Not Configured Yet**');
+
       const embed = new EmbedBuilder()
-        .setColor('#00FF00')
-        .setTitle('👋 Welcome System Configured')
-        .setDescription(`Join and Leave embed banners will now be automatically logged in ${channel}!`);
+        .setColor(enabled ? '#00FF00' : '#808080')
+        .setTitle(enabled ? '✨ Welcome System Activated' : '⏸️ Welcome System Paused')
+        .setDescription(enabled 
+          ? `Join/Leave clean embed cards are now active in: ${displayChannelText}`
+          : 'Join/Leave welcome announcement cards are now paused.'
+        );
 
       await interaction.reply({ embeds: [embed], ephemeral: true });
     } catch (error) {

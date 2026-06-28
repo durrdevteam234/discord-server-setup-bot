@@ -10,18 +10,16 @@ module.exports = {
       const settings = readData('settings.json') || {};
       const serverSettings = settings[guild.id] || {};
 
+      // 🛑 TOGGLE SECURITY CHECK: Exit instantly if the module is disabled
+      if (serverSettings.welcomeEnabled === false) return;
+
       const channelId = serverSettings.welcomeChannelId;
       if (!channelId) return;
 
       const targetChannel = guild.channels.cache.get(channelId);
       if (!targetChannel) return;
 
-      // 🟢 MATCH FIX: Tries loading both possible database keys before falling back to your exact default string
-      let rawMessage = serverSettings.leaveMessage || serverSettings.goodbyeMessage || '👋 Goodbye {user}... We will miss you!';
-
-      let finalMessage = rawMessage
-        .replace(/{user}/g, `**${member.user.username}**`)
-        .replace(/{server}/g, guild.name);
+      const finalMessage = `👋 Goodbye **${member.user.username}**... We will miss you!`;
 
       const embed = new EmbedBuilder()
         .setColor('#FF0000')

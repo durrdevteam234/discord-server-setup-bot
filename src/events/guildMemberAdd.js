@@ -10,13 +10,15 @@ module.exports = {
       const settings = readData('settings.json') || {};
       const serverSettings = settings[guild.id] || {};
 
+      // 🛑 TOGGLE SECURITY CHECK: Exit instantly if the module is disabled
+      if (serverSettings.welcomeEnabled === false) return;
+
       const channelId = serverSettings.welcomeChannelId;
       if (!channelId) return;
 
       const targetChannel = guild.channels.cache.get(channelId);
       if (!targetChannel) return;
 
-      // 🔒 HARDCODED EMBED TEXT - Permanent layout
       const finalMessage = `✨ Welcome to the server, ${member}! We are glad to have you here. ✨`;
 
       const embed = new EmbedBuilder()
