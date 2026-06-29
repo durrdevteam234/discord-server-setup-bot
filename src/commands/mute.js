@@ -6,19 +6,12 @@ const { formatCute } = require('../utils/textFormatter.js');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('mute')
-    .setDescription('Mute a user')
+    .setDescription('Mute a user for a custom duration (1m to 28d)')
     .addUserOption(option => option.setName('user').setDescription('User to mute').setRequired(true))
     .addStringOption(option =>
       option.setName('duration')
-        .setDescription('Mute duration')
+        .setDescription('Mute duration (e.g., 30m, 2h, 7d, 3w)') // Custom inputs allowed now
         .setRequired(true)
-        .addChoices(
-          { name: '1 minute', value: '1m' },
-          { name: '5 minutes', value: '5m' },
-          { name: '10 minutes', value: '10m' },
-          { name: '1 hour', value: '1h' },
-          { name: '1 day', value: '1d' }
-        )
     )
     .addStringOption(option => option.setName('reason').setDescription('Reason for mute').setRequired(false))
     .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
@@ -37,16 +30,16 @@ module.exports = {
 
     try {
       let user;
-      let duration;
+      let durationInput;
       let reason;
 
       if (isInteraction) {
         user = context.options.getUser('user');
-        duration = context.options.getString('duration');
+        durationInput = context.options.getString('duration');
         reason = context.options.getString('reason') || 'No reason provided';
       } else {
         user = context.mentions.users.first() || (args[0] ? await context.client.users.fetch(args[0]).catch(() => null) : null);
-        duration = args[1];
+        durationInput = args[1];
         reason = args.slice(2).join(' ') || 'No reason provided';
       }
 
@@ -55,12 +48,38 @@ module.exports = {
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
-      const validDurations = ['1m', '5m', '10m', '1h', '1d'];
-      if (!duration || !validDurations.includes(duration.toLowerCase())) {
-        const msg = '❌ Please specify a valid duration choice (`1m`, `5m`, `10m`, `1h`, `1d`).\nFormat: `|mute @user <duration> [reason]`';
+      if (!durationInput) {
+        const msg = '❌ Please specify a duration. Example: `30m`, `4h`, `5d`, `2w`';
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
-      duration = duration.toLowerCase();
+
+      // --- ⏳ DURATION PARSER ENGINE ---
+      const durationRegex = /^(\d+)([mhdw])$/i;
+      const match = durationInput.match(durationRegex);
+
+      if (!match) {
+        const msg = '❌ Invalid format! Use numbers followed by unit: `m` (minutes), `h` (hours), `d` (days), `w` (weeks).\nExample: `15m`, `4h`, `3d`, `2w`';
+        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
+      }
+
+      const amount = parseInt(match[1], 10);
+      const unit = match[2].toLowerCase();
+
+      // Convert unit inputs directly into milliseconds
+      let durationMs = 0;
+      if (unit === 'm') durationMs = amount * 60 * 1000;
+      if (unit === 'h') durationMs = amount * 60 * 60 * 1000;
+      if (unit === 'd') durationMs = amount * 24 * 60 * 60 * 1000;
+      if (unit === 'w') durationMs = amount * 7 * 24 * 60 * 60 * 1000;
+
+      const MIN_MS = 60 * 1000;              // 1 Minute
+      const MAX_MS = 28 * 24 * 60 * 60 * 1000; // 28 Days (Discord Timeout Limit)
+
+      if (durationMs < MIN_MS || durationMs > MAX_MS) {
+        const msg = '❌ Duration must be between **1 minute (1m)** and **28 days (28d)**!';
+        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
+      }
+      // ---------------------------------
 
       const member = await guild.members.fetch(user.id).catch(() => null);
       if (!member) {
@@ -73,17 +92,10 @@ module.exports = {
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
-      const durationMs = {
-        '1m': 60000,
-        '5m': 300000,
-        '10m': 600000,
-        '1h': 3600000,
-        '1d': 86400000,
-      }[duration];
-
+      // Apply Native Discord Timeout using the parsed millisecond duration value
       await member.timeout(durationMs, reason);
 
-      const mutes = readData('mutes.json');
+      const mutes = readData('mutes.json') || {};
       if (!mutes[guildId]) mutes[guildId] = {};
       mutes[guildId][user.id] = {
         muteEnd: Date.now() + durationMs,
@@ -91,7 +103,7 @@ module.exports = {
       };
       writeData('mutes.json', mutes);
 
-      const cuteData = readData('cute.json');
+      const cuteData = readData('cute.json') || {};
       const cuteStyle = cuteData[guildId] || 'off';
       const cuteChannelName = cuteStyle !== 'off' ? formatCute('mod-logs', cuteStyle, '🛡️') : 'mod-logs';
 
@@ -103,18 +115,18 @@ module.exports = {
           .addFields(
             { name: 'User', value: `${user.tag} (${user.id})` },
             { name: 'Moderator', value: `${author.tag}` },
-            { name: 'Duration', value: duration },
+            { name: 'Duration', value: durationInput.toLowerCase() },
             { name: 'Reason', value: reason }
           );
         await modLogsChannel.send({ embeds: [embed] });
       }
 
-      await logAction(guild, 'User Muted', author, `User: ${user.tag}, Duration: ${duration}, Reason: ${reason}`);
+      await logAction(guild, 'User Muted', author, `User: ${user.tag}, Duration: ${durationInput}, Reason: ${reason}`);
 
       const embed = new EmbedBuilder()
         .setColor('#FFFF00')
         .setTitle('✅ User Muted')
-        .setDescription(`${user.tag} has been muted for ${duration}.\nReason: ${reason}`);
+        .setDescription(`${user.tag} has been muted for ${durationInput.toLowerCase()}.\nReason: ${reason}`);
 
       if (isInteraction) {
         await context.reply({ embeds: [embed], ephemeral: true });
