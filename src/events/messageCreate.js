@@ -110,10 +110,18 @@ module.exports = {
           return message.reply({ embeds: [successEmbed] }).catch(() => null);
         } else {
           const targetCommand = message.client.commands.get(commandName);
-          if (targetCommand) await targetCommand.execute(message, args).catch(() => null);
+          if (targetCommand) {
+            // Check if the command file has a dedicated prefix runner framework
+            if (typeof targetCommand.runPrefix === 'function') {
+              await targetCommand.runPrefix(message, args).catch(err => console.error(`Prefix execution error inside |${commandName}:`, err));
+            } else {
+              // Fallback to traditional execute format if no separate runner is designed
+              await targetCommand.execute(message, args).catch(err => console.error(`Traditional fallback error inside |${commandName}:`, err));
+            }
+          }
           return;
         }
-      }
+
 
       // ==========================================
       // PART B: BACKGROUND TRACKING XP ENGINE
