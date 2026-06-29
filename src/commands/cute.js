@@ -16,11 +16,9 @@ module.exports = {
           { name: 'Turn Off (Normal Text)', value: 'off' }
         )
     )
-    // Limits visibility in Discord's UI to users who can manage the server or have admin access
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
   async execute(interaction) {
-    // Permission validation gate for both Slash and Prefix command configurations
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && 
         !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
       return interaction.reply({ 

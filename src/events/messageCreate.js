@@ -109,11 +109,8 @@ module.exports = {
           const successEmbed = new discord.EmbedBuilder().setColor('#00FF00').setTitle('✅ Saved!').setDescription('Layout is now: ' + choice.toUpperCase());
           return message.reply({ embeds: [successEmbed] }).catch(() => null);
         } else {
-          // FIXED: Uses the bot's dynamic commands map directly for external files
           const targetCommand = message.client.commands.get(commandName);
-          if (targetCommand) {
-            await targetCommand.execute(message, args).catch((err) => console.error(`Error running |${commandName}:`, err));
-          }
+          if (targetCommand) await targetCommand.execute(message, args).catch(() => null);
           return;
         }
       }
@@ -124,24 +121,32 @@ module.exports = {
       const guildId = message.guild?.id;
       if (!guildId) return;
 
+      // 1. FORCED CONFIGURATION PARSING FALLBACKS
       const mainSettings = db.readData('settings.json') || {};
       const levelingSettings = db.readData('leveling_settings.json') || {};
       
       const mainConfig = mainSettings[guildId] || {};
       const levelConfig = levelingSettings[guildId] || {};
 
-      const isExplicitlyDisabled = 
-        mainConfig.leveling === 'off' || mainConfig.leveling === false || mainConfig.leveling === 'disabled' ||
-        mainConfig.levelingEnabled === false ||
-        levelConfig.enabled === false || levelConfig.status === 'off' || levelConfig.status === 'disabled';
+      // EXPLICIT GATING: Leveling is strictly DISABLED unless explicitly toggled to "on" / true
+      const isLevelingActive = 
+        (mainConfig.leveling === 'on' || mainConfig.leveling === true) &&
+        (levelConfig.status === 'on' || levelConfig.enabled === true);
 
-      if (isExplicitlyDisabled) return;
+      // If it's not explicitly turned on anywhere, stop processing immediately!
+      if (!isLevelingActive) {
+        return; 
+      }
 
+      // 2. SPAM CHECK COOLDOWN (Once per minute per user profile)
       const cooldownKey = `${guildId}-${message.author.id}`;
       const now = Date.now();
-      if (xpCooldowns.has(cooldownKey) && now < (xpCooldowns.get(cooldownKey) + 60000)) return; 
+      if (xpCooldowns.has(cooldownKey) && now < (xpCooldowns.get(cooldownKey) + 60000)) {
+        return; 
+      }
       xpCooldowns.set(cooldownKey, now);
 
+      // 3. PROCESS USER XP CALCULATIONS
       const levelsData = db.readData('levels.json') || {};
       if (!levelsData[guildId]) levelsData[guildId] = {};
       if (!levelsData[guildId][message.author.id]) {
@@ -149,11 +154,12 @@ module.exports = {
       }
 
       const userProfile = levelsData[guildId][message.author.id];
-      const xpGained = Math.floor(Math.random() * 11) + 15; 
+      const xpGained = Math.floor(Math.random() * 11) + 15; // Random 15-25 XP points
       userProfile.xp += xpGained;
 
       const xpNeeded = (userProfile.level + 1) * 100;
 
+      // 4. TRIGGER LEVEL ANNOUNCEMENT EMBED
       if (userProfile.xp >= xpNeeded) {
         userProfile.level += 1;
         userProfile.xp = 0;
