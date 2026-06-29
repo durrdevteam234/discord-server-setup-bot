@@ -135,11 +135,22 @@ module.exports = {
       const mainConfig = mainSettings[guildId] || {};
       const levelConfig = levelingSettings[guildId] || {};
 
-      const isLevelingActive = 
-        (mainConfig.leveling === 'on' || mainConfig.leveling === true) &&
-        (levelConfig.status === 'on' || levelConfig.enabled === true);
+      // 🛠️ MONGODB DEBUG LOGS: Run 'node .' on your local computer or view Render's Log tab
+      console.log('--- LEVELING DB LOOKUP DEBUGGER ---');
+      console.log('Raw data returned from levelConfig:', JSON.stringify(levelConfig, null, 2));
 
-      if (!isLevelingActive) return; 
+      // Supports flat JSON data properties, MongoDB unwrapped documents, and deep properties nested manually
+      const targetStatus = levelConfig.status || levelConfig._doc?.status || levelConfig.enabled || levelConfig._doc?.enabled;
+      const mainLevelingStatus = mainConfig.leveling || mainConfig._doc?.leveling;
+
+      const isLevelingActive = 
+        (mainLevelingStatus === 'on' || mainLevelingStatus === true) ||
+        (targetStatus === 'on' || targetStatus === true);
+
+      if (!isLevelingActive) {
+        console.log('Leveling execution aborted: Feature evaluated to INACTIVE in configurations.');
+        return; 
+      }
 
       const cooldownKey = `${guildId}-${message.author.id}`;
       const now = Date.now();
@@ -175,12 +186,29 @@ module.exports = {
           )
           .setThumbnail(message.author.displayAvatarURL({ dynamic: true }));
 
-        // 🌟 THE FIX: Cache-first look, fallback API fetch request, absolute fallback to current channel
+        // 🌟 CACHE RECOVERY ENGINE FOR RENDER DEPLOYMENTS
+        // Looks for channel properties inside basic properties, nested docs, or server configs
+        let targetChannelId = levelConfig.channelId || 
+                              levelConfig._doc?.channelId || 
+                              levelConfig.settings?.channelId || 
+                              mainConfig.channelId ||
+                              mainConfig._doc?.channelId;
+
+        console.log('Target Channel Extraction Result ID:', targetChannelId);
+
         let targetChannel = message.channel;
-        if (levelConfig.channelId) {
-          targetChannel = message.guild.channels.cache.get(levelConfig.channelId) || 
-                          await message.guild.channels.fetch(levelConfig.channelId).catch(() => null) || 
-                          message.channel;
+        if (targetChannelId && typeof targetChannelId === 'string') {
+          try {
+            // Checks memory cache first, then executes an API call to Discord to fetch missing channels on cold starts
+            targetChannel = message.guild.channels.cache.get(targetChannelId) || 
+                            await message.guild.channels.fetch(targetChannelId) || 
+                            message.channel;
+          } catch (fetchError) {
+            console.error('Failed to locate target channel via API call, defaulting to message source channel:', fetchError.message);
+            targetChannel = message.channel;
+          }
+        } else {
+          console.log('No valid String Channel ID matched in your DB documents. Defaulting to source text channel.');
         }
 
         await targetChannel.send({ embeds: [embed] }).catch(() => null);
@@ -188,6 +216,6 @@ module.exports = {
 
       db.writeData('levels.json', levelsData);
 
-    } catch (globalError) { console.error('XP Error:', globalError); }
+    } catch (globalError) { console.error('XP Global Catch Error:', globalError); }
   },
 };
