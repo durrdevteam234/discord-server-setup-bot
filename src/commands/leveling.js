@@ -1,59 +1,74 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ChannelType } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { readData, writeData } = require('../utils/database');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('leveling')
-    .setDescription('Toggle the leveling system and configure the announcement channel')
-    .addBooleanOption(option =>
-      option.setName('enabled')
-        .setDescription('Enable or disable server experience gain')
+    .setDescription('Toggle user leveling points and cards')
+    .addStringOption(option => 
+      option.setName('status')
+        .setDescription('Turn leveling on or off')
         .setRequired(true)
-    )
-    .addChannelOption(option =>
-      option.setName('channel')
-        .setDescription('Channel where level-up messages are sent (leave blank to default to active chat)')
-        .addChannelTypes(ChannelType.GuildText)
-        .setRequired(false)
-    )
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+        .addChoices({ name: 'On', value: 'on' }, { name: 'Off', value: 'off' })
+    ),
 
-  async execute(interaction) {
-    // Permission validation gate
-    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && 
-        !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-      return interaction.reply({ 
-        content: '❌ You need **Administrator** or **Manage Server** permissions to use this configuration!', 
-        ephemeral: true 
-      });
+  async execute(context, args = []) {
+    // 1. Detect if this is a Slash Command (Interaction) or Prefix Command (Message)
+    const isInteraction = !!context.isChatInputCommand;
+    const guildId = context.guildId;
+    const memberExecutor = context.member;
+
+    if (!memberExecutor.permissions.has(PermissionFlagsBits.ManageGuild)) {
+      const msg = '❌ You need Manage Server permissions!';
+      return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
     }
 
     try {
-      const enabled = interaction.options.getBoolean('enabled');
-      const announcementChannel = interaction.options.getChannel('channel');
-      const guildId = interaction.guildId;
+      let status;
 
-      const settings = readData('settings.json');
-      if (!settings[guildId]) settings[guildId] = {};
-      
-      // Save settings parameters
-      settings[guildId].levelingEnabled = enabled;
-      settings[guildId].levelUpChannelId = announcementChannel ? announcementChannel.id : null;
-      
-      writeData('settings.json', settings);
+      // 2. Safely parse based on trigger invocation type
+      if (isInteraction) {
+        status = context.options.getString('status').toLowerCase();
+      } else {
+        // Extract the plain string string from prefix command arguments array
+        status = Array.isArray(args) ? args[0]?.toLowerCase() : (typeof args === 'string' ? args.toLowerCase() : null);
+      }
+
+      if (status !== 'on' && status !== 'off') {
+        const msg = '❌ Invalid Syntax! Use: `|leveling <on/off>`';
+        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
+      }
+
+      // 3. Save state to settings.json and leveling_settings.json for absolute cross-compatibility
+      const mainSettings = readData('settings.json') || {};
+      const levelingSettings = readData('leveling_settings.json') || {};
+
+      if (!mainSettings[guildId]) mainSettings[guildId] = {};
+      if (!levelingSettings[guildId]) levelingSettings[guildId] = {};
+
+      const isActive = status === 'on';
+      mainSettings[guildId].leveling = status;
+      levelingSettings[guildId].status = status;
+      levelingSettings[guildId].enabled = isActive;
+
+      writeData('settings.json', mainSettings);
+      writeData('leveling_settings.json', levelingSettings);
 
       const embed = new EmbedBuilder()
-        .setColor(enabled ? '#00FF00' : '#808080')
-        .setTitle(enabled ? '📈 Leveling System Activated' : '⏸️ Leveling System Paused')
-        .setDescription(enabled 
-          ? `Members will earn XP! Level-up alerts: ${announcementChannel ? announcementChannel : '**Current Active Chat**'}`
-          : 'Text XP tracking has been paused for this server.'
-        );
+        .setColor(isActive ? '#00FF00' : '#FF0000')
+        .setTitle('⚙️ Leveling Matrix Updated')
+        .setDescription(`Leveling tracking features have been turned **${status.toUpperCase()}**.`);
 
-      await interaction.reply({ embeds: [embed], ephemeral: true });
+      if (isInteraction) {
+        await context.reply({ embeds: [embed], ephemeral: true });
+      } else {
+        await context.reply({ embeds: [embed] });
+      }
     } catch (error) {
-      console.error('Leveling config error:', error);
-      await interaction.reply({ content: `❌ Config Error: ${error.message}`, ephemeral: true });
+      console.error(error);
+      const msg = `❌ Error: ${error.message}`;
+      if (isInteraction) await context.reply({ content: msg, ephemeral: true });
+      else await context.reply(msg);
     }
-  },
+  }
 };
