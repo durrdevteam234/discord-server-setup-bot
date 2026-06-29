@@ -50,7 +50,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-client.prefix = '|';
+client.prefix = process.env.PREFIX || '|';
 
 // 4. LOAD SLASH COMMANDS DYNAMICALLY
 const commandsPath = path.join(__dirname, 'commands');
