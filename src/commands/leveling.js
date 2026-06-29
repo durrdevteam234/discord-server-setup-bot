@@ -17,8 +17,8 @@ module.exports = {
     )
     .addChannelOption(option =>
       option.setName('channel')
-        .setDescription('The channel where level up messages will be sent')
-        .setRequired(true)
+        .setDescription('The channel where level up messages will be sent (Optional if disabling)')
+        .setRequired(false)
     ),
 
   async execute(context, args = []) {
@@ -33,24 +33,39 @@ module.exports = {
 
     try {
       let status;
-      let channelId;
+      let channelId = null;
 
+      // 1. Fixed Argument Parsing Block
       if (isInteraction) {
         status = context.options.getString('status').toLowerCase();
-        channelId = context.options.getChannel('channel').id;
+        
+        // Use optional chaining (?.) so it safely resolves to null instead of crashing
+        const channelOpt = context.options.getChannel('channel');
+        if (channelOpt) {
+          channelId = channelOpt.id;
+        }
       } else {
-        status = args[0]?.toLowerCase();
-        const channelMention = args[1];
-        channelId = channelMention?.replace(/[<#>]/g, '');
+        // Prefix syntax: |leveling <enable/disable> [optional #channel]
+        // Safely extract status from args array index
+        status = Array.isArray(args) ? args[0]?.toLowerCase() : (typeof args === 'string' ? args.toLowerCase() : null);
+        
+        const channelMention = Array.isArray(args) ? args[1] : null;
+        if (channelMention) {
+          channelId = channelMention.replace(/[<#>&]/g, '');
+        }
       }
 
+      // 2. Status Validation
       if (status !== 'enable' && status !== 'disable') {
-        const msg = '❌ Invalid Syntax! Use: `|leveling <enable/disable> <#channel>`';
+        const msg = '❌ Invalid Syntax! Use: `|leveling <enable/disable> [#channel]`';
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
-      if (!channelId) {
-        const msg = '❌ Please provide a valid channel! Use: `|leveling <enable/disable> <#channel>`';
+      const isActive = status === 'enable';
+
+      // 3. Enforce channel only on enabling setup
+      if (isActive && !channelId) {
+        const msg = '❌ Please provide a valid channel to enable leveling! Use: `/leveling status:Enable channel:#channel`';
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
@@ -60,21 +75,28 @@ module.exports = {
       if (!mainSettings[guildId]) mainSettings[guildId] = {};
       if (!levelingSettings[guildId]) levelingSettings[guildId] = {};
 
-      const isActive = status === 'enable';
-      
       mainSettings[guildId].leveling = isActive ? 'on' : 'off';
-      
       levelingSettings[guildId].status = isActive ? 'on' : 'off';
-      levelingSettings[guildId].enabled = isActive; // This true/false flag controls the event block
-      levelingSettings[guildId].channelId = channelId;
+      levelingSettings[guildId].enabled = isActive;
+      
+      if (channelId) {
+        levelingSettings[guildId].channelId = channelId;
+      }
 
       writeData('settings.json', mainSettings);
       writeData('leveling_settings.json', levelingSettings);
 
+      // 4. Send Success Embed
+      let descriptionText = `Leveling features have been **${status.toUpperCase()}D**.`;
+      if (isActive || levelingSettings[guildId].channelId) {
+        const displayChannel = channelId || levelingSettings[guildId].channelId;
+        descriptionText += `\n**Announcement Channel:** <#${displayChannel}>`;
+      }
+
       const embed = new EmbedBuilder()
         .setColor(isActive ? '#00FF00' : '#FF0000')
         .setTitle('⚙️ Leveling Matrix Updated')
-        .setDescription(`Leveling features have been **${status.toUpperCase()}D**.\n**Announcement Channel:** <#${channelId}>`);
+        .setDescription(descriptionText);
 
       if (isInteraction) {
         await context.reply({ embeds: [embed], ephemeral: true });
