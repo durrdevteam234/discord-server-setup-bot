@@ -29,7 +29,6 @@ module.exports = {
             return message.reply('❌ Permissions required!').catch(() => null);
           }
           
-          // Fixed array parsing logic
           const templateArg = args[0] ? args[0].toLowerCase() : null;
           const clearArg = args[1] ? args[1].toLowerCase() : null;
           const clear = clearArg === 'clear' || clearArg === 'true';
@@ -103,7 +102,7 @@ module.exports = {
             return message.reply('❌ Permissions required!').catch(() => null);
           }
           
-          const choice = args[0] ? args[0].toLowerCase() : null;
+          const choice = args ? args.toLowerCase() : null;
           const validStyles = ['off', 'wide', 'smallcaps', 'bubbles'];
           if (!choice || !validStyles.includes(choice)) {
             const embed = new discord.EmbedBuilder().setColor('#FF69B4').setTitle('✨ Font Menu ✨').setDescription('Usage: `|cute <choice>`\n• `off` ➡️ Normal\n• `wide` ➡️ ᴡɪᴅᴇ\n• `smallcaps` ➡️ sᴍᴀʟʟᴄᴀᴘs\n• `bubbles` ➡️ ⓑⓤⓑⓑⓛⓔⓢ');
@@ -136,7 +135,6 @@ module.exports = {
       const mainConfig = mainSettings[guildId] || {};
       const levelConfig = levelingSettings[guildId] || {};
 
-      // Checks if features are disabled in either configuration file block
       const isLevelingActive = 
         (mainConfig.leveling === 'on' || mainConfig.leveling === true) &&
         (levelConfig.status === 'on' || levelConfig.enabled === true);
@@ -177,9 +175,14 @@ module.exports = {
           )
           .setThumbnail(message.author.displayAvatarURL({ dynamic: true }));
 
-        // Routes notification message safely to your chosen custom channel ID
-        const targetChannelId = levelConfig.channelId || message.channel.id;
-        const targetChannel = message.guild.channels.cache.get(targetChannelId) || message.channel;
+        // 🌟 THE FIX: Cache-first look, fallback API fetch request, absolute fallback to current channel
+        let targetChannel = message.channel;
+        if (levelConfig.channelId) {
+          targetChannel = message.guild.channels.cache.get(levelConfig.channelId) || 
+                          await message.guild.channels.fetch(levelConfig.channelId).catch(() => null) || 
+                          message.channel;
+        }
+
         await targetChannel.send({ embeds: [embed] }).catch(() => null);
       }
 
