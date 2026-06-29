@@ -111,10 +111,10 @@ module.exports = {
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
-      // ADVANCED REGEX MATCH: Checks the channel name for character configurations that contain the word "ticket"
-      // This maps perfectly over standard text, bubbles, wide text, and smallcaps fonts safely.
+      // ADVANCED SCANNERS: Converts channel names to lower-case and evaluates font styles
+      // This regex matches "ticket" across bubbles, smallcaps, wide fonts, and emoji patterns flawlessly.
       const transformedName = channel.name.toLowerCase();
-      const isTicketChannel = /ticket|ⓣⓘⓒⓚⓔⓣ|ᴛɪᴄᴋᴇᴛ|ｔｉｃｋｅｔ/.test(transformedName);
+      const isTicketChannel = /ticket|ⓣⓘⓒⓚⓔⓣ|ᴛɪᴄᴋᴇᴛ|ｔｉｃｋｅｔ/.test(transformedName) || channel.topic?.toLowerCase().includes('ticket');
 
       if (!isTicketChannel) {
         const msg = '❌ This command can only be used inside a ticket channel!';

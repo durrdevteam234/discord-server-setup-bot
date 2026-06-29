@@ -4,60 +4,61 @@ const { readData, writeData } = require('../utils/database');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('welcome')
-    .setDescription('Configure the welcome/goodbye system toggle and logs channel')
-    .addBooleanOption(option =>
-      option.setName('enabled')
-        .setDescription('Turn the welcome/goodbye announcement system ON or OFF')
-        .setRequired(true)
-    )
-    .addChannelOption(option =>
-      option.setName('channel')
-        .setDescription('The channel where welcome and goodbye embeds will be posted')
-        .setRequired(false)
-    )
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+    .setDescription('Configure or toggle the welcome system')
+    .addChannelOption(option => option.setName('channel').setDescription('The welcome channel').setRequired(true))
+    .addBooleanOption(option => option.setName('enabled').setDescription('Enable welcome alerts').setRequired(true)),
 
-  async execute(interaction) {
-    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && 
-        !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-      return interaction.reply({ 
-        content: '❌ You need **Administrator** or **Manage Server** permissions to use this configuration!', 
-        ephemeral: true 
-      });
+  async execute(context, args = []) {
+    const isInteraction = !!context.isChatInputCommand;
+    const guildId = context.guildId;
+    const memberExecutor = context.member;
+
+    if (!memberExecutor.permissions.has(PermissionFlagsBits.ManageGuild)) {
+      const msg = '❌ You need Manage Server permissions!';
+      return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
     }
 
     try {
-      const enabled = interaction.options.getBoolean('enabled');
-      const channel = interaction.options.getChannel('channel');
-      const guildId = interaction.guildId;
+      let targetChannel;
+      let isEnabled;
 
+      if (isInteraction) {
+        targetChannel = context.options.getChannel('channel');
+        isEnabled = context.options.getBoolean('enabled');
+      } else {
+        // Prefix: args[0] is channel mention/ID, args[1] is true/false string
+        targetChannel = context.mentions.channels.first() || context.guild.channels.cache.get(args[0]);
+        isEnabled = args[1] ? args[1].toLowerCase() === 'true' : null;
+      }
+
+      if (!targetChannel || isEnabled === null) {
+        const msg = '❌ Invalid Syntax! Use: `|welcome <#channel> <true/false>`';
+        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
+      }
+
+      // Save to database registry
       const settings = readData('settings.json') || {};
       if (!settings[guildId]) settings[guildId] = {};
       
-      // Save settings flags securely
-      settings[guildId].welcomeEnabled = enabled;
-      if (channel) {
-        settings[guildId].welcomeChannelId = channel.id;
-      }
-      
+      settings[guildId].welcomeChannelId = targetChannel.id;
+      settings[guildId].welcomeEnabled = isEnabled;
       writeData('settings.json', settings);
 
-      // Get current channel configuration or fall back to saved settings text label
-      const savedChannelId = settings[guildId].welcomeChannelId;
-      const displayChannelText = channel ? channel : (savedChannelId ? `<#${savedChannelId}>` : '**Not Configured Yet**');
-
       const embed = new EmbedBuilder()
-        .setColor(enabled ? '#00FF00' : '#808080')
-        .setTitle(enabled ? '✨ Welcome System Activated' : '⏸️ Welcome System Paused')
-        .setDescription(enabled 
-          ? `Join/Leave clean embed cards are now active in: ${displayChannelText}`
-          : 'Join/Leave welcome announcement cards are now paused.'
-        );
+        .setColor('#00FF00')
+        .setTitle('✅ Welcome Config Updated')
+        .setDescription(`**Channel:** ${targetChannel}\n**System Enabled:** \`${isEnabled}\``);
 
-      await interaction.reply({ embeds: [embed], ephemeral: true });
+      if (isInteraction) {
+        await context.reply({ embeds: [embed], ephemeral: true });
+      } else {
+        await context.reply({ embeds: [embed] });
+      }
     } catch (error) {
-      console.error('Welcome command configuration error:', error);
-      await interaction.reply({ content: `❌ Config Error: ${error.message}`, ephemeral: true });
+      console.error(error);
+      const msg = `❌ Error: ${error.message}`;
+      if (isInteraction) await context.reply({ content: msg, ephemeral: true });
+      else await context.reply(msg);
     }
-  },
+  }
 };
