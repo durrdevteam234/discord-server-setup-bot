@@ -40,15 +40,22 @@ module.exports = {
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
-      const targetMember = await guild.members.fetch(user.id).catch(() => null);
-      if (targetMember && !targetMember.bannable) {
-        const msg = '❌ I cannot ban this user! Their roles might be higher than mine or yours.';
+      // 🛑 ANTI-DUPLICATE CHECK: Intercept if user is already banned natives
+      const existingBan = await guild.bans.fetch(user.id).catch(() => null);
+      if (existingBan) {
+        const msg = `❌ **${user.username}** is already banned from this server!`;
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
-      await guild.members.ban(user, { reason });
+      const member = await guild.members.fetch(user.id).catch(() => null);
+      if (member && !member.bannable) {
+        const msg = '❌ I cannot ban this user! Their roles are higher than mine or yours.';
+        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
+      }
 
-      const cuteData = readData('cute.json');
+      await guild.members.ban(user.id, { reason });
+
+      const cuteData = readData('cute.json') || {};
       const cuteStyle = cuteData[guildId] || 'off';
       const cuteChannelName = cuteStyle !== 'off' ? formatCute('mod-logs', cuteStyle, '🛡️') : 'mod-logs';
 
@@ -62,7 +69,7 @@ module.exports = {
             { name: 'Moderator', value: `${author.tag}` },
             { name: 'Reason', value: reason }
           );
-        await modLogsChannel.send({ embeds: [embed] });
+        await modLogsChannel.send({ embeds: [embed] }).catch(() => null);
       }
 
       await logAction(guild, 'User Banned', author, `User: ${user.tag}, Reason: ${reason}`);
@@ -72,19 +79,11 @@ module.exports = {
         .setTitle('✅ User Banned')
         .setDescription(`${user.tag} has been banned.\nReason: ${reason}`);
 
-      if (isInteraction) {
-        await context.reply({ embeds: [embed], ephemeral: true });
-      } else {
-        await context.reply({ embeds: [embed] });
-      }
+      return isInteraction ? context.reply({ embeds: [embed], ephemeral: true }) : context.reply({ embeds: [embed] });
     } catch (error) {
       console.error('Ban error:', error);
       const msg = `❌ Error banning user: ${error.message}`;
-      if (isInteraction) {
-        await context.reply({ content: msg, ephemeral: true });
-      } else {
-        await context.reply(msg);
-      }
+      return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
     }
   },
 };

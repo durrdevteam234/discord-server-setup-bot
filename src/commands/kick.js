@@ -40,56 +40,49 @@ module.exports = {
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
+      // 🛑 ANTI-GHOST CHECK: Verify target is a current server member
       const member = await guild.members.fetch(user.id).catch(() => null);
       if (!member) {
-        const msg = '❌ This user is not in the server.';
+        const msg = '❌ This user is not in the server! You cannot kick someone who has already left.';
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
       if (!member.kickable) {
-        const msg = '❌ I cannot kick this user! Their roles might be higher than mine or yours.';
+        const msg = '❌ I cannot kick this user! Their roles are higher than mine or yours.';
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
       await member.kick(reason);
 
-      const cuteData = readData('cute.json');
+      const cuteData = readData('cute.json') || {};
       const cuteStyle = cuteData[guildId] || 'off';
       const cuteChannelName = cuteStyle !== 'off' ? formatCute('mod-logs', cuteStyle, '🛡️') : 'mod-logs';
 
       const modLogsChannel = guild.channels.cache.find(ch => ch.name === 'mod-logs' || ch.name === cuteChannelName);
       if (modLogsChannel) {
         const embed = new EmbedBuilder()
-          .setColor('#FF9900')
+          .setColor('#FFA500')
           .setTitle('User Kicked')
           .addFields(
             { name: 'User', value: `${user.tag} (${user.id})` },
             { name: 'Moderator', value: `${author.tag}` },
             { name: 'Reason', value: reason }
           );
-        await modLogsChannel.send({ embeds: [embed] });
+        await modLogsChannel.send({ embeds: [embed] }).catch(() => null);
       }
 
       await logAction(guild, 'User Kicked', author, `User: ${user.tag}, Reason: ${reason}`);
 
       const embed = new EmbedBuilder()
-        .setColor('#FF9900')
+        .setColor('#FFA500')
         .setTitle('✅ User Kicked')
         .setDescription(`${user.tag} has been kicked.\nReason: ${reason}`);
 
-      if (isInteraction) {
-        await context.reply({ embeds: [embed], ephemeral: true });
-      } else {
-        await context.reply({ embeds: [embed] });
-      }
+      return isInteraction ? context.reply({ embeds: [embed], ephemeral: true }) : context.reply({ embeds: [embed] });
     } catch (error) {
       console.error('Kick error:', error);
       const msg = `❌ Error kicking user: ${error.message}`;
-      if (isInteraction) {
-        await context.reply({ content: msg, ephemeral: true });
-      } else {
-        await context.reply(msg);
-      }
+      return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
     }
   },
 };

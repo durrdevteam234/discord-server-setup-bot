@@ -10,7 +10,7 @@ module.exports = {
     .addUserOption(option => option.setName('user').setDescription('User to mute').setRequired(true))
     .addStringOption(option =>
       option.setName('duration')
-        .setDescription('Mute duration (e.g., 30m, 2h, 7d, 3w)') // Custom inputs allowed now
+        .setDescription('Mute duration (e.g., 30m, 2h, 7d, 3w)')
         .setRequired(true)
     )
     .addStringOption(option => option.setName('reason').setDescription('Reason for mute').setRequired(false))
@@ -48,42 +48,40 @@ module.exports = {
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
+      // 🛑 ANTI-GHOST CHECK: Ensure user is in the server before trying to mute
+      const member = await guild.members.fetch(user.id).catch(() => null);
+      if (!member) {
+        const msg = '❌ This user is not in the server! You cannot mute someone who is not here.';
+        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
+      }
+
       if (!durationInput) {
         const msg = '❌ Please specify a duration. Example: `30m`, `4h`, `5d`, `2w`';
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
-      // --- ⏳ DURATION PARSER ENGINE ---
       const durationRegex = /^(\d+)([mhdw])$/i;
       const match = durationInput.match(durationRegex);
 
       if (!match) {
-        const msg = '❌ Invalid format! Use numbers followed by unit: `m` (minutes), `h` (hours), `d` (days), `w` (weeks).\nExample: `15m`, `4h`, `3d`, `2w`';
+        const msg = '❌ Invalid format! Use numbers followed by unit: `m` (minutes), `h` (hours), `d` (days), `w` (weeks).';
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
       const amount = parseInt(match[1], 10);
       const unit = match[2].toLowerCase();
 
-      // Convert unit inputs directly into milliseconds
       let durationMs = 0;
       if (unit === 'm') durationMs = amount * 60 * 1000;
       if (unit === 'h') durationMs = amount * 60 * 60 * 1000;
       if (unit === 'd') durationMs = amount * 24 * 60 * 60 * 1000;
       if (unit === 'w') durationMs = amount * 7 * 24 * 60 * 60 * 1000;
 
-      const MIN_MS = 60 * 1000;              // 1 Minute
-      const MAX_MS = 28 * 24 * 60 * 60 * 1000; // 28 Days (Discord Timeout Limit)
+      const MIN_MS = 60 * 1000;
+      const MAX_MS = 28 * 24 * 60 * 60 * 1000;
 
       if (durationMs < MIN_MS || durationMs > MAX_MS) {
         const msg = '❌ Duration must be between **1 minute (1m)** and **28 days (28d)**!';
-        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
-      }
-      // ---------------------------------
-
-      const member = await guild.members.fetch(user.id).catch(() => null);
-      if (!member) {
-        const msg = '❌ This user is not in the server.';
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
@@ -92,15 +90,11 @@ module.exports = {
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
-      // Apply Native Discord Timeout using the parsed millisecond duration value
       await member.timeout(durationMs, reason);
 
       const mutes = readData('mutes.json') || {};
       if (!mutes[guildId]) mutes[guildId] = {};
-      mutes[guildId][user.id] = {
-        muteEnd: Date.now() + durationMs,
-        reason,
-      };
+      mutes[guildId][user.id] = { muteEnd: Date.now() + durationMs, reason };
       writeData('mutes.json', mutes);
 
       const cuteData = readData('cute.json') || {};
@@ -118,7 +112,7 @@ module.exports = {
             { name: 'Duration', value: durationInput.toLowerCase() },
             { name: 'Reason', value: reason }
           );
-        await modLogsChannel.send({ embeds: [embed] });
+        await modLogsChannel.send({ embeds: [embed] }).catch(() => null);
       }
 
       await logAction(guild, 'User Muted', author, `User: ${user.tag}, Duration: ${durationInput}, Reason: ${reason}`);
@@ -128,19 +122,11 @@ module.exports = {
         .setTitle('✅ User Muted')
         .setDescription(`${user.tag} has been muted for ${durationInput.toLowerCase()}.\nReason: ${reason}`);
 
-      if (isInteraction) {
-        await context.reply({ embeds: [embed], ephemeral: true });
-      } else {
-        await context.reply({ embeds: [embed] });
-      }
+      return isInteraction ? context.reply({ embeds: [embed], ephemeral: true }) : context.reply({ embeds: [embed] });
     } catch (error) {
       console.error('Mute error:', error);
       const msg = `❌ Error muting user: ${error.message}`;
-      if (isInteraction) {
-        await context.reply({ content: msg, ephemeral: true });
-      } else {
-        await context.reply(msg);
-      }
+      return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
     }
   },
 };
