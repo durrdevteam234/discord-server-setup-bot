@@ -35,20 +35,15 @@ module.exports = {
       let status;
       let channelId = null;
 
-      // 1. Fixed Argument Parsing Block
+      // 1. Safe argument extraction
       if (isInteraction) {
         status = context.options.getString('status').toLowerCase();
-        
-        // Use optional chaining (?.) so it safely resolves to null instead of crashing
         const channelOpt = context.options.getChannel('channel');
         if (channelOpt) {
           channelId = channelOpt.id;
         }
       } else {
-        // Prefix syntax: |leveling <enable/disable> [optional #channel]
-        // Safely extract status from args array index
         status = Array.isArray(args) ? args[0]?.toLowerCase() : (typeof args === 'string' ? args.toLowerCase() : null);
-        
         const channelMention = Array.isArray(args) ? args[1] : null;
         if (channelMention) {
           channelId = channelMention.replace(/[<#>&]/g, '');
@@ -63,7 +58,7 @@ module.exports = {
 
       const isActive = status === 'enable';
 
-      // 3. Enforce channel only on enabling setup
+      // 3. Enforce channel selection ONLY on enabling
       if (isActive && !channelId) {
         const msg = '❌ Please provide a valid channel to enable leveling! Use: `/leveling status:Enable channel:#channel`';
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
@@ -86,10 +81,12 @@ module.exports = {
       writeData('settings.json', mainSettings);
       writeData('leveling_settings.json', levelingSettings);
 
-      // 4. Send Success Embed
+      // 4. Fixed description builder (Never reads properties of null)
       let descriptionText = `Leveling features have been **${status.toUpperCase()}D**.`;
-      if (isActive || levelingSettings[guildId].channelId) {
-        const displayChannel = channelId || levelingSettings[guildId].channelId;
+      
+      // Pull saved channel safely if no new channelId was provided in this message call
+      const displayChannel = channelId || levelingSettings[guildId]?.channelId;
+      if (displayChannel) {
         descriptionText += `\n**Announcement Channel:** <#${displayChannel}>`;
       }
 
