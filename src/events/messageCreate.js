@@ -3,7 +3,6 @@ const audit = require('../utils/auditLog');
 const db = require('../utils/database');
 const formatter = require('../utils/textFormatter.js');
 
-// Cooldown tracker memory cache to restrict users from farming XP text spam
 const xpCooldowns = new Map();
 
 module.exports = {
@@ -100,7 +99,7 @@ module.exports = {
           if (!message.member.permissions.has(discord.PermissionFlagsBits.Administrator) && !message.member.permissions.has(discord.PermissionFlagsBits.ManageGuild)) {
             return message.reply('❌ Permissions required!').catch(() => null);
           }
-          const choice = args ? args.toLowerCase() : null;
+          const choice = args[0] ? args[0].toLowerCase() : null;
           const validStyles = ['off', 'wide', 'smallcaps', 'bubbles'];
           if (!choice || !validStyles.includes(choice)) {
             const embed = new discord.EmbedBuilder().setColor('#FF69B4').setTitle('✨ Font Menu ✨').setDescription('Usage: `|cute <choice>`\n• `off` ➡️ Normal\n• `wide` ➡️ ᴡɪᴅᴇ\n• `smallcaps` ➡️ sᴍᴀʟʟᴄᴀᴘs\n• `bubbles` ➡️ ⓑⓤⓑⓑⓛⓔⓢ');
@@ -110,8 +109,11 @@ module.exports = {
           const successEmbed = new discord.EmbedBuilder().setColor('#00FF00').setTitle('✅ Saved!').setDescription('Layout is now: ' + choice.toUpperCase());
           return message.reply({ embeds: [successEmbed] }).catch(() => null);
         } else {
+          // FIXED: Uses the bot's dynamic commands map directly for external files
           const targetCommand = message.client.commands.get(commandName);
-          if (targetCommand) await targetCommand.execute(message, args).catch(() => null);
+          if (targetCommand) {
+            await targetCommand.execute(message, args).catch((err) => console.error(`Error running |${commandName}:`, err));
+          }
           return;
         }
       }
@@ -122,32 +124,24 @@ module.exports = {
       const guildId = message.guild?.id;
       if (!guildId) return;
 
-      // 1. DUAL DATABASE SAFETY CONFIGURATION VERIFICATION
       const mainSettings = db.readData('settings.json') || {};
       const levelingSettings = db.readData('leveling_settings.json') || {};
       
       const mainConfig = mainSettings[guildId] || {};
       const levelConfig = levelingSettings[guildId] || {};
 
-      // Unified block checking all known toggle indicators across both files
       const isExplicitlyDisabled = 
         mainConfig.leveling === 'off' || mainConfig.leveling === false || mainConfig.leveling === 'disabled' ||
         mainConfig.levelingEnabled === false ||
         levelConfig.enabled === false || levelConfig.status === 'off' || levelConfig.status === 'disabled';
 
-      if (isExplicitlyDisabled) {
-        return; // Drops execution cleanly before generating any XP math or level cards
-      }
+      if (isExplicitlyDisabled) return;
 
-      // 2. SPAM CHECK COOLDOWN (Once per minute per user profile)
       const cooldownKey = `${guildId}-${message.author.id}`;
       const now = Date.now();
-      if (xpCooldowns.has(cooldownKey) && now < (xpCooldowns.get(cooldownKey) + 60000)) {
-        return; 
-      }
+      if (xpCooldowns.has(cooldownKey) && now < (xpCooldowns.get(cooldownKey) + 60000)) return; 
       xpCooldowns.set(cooldownKey, now);
 
-      // 3. PROCESS USER XP CALCULATIONS
       const levelsData = db.readData('levels.json') || {};
       if (!levelsData[guildId]) levelsData[guildId] = {};
       if (!levelsData[guildId][message.author.id]) {
@@ -155,12 +149,11 @@ module.exports = {
       }
 
       const userProfile = levelsData[guildId][message.author.id];
-      const xpGained = Math.floor(Math.random() * 11) + 15; // Random 15-25 XP points
+      const xpGained = Math.floor(Math.random() * 11) + 15; 
       userProfile.xp += xpGained;
 
       const xpNeeded = (userProfile.level + 1) * 100;
 
-      // 4. TRIGGER LEVEL ANNOUNCEMENT EMBED
       if (userProfile.xp >= xpNeeded) {
         userProfile.level += 1;
         userProfile.xp = 0;

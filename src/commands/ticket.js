@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ChannelType } = require('discord.js');
 const { logAction } = require('../utils/auditLog');
-const { readData, writeData } = require('../utils/database');
+const { readData } = require('../utils/database');
 const { formatCute } = require('../utils/textFormatter.js');
 
 module.exports = {
@@ -18,23 +18,42 @@ module.exports = {
         .setDescription('🔒 Staff Only: Close and delete this ticket channel')
     ),
 
-  async execute(interaction) {
-    const subcommand = interaction.options.getSubcommand();
-    const guild = interaction.guild;
-    const guildId = interaction.guildId;
+  async execute(context, args = []) {
+    // 1. Detect if this is a Slash Command (Interaction) or Prefix Command (Message)
+    const isInteraction = !!context.isChatInputCommand;
+    const guild = context.guild;
+    const guildId = context.guildId;
+    const author = isInteraction ? context.user : context.author;
+    const memberExecutor = context.member;
+    const channel = context.channel;
+
+    // Determine the active subcommand choice dynamically
+    let subcommand;
+    if (isInteraction) {
+      subcommand = context.options.getSubcommand();
+    } else {
+      subcommand = args[0] ? args[0].toLowerCase() : null;
+      if (!subcommand || (subcommand !== 'create' && subcommand !== 'close')) {
+        return context.reply('❌ Usage: `|ticket create` or `|ticket close`').catch(() => null);
+      }
+    }
 
     // ==========================================
     // 🎟️ TICKET CREATE SUBCOMMAND
     // ==========================================
     if (subcommand === 'create') {
-      await interaction.deferReply({ ephemeral: true });
+      if (isInteraction) {
+        await context.deferReply({ ephemeral: true });
+      } else {
+        await context.reply('⏳ Creating your ticket...').catch(() => null);
+      }
 
       try {
         const cuteData = readData('cute.json');
         const cuteStyle = cuteData[guildId] || 'off';
 
         // Use a persistent slice of the User ID instead of a counter variable that resets on Railway restarts
-        const uniqueId = interaction.user.id.slice(-4);
+        const uniqueId = author.id.slice(-4);
         const rawName = `ticket-${uniqueId}`;
         const ticketChannelName = cuteStyle !== 'off' ? formatCute(rawName, cuteStyle, '🎟️') : rawName;
 
@@ -48,7 +67,7 @@ module.exports = {
               deny: [PermissionFlagsBits.ViewChannel],
             },
             {
-              id: interaction.user.id,
+              id: author.id,
               allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
             },
           ],
@@ -58,16 +77,26 @@ module.exports = {
         const embed = new EmbedBuilder()
           .setColor('#00FF00')
           .setTitle(welcomeTitle)
-          .setDescription(`Hello ${interaction.user}, thanks for opening a ticket!\nUse \`/ticket close\` to request a staff member close this channel.`);
+          .setDescription(`Hello ${author}, thanks for opening a ticket!\nUse \`${isInteraction ? '/ticket close' : '|ticket close'}\` to request a staff member close this channel.`);
 
-        await ticketChannel.send({ content: `${interaction.user}`, embeds: [embed] });
-        try { await logAction(guild, 'Ticket Opened', interaction.user, `Channel: ${ticketChannel.name}`); } catch(e){}
+        await ticketChannel.send({ content: `${author}`, embeds: [embed] });
+        try { await logAction(guild, 'Ticket Opened', author, `Channel: ${ticketChannel.name}`); } catch(e){}
         
-        await interaction.editReply({ content: `✅ Ticket channel created successfully: ${ticketChannel}` });
+        const successMsg = `✅ Ticket channel created successfully: ${ticketChannel}`;
+        if (isInteraction) {
+          await context.editReply({ content: successMsg });
+        } else {
+          await channel.send(successMsg);
+        }
 
       } catch (error) {
         console.error('Ticket creation error:', error);
-        await interaction.editReply({ content: `❌ Failed to create ticket: ${error.message}` }).catch(() => null);
+        const errMsg = `❌ Failed to create ticket: ${error.message}`;
+        if (isInteraction) {
+          await context.editReply({ content: errMsg }).catch(() => null);
+        } else {
+          await channel.send(errMsg).catch(() => null);
+        }
       }
     }
 
@@ -76,22 +105,34 @@ module.exports = {
     // ==========================================
     if (subcommand === 'close') {
       // Permission restriction check for closing staff actions
-      if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && 
-          !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-        return interaction.reply({ content: '❌ You need **Manage Server** or **Admin** permissions to close tickets!', ephemeral: true });
+      if (!memberExecutor.permissions.has(PermissionFlagsBits.Administrator) && 
+          !memberExecutor.permissions.has(PermissionFlagsBits.ManageGuild)) {
+        const msg = '❌ You need **Manage Server** or **Admin** permissions to close tickets!';
+        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
-      // Check if they are inside a ticket channel
-      if (!interaction.channel.name.includes('ticket')) {
-        return interaction.reply({ content: '❌ This command can only be used inside a ticket channel!', ephemeral: true });
+      // ADVANCED REGEX MATCH: Checks the channel name for character configurations that contain the word "ticket"
+      // This maps perfectly over standard text, bubbles, wide text, and smallcaps fonts safely.
+      const transformedName = channel.name.toLowerCase();
+      const isTicketChannel = /ticket|ⓣⓘⓒⓚⓔⓣ|ᴛɪᴄᴋᴇᴛ|ｔｉｃｋｅｔ/.test(transformedName);
+
+      if (!isTicketChannel) {
+        const msg = '❌ This command can only be used inside a ticket channel!';
+        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
-      await interaction.reply({ content: '🔒 Closing and purging this channel in 5 seconds...' });
-      try { await logAction(guild, 'Ticket Closed', interaction.user, `Channel: ${interaction.channel.name}`); } catch(e){}
+      const closeMsg = '🔒 Closing and purging this channel in 5 seconds...';
+      if (isInteraction) {
+        await context.reply({ content: closeMsg });
+      } else {
+        await context.reply(closeMsg).catch(() => null);
+      }
+
+      try { await logAction(guild, 'Ticket Closed', author, `Channel: ${channel.name}`); } catch(e){}
 
       setTimeout(async () => {
         try {
-          await interaction.channel.delete();
+          await channel.delete();
         } catch (e) {
           console.error('Failed to delete ticket channel:', e.message);
         }
