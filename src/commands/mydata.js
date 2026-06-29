@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder } = require('discord.js');
 const { readData } = require('../utils/database');
 
 module.exports = {
@@ -6,11 +6,16 @@ module.exports = {
     .setName('mydata')
     .setDescription('Developer Only: View raw saved JSON data files'),
 
+  // This handles the |mydata prefix command directly
+  async runPrefix(message, args = []) {
+    await this.execute(message, args);
+  },
+
   async execute(context, args = []) {
     const isInteraction = !!context.isChatInputCommand;
     const authorId = isInteraction ? context.user.id : context.author.id;
 
-    // 🔒 SECURITY GATE: Replace this string with YOUR personal Discord User ID
+    // 🔒 SECURITY GATE: Put your Discord User ID here (numbers only inside quotes)
     const OWNER_ID = '889540845269823559'; 
 
     if (authorId !== OWNER_ID) {
@@ -19,20 +24,24 @@ module.exports = {
     }
 
     try {
-      // Pick which file you want to view based on arguments (Default: levels.json)
-      let fileName = 'levels.json';
-      const inputArg = isInteraction ? context.options.getString('file') : args[0];
+      // Safely parse argument whether it's an array or string
+      let choice = '';
+      if (isInteraction) {
+        choice = context.options.getString('file') || '';
+      } else {
+        choice = Array.isArray(args) ? args[0] : args;
+      }
       
-      if (inputArg === 'settings') fileName = 'settings.json';
-      if (inputArg === 'mutes') fileName = 'mutes.json';
-      if (inputArg === 'leveling') fileName = 'leveling_settings.json';
+      let fileName = 'levels.json';
+      choice = choice?.toLowerCase();
+      
+      if (choice === 'settings') fileName = 'settings.json';
+      if (choice === 'mutes') fileName = 'mutes.json';
+      if (choice === 'leveling') fileName = 'leveling_settings.json';
 
       const rawData = readData(fileName) || {};
-      
-      // Convert the JSON object to a clean string format
       const jsonString = JSON.stringify(rawData, null, 2);
 
-      // If the data is massive, truncate it to fit inside Discord's 2000 character limit
       const safeString = jsonString.length > 1900 
         ? jsonString.substring(0, 1900) + '\n... (truncated due to length)'
         : jsonString;
@@ -52,4 +61,3 @@ module.exports = {
     }
   }
 };
-
