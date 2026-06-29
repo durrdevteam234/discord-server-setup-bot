@@ -4,16 +4,24 @@ const { readData, writeData } = require('../utils/database');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('leveling')
-    .setDescription('Toggle user leveling points and cards')
+    .setDescription('Toggle leveling and set the announcement channel')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addStringOption(option => 
       option.setName('status')
         .setDescription('Turn leveling on or off')
         .setRequired(true)
-        .addChoices({ name: 'On', value: 'on' }, { name: 'Off', value: 'off' })
+        .addChoices(
+          { name: 'Enable', value: 'enable' }, 
+          { name: 'Disable', value: 'disable' }
+        )
+    )
+    .addChannelOption(option =>
+      option.setName('channel')
+        .setDescription('The channel where level up messages will be sent')
+        .setRequired(true)
     ),
 
   async execute(context, args = []) {
-    // 1. Detect if this is a Slash Command (Interaction) or Prefix Command (Message)
     const isInteraction = !!context.isChatInputCommand;
     const guildId = context.guildId;
     const memberExecutor = context.member;
@@ -25,31 +33,40 @@ module.exports = {
 
     try {
       let status;
+      let channelId;
 
-      // 2. Safely parse based on trigger invocation type
       if (isInteraction) {
         status = context.options.getString('status').toLowerCase();
+        channelId = context.options.getChannel('channel').id;
       } else {
-        // Extract the plain string string from prefix command arguments array
-        status = Array.isArray(args) ? args[0]?.toLowerCase() : (typeof args === 'string' ? args.toLowerCase() : null);
+        status = args[0]?.toLowerCase();
+        const channelMention = args[1];
+        channelId = channelMention?.replace(/[<#>]/g, '');
       }
 
-      if (status !== 'on' && status !== 'off') {
-        const msg = '❌ Invalid Syntax! Use: `|leveling <on/off>`';
+      if (status !== 'enable' && status !== 'disable') {
+        const msg = '❌ Invalid Syntax! Use: `|leveling <enable/disable> <#channel>`';
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
-      // 3. Save state to settings.json and leveling_settings.json for absolute cross-compatibility
+      if (!channelId) {
+        const msg = '❌ Please provide a valid channel! Use: `|leveling <enable/disable> <#channel>`';
+        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
+      }
+
       const mainSettings = readData('settings.json') || {};
       const levelingSettings = readData('leveling_settings.json') || {};
 
       if (!mainSettings[guildId]) mainSettings[guildId] = {};
       if (!levelingSettings[guildId]) levelingSettings[guildId] = {};
 
-      const isActive = status === 'on';
-      mainSettings[guildId].leveling = status;
-      levelingSettings[guildId].status = status;
-      levelingSettings[guildId].enabled = isActive;
+      const isActive = status === 'enable';
+      
+      mainSettings[guildId].leveling = isActive ? 'on' : 'off';
+      
+      levelingSettings[guildId].status = isActive ? 'on' : 'off';
+      levelingSettings[guildId].enabled = isActive; // This true/false flag controls the event block
+      levelingSettings[guildId].channelId = channelId;
 
       writeData('settings.json', mainSettings);
       writeData('leveling_settings.json', levelingSettings);
@@ -57,7 +74,7 @@ module.exports = {
       const embed = new EmbedBuilder()
         .setColor(isActive ? '#00FF00' : '#FF0000')
         .setTitle('⚙️ Leveling Matrix Updated')
-        .setDescription(`Leveling tracking features have been turned **${status.toUpperCase()}**.`);
+        .setDescription(`Leveling features have been **${status.toUpperCase()}D**.\n**Announcement Channel:** <#${channelId}>`);
 
       if (isInteraction) {
         await context.reply({ embeds: [embed], ephemeral: true });
