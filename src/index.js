@@ -8,8 +8,38 @@ if (typeof globalThis.ReadableStream === 'undefined') {
 const fs = require('fs');
 const path = require('path');
 const { Client, Collection, GatewayIntentBits } = require('discord.js');
+const mongoose = require('mongoose');
+const express = require('express');
 require('dotenv').config();
 
+// ==========================================
+// 1. FREE TIER KEEP-ALIVE EXPRESS SERVER
+// ==========================================
+const app = express();
+const port = process.env.PORT || 10000; // Render automatically injects this port
+
+app.get('/', (req, res) => {
+    res.send('Bot keep-alive server is active and running!');
+});
+
+app.listen(port, () => {
+    console.log(`[SERVER] Keep-alive server listening on port ${port} for Render health checks.`);
+});
+
+// ==========================================
+// 2. MONGODB ATLAS CONNECTION SETUP
+// ==========================================
+if (!process.env.MONGODB_URI) {
+    console.error('[CRITICAL] MONGODB_URI environment variable is missing!');
+} else {
+    mongoose.connect(process.env.MONGODB_URI)
+        .then(() => console.log('[DATABASE] Connected to MongoDB Atlas successfully!'))
+        .catch(err => console.error('[DATABASE ERROR] MongoDB connection error:', err));
+}
+
+// ==========================================
+// 3. DISCORD BOT CLIENT INITIALIZATION
+// ==========================================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -22,7 +52,7 @@ const client = new Client({
 client.commands = new Collection();
 client.prefix = '|';
 
-// 1. LOAD SLASH COMMANDS DYNAMICALLY
+// 4. LOAD SLASH COMMANDS DYNAMICALLY
 const commandsPath = path.join(__dirname, 'commands');
 if (fs.existsSync(commandsPath)) {
   const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
@@ -39,7 +69,7 @@ if (fs.existsSync(commandsPath)) {
   }
 }
 
-// 2. LOAD EVENT HANDLERS DYNAMICALLY
+// 5. LOAD EVENT HANDLERS DYNAMICALLY
 const eventsPath = path.join(__dirname, 'events');
 console.log('[STARTUP] Checking events directory path: ' + eventsPath);
 
