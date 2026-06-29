@@ -40,14 +40,15 @@ module.exports = {
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
-      // 🛑 ANTI-DUPLICATE CHECK: Intercept if user is already banned natives
-      const existingBan = await guild.bans.fetch(user.id).catch(() => null);
+      // 🛑 ANTI-DUPLICATE CHECK (Fetch via API, bypassing cache to see if already banned)
+      const existingBan = await guild.bans.fetch({ user: user.id, cache: false }).catch(() => null);
       if (existingBan) {
         const msg = `❌ **${user.username}** is already banned from this server!`;
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
-      const member = await guild.members.fetch(user.id).catch(() => null);
+      // Bypass cache to fetch member presence accurately
+      const member = await guild.members.fetch({ user: user.id, force: true }).catch(() => null);
       if (member && !member.bannable) {
         const msg = '❌ I cannot ban this user! Their roles are higher than mine or yours.';
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);

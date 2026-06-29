@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
-const { logAction } = require('../utils/auditLog');
+const { logAction = () => {} } = require('../utils/auditLog');
 const { readData } = require('../utils/database');
 const { formatCute } = require('../utils/textFormatter.js');
 
@@ -40,8 +40,8 @@ module.exports = {
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
-      // 🛑 ANTI-GHOST CHECK: Verify target is a current server member
-      const member = await guild.members.fetch(user.id).catch(() => null);
+      // 🛑 ANTI-GHOST CHECK (Bypass Cache to verify presence)
+      const member = await guild.members.fetch({ user: user.id, force: true }).catch(() => null);
       if (!member) {
         const msg = '❌ This user is not in the server! You cannot kick someone who has already left.';
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);

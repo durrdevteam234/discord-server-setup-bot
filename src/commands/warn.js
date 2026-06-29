@@ -40,8 +40,8 @@ module.exports = {
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
-      // 🛑 ANTI-GHOST CHECK: Disallow warning users who are not in the server
-      const member = await guild.members.fetch(user.id).catch(() => null);
+      // 🛑 ANTI-GHOST CHECK (Bypass Cache to verify presence)
+      const member = await guild.members.fetch({ user: user.id, force: true }).catch(() => null);
       if (!member) {
         const msg = '❌ This user is not in the server! You cannot warn someone who is not here.';
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);

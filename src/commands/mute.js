@@ -48,8 +48,8 @@ module.exports = {
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
-      // 🛑 ANTI-GHOST CHECK: Ensure user is in the server before trying to mute
-      const member = await guild.members.fetch(user.id).catch(() => null);
+      // 🛑 ANTI-GHOST CHECK (Bypass Cache to verify presence)
+      const member = await guild.members.fetch({ user: user.id, force: true }).catch(() => null);
       if (!member) {
         const msg = '❌ This user is not in the server! You cannot mute someone who is not here.';
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
