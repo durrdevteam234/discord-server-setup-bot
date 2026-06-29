@@ -1,12 +1,18 @@
 const { SlashCommandBuilder, AttachmentBuilder } = require('discord.js');
-const { readData } = require('../utils/database');
+const mongoose = require('mongoose');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('mydata')
-    .setDescription('Developer Only: Download raw saved JSON data files as files'),
+    .setDescription('Developer Only: Download raw saved MongoDB data as JSON files')
+    .addStringOption(option =>
+      option.setName('collection')
+        .setDescription('The specific database collection to download')
+        .setRequired(false)
+    ),
 
   async runPrefix(message, args = []) {
+    // Standardizes the prefix arguments array structure
     await this.execute(message, args);
   },
 
@@ -14,7 +20,7 @@ module.exports = {
     const isInteraction = !!context.isChatInputCommand;
     const authorId = isInteraction ? context.user.id : context.author.id;
 
-    // 🔒 SECURITY GATE: Put your Discord User ID here (numbers only inside quotes)
+    // 🔒 SECURITY GATE: Preserved your owner ID safely
     const OWNER_ID = '889540845269823559'; 
 
     if (authorId !== OWNER_ID) {
@@ -23,32 +29,47 @@ module.exports = {
     }
 
     try {
-      // Safely parse command arguments 
-      let choice = '';
-      if (isInteraction) {
-        choice = context.options.getString('file') || '';
-      } else {
-        choice = Array.isArray(args) ? args[0] : args;
+      // 1. Check if MongoDB is actually connected
+      if (mongoose.connection.readyState !== 1) {
+          const msg = '❌ The database connection is currently offline!';
+          return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
-      
-      let fileName = 'levels.json';
-      choice = choice?.toLowerCase();
-      
-      if (choice === 'settings') fileName = 'settings.json';
-      if (choice === 'mutes') fileName = 'mutes.json';
-      if (choice === 'leveling') fileName = 'leveling_settings.json';
 
-      // Read the data from your local file system
-      const rawData = readData(fileName) || {};
-      
-      // Convert the JSON object to a cleanly spaced string
-      const jsonString = JSON.stringify(rawData, null, 2);
+      const db = mongoose.connection.db;
 
-      // Convert the string into a temporary memory Buffer for Discord attachments
+      // 2. Parse command arguments to find out what target collection the user wants
+      let targetCollection = '';
+      if (isInteraction) {
+        targetCollection = context.options.getString('collection') || '';
+      } else {
+        targetCollection = Array.isArray(args) ? args[0] : args;
+      }
+
+      let dataPayload = {};
+      let downloadFileName = 'all_database_collections.json';
+
+      // 3. If a specific collection is named, fetch only that collection. Otherwise, fetch everything.
+      if (targetCollection) {
+        targetCollection = targetCollection.toLowerCase();
+        const documents = await db.collection(targetCollection).find().toArray();
+        dataPayload[targetCollection] = documents;
+        downloadFileName = `${targetCollection}_backup.json`;
+      } else {
+        // Fetch every single collection in your cluster database
+        const collections = await db.listCollections().toArray();
+        for (const col of collections) {
+          dataPayload[col.name] = await db.collection(col.name).find().toArray();
+        }
+      }
+
+      // 4. Convert the MongoDB data documents into a cleanly spaced text string
+      const jsonString = JSON.stringify(dataPayload, null, 2);
+
+      // 5. Convert the string into a memory Buffer for Discord attachments (removes local file writing entirely)
       const buffer = Buffer.from(jsonString, 'utf-8');
-      const fileAttachment = new AttachmentBuilder(buffer, { name: `raw_${fileName}` });
+      const fileAttachment = new AttachmentBuilder(buffer, { name: downloadFileName });
 
-      const outputMessage = `📊 **Live Cloud Storage File: \`${fileName}\`**\nHere is your full database backup requested below:`;
+      const outputMessage = `📊 **Live MongoDB Atlas Export: \`${downloadFileName}\`**\nHere is your real-time database backup file:`;
 
       if (isInteraction) {
         await context.reply({ content: outputMessage, files: [fileAttachment], ephemeral: true });
@@ -56,8 +77,8 @@ module.exports = {
         await context.reply({ content: outputMessage, files: [fileAttachment] });
       }
     } catch (error) {
-      console.error(error);
-      const msg = `❌ Error building database text file: ${error.message}`;
+      console.error('[DATABASE EXPORT CRASH]', error);
+      const msg = `❌ Error building database backup file: ${error.message}`;
       if (isInteraction) await context.reply({ content: msg, ephemeral: true });
       else await context.reply(msg);
     }
