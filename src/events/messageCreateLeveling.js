@@ -16,10 +16,20 @@ module.exports = {
       const guildId = message.guild.id;
       const userId = message.author.id;
 
-      // Check if leveling is enabled globally in settings
+      // 1. Correct database reads matching your setup script
       const settings = readData('settings.json') || {};
+      const levelingSettings = readData('leveling_settings.json') || {};
+      
       const serverSettings = settings[guildId] || {};
-      if (serverSettings.levelingEnabled === false) return;
+      const serverLevelingConfig = levelingSettings[guildId] || {};
+
+      // 2. Structural status check (verifies if enabled in settings or leveling file)
+      const isLevelingActive = 
+        serverSettings.leveling === 'on' || 
+        serverLevelingConfig.status === 'on' || 
+        serverLevelingConfig.enabled === true;
+
+      if (!isLevelingActive) return;
 
       // Anti-Spam Cooldown check
       const cooldownKey = `${guildId}-${userId}`;
@@ -42,12 +52,17 @@ module.exports = {
         userStats.xp -= xpNeeded;
         userStats.level += 1;
         
-        // 🎯 DYNAMIC ANNOUNCEMENT TARGET LOGIC
-        // Fallback option: checks if custom channel ID exists, otherwise targets current channel context
-        const customChannelId = serverSettings.levelUpChannelId;
-        const targetChannel = customChannelId 
-          ? (message.guild.channels.cache.get(customChannelId) || message.channel)
-          : message.channel;
+        // 3. TARGET THE CORRECT SAVED KEY
+        // Pulls channelId directly from leveling_settings.json configuration block
+        const customChannelId = serverLevelingConfig.channelId;
+        
+        let targetChannel = message.channel;
+        if (customChannelId) {
+          // Checks local memory cache first, falls back to direct API fetch for Render container restarts
+          targetChannel = message.guild.channels.cache.get(customChannelId) || 
+                          await message.guild.channels.fetch(customChannelId).catch(() => null) || 
+                          message.channel;
+        }
 
         const levelUpEmbed = new EmbedBuilder()
           .setColor('#FFD700')
