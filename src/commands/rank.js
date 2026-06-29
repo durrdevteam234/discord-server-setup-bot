@@ -11,7 +11,7 @@ module.exports = {
         .setRequired(false)
     ),
 
-  async execute(interactionOrMessage) {
+  async execute(interactionOrMessage, args = []) {
     try {
       // 1. Check if the incoming payload is a Slash Command or a raw Prefix Message
       const isInteraction = typeof interactionOrMessage.reply === 'function' && !interactionOrMessage.author;
@@ -24,7 +24,16 @@ module.exports = {
       if (isInteraction) {
         user = interactionOrMessage.options.getUser('target') || interactionOrMessage.user;
       } else {
-        user = interactionOrMessage.mentions.users.first() || interactionOrMessage.author;
+        user = interactionOrMessage.mentions.users.first() || (args && args[0] ? await interactionOrMessage.client.users.fetch(args[0]).catch(() => null) : null) || interactionOrMessage.author;
+      }
+
+      // 🛡️ SECURITY PATCH: Block checking ranks for users who are no longer in the server
+      const isTargetMemberActive = await guild.members.fetch({ user: user.id, force: true }).catch(() => null);
+      if (!isTargetMemberActive) {
+        const ghostMsg = '❌ This user is not in the server! You cannot check the rank of someone who left.';
+        return isInteraction 
+          ? await interactionOrMessage.reply({ content: ghostMsg, ephemeral: true }) 
+          : await interactionOrMessage.reply(ghostMsg);
       }
 
       // 3. Read the level data securely using your standard readData tool
