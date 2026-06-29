@@ -6,10 +6,14 @@ module.exports = {
     .setName('leaderboard')
     .setDescription('View the server leaderboard'),
 
-  async execute(interaction) {
+  async execute(context) { // Changed 'interaction' to generic 'context'
+    const isInteraction = !!context.isChatInputCommand;
+    const guildId = context.guildId;
+    const client = context.client;
+
     try {
-      const levels = readData('levels.json');
-      const guildLevels = levels[interaction.guildId] || {};
+      const levels = readData('levels.json') || {};
+      const guildLevels = levels[guildId] || {};
 
       const sorted = Object.entries(guildLevels)
         .map(([userId, data]) => ({ userId, ...data }))
@@ -17,7 +21,8 @@ module.exports = {
         .slice(0, 10);
 
       if (sorted.length === 0) {
-        return interaction.reply({ content: '📊 No users have leveled up yet!', ephemeral: true });
+        const msg = '📊 No users have leveled up yet!';
+        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
       const embed = new EmbedBuilder()
@@ -26,17 +31,29 @@ module.exports = {
         .setDescription('Top 10 users by level');
 
       for (let i = 0; i < sorted.length; i++) {
-        const user = await interaction.client.users.fetch(sorted[i].userId);
+        // Safely fetch user fallback if they left the server
+        const user = await client.users.fetch(sorted[i].userId).catch(() => null);
+        const username = user ? user.username : `Unknown User (${sorted[i].userId})`;
+        
         embed.addFields({
-          name: `#${i + 1} - ${user.username}`,
+          name: `#${i + 1} - ${username}`,
           value: `Level: ${sorted[i].level} | XP: ${sorted[i].xp}`,
         });
       }
 
-      await interaction.reply({ embeds: [embed] });
+      if (isInteraction) {
+        await context.reply({ embeds: [embed] });
+      } else {
+        await context.reply({ embeds: [embed] });
+      }
     } catch (error) {
       console.error('Leaderboard error:', error);
-      await interaction.reply({ content: `❌ Error fetching leaderboard: ${error.message}`, ephemeral: true });
+      const msg = `❌ Error fetching leaderboard: ${error.message}`;
+      if (isInteraction) {
+        await context.reply({ content: msg, ephemeral: true });
+      } else {
+        await context.reply(msg);
+      }
     }
   },
 };
