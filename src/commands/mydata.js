@@ -15,7 +15,7 @@ module.exports = {
     const authorId = isInteraction ? context.user.id : context.author.id;
 
     // 🔒 SECURITY GATE: Put your Discord User ID here (numbers only inside quotes)
-    const OWNER_ID = 'YOUR_PERSONAL_DISCORD_USER_ID'; 
+    const OWNER_ID = '889540845269823559'; 
 
     if (authorId !== OWNER_ID) {
       const msg = '❌ This command can only be used by the Bot Owner!';
