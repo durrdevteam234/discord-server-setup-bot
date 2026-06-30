@@ -1,41 +1,75 @@
-const fs = require('fs');
-const path = require('path');
+const mongoose = require('mongoose');
 
-// FIXED: Automatically maps to Railway's persistent volume path if it exists, 
-// otherwise falls back to your local project directory.
-const DATA_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH 
-    ? path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH) 
-    : path.join(__dirname, '../data');
+// Generic schema: each "fileName" (e.g. 'levels.json') becomes its own
+// MongoDB collection. Each top-level key in your old JSON object becomes
+// one document, identified by _id.
+const genericSchema = new mongoose.Schema(
+  {
+    _id: { type: String, required: true }, // the old JSON object's key (e.g. userId)
+    value: { type: mongoose.Schema.Types.Mixed, required: true }, // the old JSON object's value
+  },
+  { collection: undefined, strict: false } // collection name set dynamically per file
+);
 
-// Automatically recreate the 'data' folder on Railway startup if wiped
-if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+// Cache models per "fileName" so we don't redefine them repeatedly
+const modelCache = {};
+
+function getModel(fileName) {
+  // Strip .json extension to get a clean collection name, e.g. "levels.json" -> "levels"
+  const collectionName = fileName.replace(/\.json$/i, '');
+  if (!modelCache[collectionName]) {
+    modelCache[collectionName] = mongoose.model(
+      collectionName,
+      genericSchema,
+      collectionName // explicit collection name, so it matches what mydata.js lists
+    );
+  }
+  return modelCache[collectionName];
 }
 
-function readData(fileName) {
-    const filePath = path.join(DATA_DIR, fileName);
-    
-    // Guard: If Railway wiped the file, return empty data instead of crashing
-    if (!fs.existsSync(filePath)) {
-        return {}; 
+// Reads all documents for a given "fileName" and reconstructs the old
+// { key: value, key2: value2 } object shape your bot code expects.
+async function readData(fileName) {
+  try {
+    const Model = getModel(fileName);
+    const docs = await Model.find().lean();
+    const result = {};
+    for (const doc of docs) {
+      result[doc._id] = doc.value;
     }
-    
-    try {
-        const fileContent = fs.readFileSync(filePath, 'utf8');
-        return JSON.parse(fileContent);
-    } catch (error) {
-        console.error(`Error reading ${fileName}, resetting data:`, error.message);
-        return {};
-    }
+    return result;
+  } catch (error) {
+    console.error(`Error reading ${fileName} from MongoDB, resetting data:`, error.message);
+    return {};
+  }
 }
 
-function writeData(fileName, data) {
-    const filePath = path.join(DATA_DIR, fileName);
-    try {
-        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
-    } catch (error) {
-        console.error(`Error writing to ${fileName}:`, error.message);
+// Writes an entire { key: value, ... } object back to MongoDB,
+// upserting each key as its own document.
+async function writeData(fileName, data) {
+  try {
+    const Model = getModel(fileName);
+    const keys = Object.keys(data);
+
+    // Upsert every key/value pair
+    const bulkOps = keys.map((key) => ({
+      updateOne: {
+        filter: { _id: key },
+        update: { $set: { value: data[key] } },
+        upsert: true,
+      },
+    }));
+
+    if (bulkOps.length > 0) {
+      await Model.bulkWrite(bulkOps);
     }
+
+    // Remove any documents whose keys no longer exist in the new data
+    // (mirrors fully overwriting the old JSON file)
+    await Model.deleteMany({ _id: { $nin: keys } });
+  } catch (error) {
+    console.error(`Error writing to ${fileName} in MongoDB:`, error.message);
+  }
 }
 
 module.exports = { readData, writeData };

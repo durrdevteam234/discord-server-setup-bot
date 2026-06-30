@@ -64,8 +64,8 @@ module.exports = {
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
 
-      const mainSettings = readData('settings.json') || {};
-      const levelingSettings = readData('leveling_settings.json') || {};
+      const mainSettings = (await readData('settings.json')) || {};
+      const levelingSettings = (await readData('leveling_settings.json')) || {};
 
       if (!mainSettings[guildId]) mainSettings[guildId] = {};
       if (!levelingSettings[guildId]) levelingSettings[guildId] = {};
@@ -78,8 +78,8 @@ module.exports = {
         levelingSettings[guildId].channelId = channelId;
       }
 
-      writeData('settings.json', mainSettings);
-      writeData('leveling_settings.json', levelingSettings);
+      await writeData('settings.json', mainSettings);
+      await writeData('leveling_settings.json', levelingSettings);
 
       // 4. Fixed description builder (Never reads properties of null)
       let descriptionText = `Leveling features have been **${status.toUpperCase()}D**.`;
