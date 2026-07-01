@@ -87,11 +87,19 @@ if (!process.env.MONGODB_URI) {
 const app = express();
 const port = process.env.PORT || 10000;
 
+// Serve all static assets (CSS, images, frontend JS) out of the 'web' folder
 app.use(express.static(path.join(__dirname, 'web')));
 
-// UPDATED: Always sends a text response to secure your uptime pings
+// UPDATED: Serves your actual dashboard frontend while satisfying 24/7 uptime pings
 app.get('/', (req, res) => {
-  res.status(200).send('Bot dashboard web server and uptime route are fully operational!');
+  const dashboardPath = path.join(__dirname, 'web', 'dashboard.html');
+  
+  if (fs.existsSync(dashboardPath)) {
+    res.status(200).sendFile(dashboardPath);
+  } else {
+    // Fail-safe backup response so the server stays awake even if the HTML is misplaced
+    res.status(200).send('ServerMiser Dashboard backend is active, but dashboard.html was not found.');
+  }
 });
 
 // ── API: General stats ──
