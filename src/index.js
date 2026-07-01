@@ -87,10 +87,8 @@ if (!process.env.MONGODB_URI) {
 const app = express();
 const port = process.env.PORT || 10000;
 
-// Serve static files (dashboard.html, logo.jpg) from web/
 app.use(express.static(path.join(__dirname, 'web')));
 
-// Dashboard homepage
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'web', 'dashboard.html'));
 });
@@ -154,8 +152,10 @@ app.get('/api/leaderboard', async (req, res) => {
             for (const userData of Object.values(guildData)) {
               xp += (userData.xp || 0) + (userData.level || 1) * 100;
             }
-            const guild = client?.guilds?.cache?.get(guildId);
-            serverTotals.push({ name: guild?.name || `Server ${guildId}`, totalXp: xp });
+            // Try cache first, then live fetch if not cached yet
+            const guild = client?.guilds?.cache?.get(guildId)
+              || await client?.guilds?.fetch(guildId).catch(() => null);
+            serverTotals.push({ name: guild?.name || 'Unknown Server', totalXp: xp });
           }
         }
       }
