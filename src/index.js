@@ -80,7 +80,7 @@ if (fs.existsSync(eventsPath)) {
   for (const file of eventFiles) {
     const filePath = path.join(eventsPath, file);
     
-    // 🛡️ CRASH PROTECTION: Wrap each file link in a unique try/catch block
+    // 🛡️ CRASH PROTECTION: Wrap each file link in a unique try/catch block e
     try {
       const event = require(filePath);
       console.log('[STARTUP] Successfully linked event handler file: ' + file + ' -> Event Name: ' + event.name);
