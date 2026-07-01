@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ServerMiser — Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy:      #0d1229;
+      --navy2:     #111627;
+      --card:      #161c33;
+      --border:    #1e2640;
+      --teal:      #5bbfbf;
+      --crimson:   #c93a6e;
+      --lavender:  #7b6fd4;
+      --text:      #dde3f0;
+      --muted:     #5a6380;
+      --mono:      'JetBrains Mono', monospace;
+      --sans:      'Inter', sans-serif;
+    }
+
+    body {
+      background: var(--navy);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      top: -200px; left: -200px;
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(91,191,191,0.07) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    body::after {
+      content: '';
+      position: fixed;
+      bottom: -150px; right: -150px;
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, rgba(201,58,110,0.07) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── HEADER ── */
+    header {
+      background: rgba(13, 18, 41, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      text-decoration: none;
+    }
+
+    .logo-img {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 1.5px solid rgba(91,191,191,0.35);
+      box-shadow: 0 0 12px rgba(91,191,191,0.2);
+    }
+
+    .logo-text {
+      font-family: var(--mono);
+      font-weight: 700;
+      font-size: 0.95rem;
+      letter-spacing: -0.01em;
+      color: var(--text);
+    }
+
+    .logo-text span {
+      background: linear-gradient(90deg, var(--teal), var(--lavender));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: rgba(91,191,191,0.1);
+      color: var(--teal);
+      border: 1px solid rgba(91,191,191,0.25);
+      border-radius: 99px;
+      font-size: 0.7rem;
+      font-family: var(--mono);
+      font-weight: 600;
+      padding: 0.25rem 0.7rem;
+    }
+
+    .status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--teal);
+      box-shadow: 0 0 6px var(--teal);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+
+    /* ── MAIN ── */
+    main {
+      position: relative;
+      z-index: 1;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 5rem;
+    }
+
+    /* ── HERO ── */
+    .hero {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      margin-bottom: 2.5rem;
+      padding: 1.75rem 2rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, rgba(91,191,191,0.06) 0%, rgba(201,58,110,0.04) 100%);
+      pointer-events: none;
+    }
+
+    .hero-planet {
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid rgba(91,191,191,0.3);
+      box-shadow: 0 0 24px rgba(91,191,191,0.15), 0 0 48px rgba(201,58,110,0.08);
+      flex-shrink: 0;
+    }
+
+    /* fallback planet shown when logo fails to load */
+    .hero-planet-fallback {
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: radial-gradient(circle at 35% 35%, #5bbfbf, #7b6fd4 50%, #c93a6e);
+      border: 2px solid rgba(91,191,191,0.3);
+      box-shadow: 0 0 24px rgba(91,191,191,0.15);
+      display: none;
+    }
+
+    .hero-text h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.3rem;
+    }
+
+    .hero-text h1 span {
+      background: linear-gradient(90deg, var(--teal) 0%, var(--lavender) 60%, var(--crimson) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-text p {
+      font-size: 0.83rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    /* ── SECTION LABEL ── */
+    .section-label {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .section-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── STATS GRID ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 0.9rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.2rem 1.4rem;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.2s, transform 0.15s;
+      cursor: default;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(91,191,191,0.3);
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+    }
+
+    .stat-card.teal::before     { background: linear-gradient(90deg, var(--teal), transparent); }
+    .stat-card.crimson::before  { background: linear-gradient(90deg, var(--crimson), transparent); }
+    .stat-card.lavender::before { background: linear-gradient(90deg, var(--lavender), transparent); }
+    .stat-card.mixed::before    { background: linear-gradient(90deg, var(--teal), var(--crimson)); }
+
+    .stat-label {
+      font-size: 0.68rem;
+      font-weight: 500;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      margin-bottom: 0.5rem;
+    }
+
+    .stat-value {
+      font-family: var(--mono);
+      font-size: 1.9rem;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1;
+      transition: opacity 0.2s;
+    }
+
+    .stat-sub {
+      font-size: 0.7rem;
+      color: var(--muted);
+      margin-top: 0.3rem;
+    }
+
+    /* ── TWO-COL ── */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 2.5rem;
+    }
+
+    @media (max-width: 768px) {
+      .two-col { grid-template-columns: 1fr; }
+      .hero { flex-direction: column; text-align: center; }
+    }
+
+    /* ── CARD ── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .card-header {
+      padding: 0.9rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(255,255,255,0.02);
+    }
+
+    /* ── TABLE ── */
+    table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+
+    th {
+      padding: 0.55rem 1.25rem;
+      text-align: left;
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: rgba(0,0,0,0.15);
+      border-bottom: 1px solid var(--border);
+    }
+
+    td {
+      padding: 0.7rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(91,191,191,0.04); }
+
+    .rank {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--muted);
+      width: 20px;
+      display: inline-block;
+      text-align: center;
+    }
+
+    .rank.r1 { color: #fbbf24; }
+    .rank.r2 { color: #94a3b8; }
+    .rank.r3 { color: #cd7f32; }
+
+    .xp-bar-wrap {
+      background: var(--border);
+      border-radius: 4px;
+      height: 3px;
+      width: 70px;
+      overflow: hidden;
+      display: inline-block;
+      vertical-align: middle;
+      margin-left: 0.5rem;
+    }
+
+    .xp-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--teal), var(--lavender));
+      border-radius: 4px;
+    }
+
+    /* ── COMMANDS ── */
+    .commands-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 0.7rem;
+    }
+
+    .cmd-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.85rem 1rem;
+      transition: border-color 0.15s, transform 0.15s;
+    }
+
+    .cmd-card:hover {
+      border-color: rgba(123,111,212,0.4);
+      transform: translateY(-1px);
+    }
+
+    .cmd-name {
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--teal);
+      margin-bottom: 0.3rem;
+    }
+
+    .cmd-desc {
+      font-size: 0.75rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* ── SKELETON ── */
+    .skeleton {
+      background: linear-gradient(90deg, var(--border) 25%, var(--navy2) 50%, var(--border) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s infinite;
+      border-radius: 4px;
+      height: 1.8rem;
+      width: 55%;
+    }
+
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    .empty {
+      padding: 1.75rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <a class="logo-wrap" href="#">
+    <img class="logo-img" id="header-logo" src="/logo.jpg" alt="ServerMiser" />
+    <div class="logo-text">Server<span>Miser</span></div>
+  </a>
+  <div class="status-chip"><div class="status-dot"></div>ONLINE</div>
+</header>
+
+<main>
+
+  <!-- HERO -->
+  <div class="hero">
+    <img class="hero-planet" id="hero-logo" src="/logo.jpg" alt="ServerMiser"
+         onerror="this.style.display='none'; document.getElementById('hero-fallback').style.display='block'" />
+    <div class="hero-planet-fallback" id="hero-fallback"></div>
+    <div class="hero-text">
+      <h1><span>ServerMiser</span> Dashboard</h1>
+      <p>Live analytics, server leaderboards, and command reference — all in one place.</p>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="section-label">Live Stats</div>
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-card teal"><div class="skeleton"></div></div>
+    <div class="stat-card lavender"><div class="skeleton"></div></div>
+    <div class="stat-card mixed"><div class="skeleton"></div></div>
+    <div class="stat-card teal"><div class="skeleton"></div></div>
+    <div class="stat-card crimson"><div class="skeleton"></div></div>
+    <div class="stat-card lavender"><div class="skeleton"></div></div>
+  </div>
+
+  <!-- LEADERBOARD + COMMANDS -->
+  <div class="two-col">
+
+    <div>
+      <div class="section-label">Top Servers by Activity</div>
+      <div class="card">
+        <div class="card-header">🏆 Server Leaderboard</div>
+        <table>
+          <thead><tr><th>#</th><th>Server</th><th>Total XP</th></tr></thead>
+          <tbody id="server-table">
+            <tr><td colspan="3" class="empty">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">Commands</div>
+      <div class="commands-grid" id="commands-grid">
+        <div class="cmd-card"><div class="skeleton"></div></div>
+        <div class="cmd-card"><div class="skeleton"></div></div>
+        <div class="cmd-card"><div class="skeleton"></div></div>
+        <div class="cmd-card"><div class="skeleton"></div></div>
+      </div>
+    </div>
+
+  </div>
+
+</main>
+
+<script>
+  // ── Only stats + leaderboard refresh every 5s
+  // ── Commands load once on page load only
+
+  async function fetchStats() {
+    try {
+      const d = await fetch('/api/stats').then(r => r.json());
+      document.getElementById('stats-grid').innerHTML = `
+        <div class="stat-card teal">
+          <div class="stat-label">Servers</div>
+          <div class="stat-value">${fmt(d.totalServers)}</div>
+          <div class="stat-sub">guilds the bot is in</div>
+        </div>
+        <div class="stat-card lavender">
+          <div class="stat-label">Total Users</div>
+          <div class="stat-value">${fmt(d.totalUsers)}</div>
+          <div class="stat-sub">across all servers</div>
+        </div>
+        <div class="stat-card mixed">
+          <div class="stat-label">Total XP Given</div>
+          <div class="stat-value">${fmt(d.totalXp)}</div>
+          <div class="stat-sub">all time</div>
+        </div>
+        <div class="stat-card teal">
+          <div class="stat-label">Leveled Users</div>
+          <div class="stat-value">${fmt(d.leveledUsers)}</div>
+          <div class="stat-sub">with XP tracked</div>
+        </div>
+        <div class="stat-card crimson">
+          <div class="stat-label">Tickets Opened</div>
+          <div class="stat-value">${fmt(d.totalTickets)}</div>
+          <div class="stat-sub">all time</div>
+        </div>
+        <div class="stat-card lavender">
+          <div class="stat-label">Uptime</div>
+          <div class="stat-value" style="font-size:1.05rem;padding-top:0.3rem">${formatUptime(d.uptimeSeconds)}</div>
+          <div class="stat-sub">since last restart</div>
+        </div>
+      `;
+    } catch (e) {}
+  }
+
+  async function fetchLeaderboard() {
+    try {
+      const servers = await fetch('/api/leaderboard').then(r => r.json());
+      if (!servers.length) {
+        document.getElementById('server-table').innerHTML = `<tr><td colspan="3" class="empty">No activity yet.</td></tr>`;
+        return;
+      }
+      const maxXp = servers[0]?.totalXp || 1;
+      document.getElementById('server-table').innerHTML = servers.map((s, i) => {
+        const rc = i === 0 ? 'r1' : i === 1 ? 'r2' : i === 2 ? 'r3' : '';
+        const pct = Math.round((s.totalXp / maxXp) * 100);
+        return `<tr>
+          <td><span class="rank ${rc}">${i + 1}</span></td>
+          <td>${esc(s.name)}</td>
+          <td>${fmt(s.totalXp)} XP<div class="xp-bar-wrap"><div class="xp-bar" style="width:${pct}%"></div></div></td>
+        </tr>`;
+      }).join('');
+    } catch (e) {}
+  }
+
+  async function fetchCommands() {
+    try {
+      const cmds = await fetch('/api/commands').then(r => r.json());
+      if (!cmds.length) {
+        document.getElementById('commands-grid').innerHTML = `<div class="empty">No commands found.</div>`;
+        return;
+      }
+      document.getElementById('commands-grid').innerHTML = cmds.map(c => `
+        <div class="cmd-card">
+          <div class="cmd-name">/${esc(c.name)}</div>
+          <div class="cmd-desc">${esc(c.description)}</div>
+        </div>`).join('');
+    } catch (e) {}
+  }
+
+  function fmt(n) { return n == null ? '—' : Number(n).toLocaleString(); }
+
+  function formatUptime(s) {
+    if (!s) return '—';
+    const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+    const p = [];
+    if (d) p.push(`${d}d`);
+    if (h) p.push(`${h}h`);
+    p.push(`${m}m`);
+    return p.join(' ');
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // Fix header logo fallback too
+  document.getElementById('header-logo').onerror = function() { this.style.display = 'none'; };
+
+  // Commands load once only
+  fetchCommands();
+
+  // Stats + leaderboard refresh every 5 seconds silently
+  function refreshAnalytics() {
+    fetchStats();
+    fetchLeaderboard();
+  }
+
+  refreshAnalytics();
+  setInterval(refreshAnalytics, 5000);
+</script>
+
+</body>
+</html>

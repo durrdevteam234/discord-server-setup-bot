@@ -4,7 +4,6 @@ if (typeof globalThis.ReadableStream === 'undefined') {
         globalThis.ReadableStream = ReadableStream;
     } catch (e) {}
 }
-
 const fs = require('fs');
 const path = require('path');
 const { Client, Collection, GatewayIntentBits } = require('discord.js');
@@ -13,46 +12,22 @@ const express = require('express');
 require('dotenv').config();
 
 // ==========================================
-// 1. FREE TIER KEEP-ALIVE EXPRESS SERVER
-// ==========================================
-const app = express();
-const port = process.env.PORT || 10000; // Render automatically injects this port
-
-app.get('/', (req, res) => {
-    res.send('Bot keep-alive server is active and running!');
-});
-
-app.listen(port, () => {
-    console.log(`[SERVER] Keep-alive server listening on port ${port} for Render health checks.`);
-});
-
-// ==========================================
-// 2. MONGODB ATLAS CONNECTION SETUP
-// ==========================================
-if (!process.env.MONGODB_URI) {
-    console.error('[CRITICAL] MONGODB_URI environment variable is missing!');
-} else {
-    mongoose.connect(process.env.MONGODB_URI)
-        .then(() => console.log('[DATABASE] Connected to MongoDB Atlas successfully!'))
-        .catch(err => console.error('[DATABASE ERROR] MongoDB connection error:', err));
-}
-
-// ==========================================
-// 3. DISCORD BOT CLIENT INITIALIZATION
+// 1. DISCORD BOT CLIENT INITIALIZATION
 // ==========================================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent, 
+    GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers
   ]
 });
-
 client.commands = new Collection();
 client.prefix = process.env.PREFIX || '|';
 
-// 4. LOAD SLASH COMMANDS DYNAMICALLY
+// ==========================================
+// 2. LOAD SLASH COMMANDS DYNAMICALLY
+// ==========================================
 const commandsPath = path.join(__dirname, 'commands');
 if (fs.existsSync(commandsPath)) {
   const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
@@ -69,27 +44,22 @@ if (fs.existsSync(commandsPath)) {
   }
 }
 
-// 5. LOAD EVENT HANDLERS DYNAMICALLY
+// ==========================================
+// 3. LOAD EVENT HANDLERS DYNAMICALLY
+// ==========================================
 const eventsPath = path.join(__dirname, 'events');
 console.log('[STARTUP] Checking events directory path: ' + eventsPath);
-
 if (fs.existsSync(eventsPath)) {
   const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
   console.log('[STARTUP] Found ' + eventFiles.length + ' event files to load.');
-
   for (const file of eventFiles) {
     const filePath = path.join(eventsPath, file);
-    
-    // 🛡️ CRASH PROTECTION: Wrap each file link in a unique try/catch block e
     try {
       const event = require(filePath);
       console.log('[STARTUP] Successfully linked event handler file: ' + file + ' -> Event Name: ' + event.name);
-
       if (event.once) {
-        // FIXED: Passes the client down alongside runtime event arguments
         client.once(event.name, (...args) => event.execute(...args, client));
       } else {
-        // FIXED: Allows multiple components (like commands and XP engines) to listen safely
         client.on(event.name, (...args) => event.execute(...args, client));
       }
     } catch (eventErr) {
@@ -100,4 +70,122 @@ if (fs.existsSync(eventsPath)) {
   console.error('[CRITICAL] The events folder path does not exist!');
 }
 
+// ==========================================
+// 4. MONGODB ATLAS CONNECTION
+// ==========================================
+if (!process.env.MONGODB_URI) {
+  console.error('[CRITICAL] MONGODB_URI environment variable is missing!');
+} else {
+  mongoose.connect(process.env.MONGODB_URI)
+    .then(() => console.log('[DATABASE] Connected to MongoDB Atlas successfully!'))
+    .catch(err => console.error('[DATABASE ERROR] MongoDB connection error:', err));
+}
+
+// ==========================================
+// 5. EXPRESS DASHBOARD + API SERVER
+// ==========================================
+const app = express();
+const port = process.env.PORT || 10000;
+
+// Serve static files (dashboard.html, logo.jpg) from web/
+app.use(express.static(path.join(__dirname, 'web')));
+
+// Dashboard homepage
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'web', 'dashboard.html'));
+});
+
+// ── API: General stats ──
+app.get('/api/stats', async (req, res) => {
+  try {
+    const db = mongoose.connection.db;
+
+    const totalServers = client?.guilds?.cache?.size ?? 0;
+    const totalUsers = client?.guilds?.cache?.reduce((acc, g) => acc + g.memberCount, 0) ?? 0;
+
+    let totalXp = 0;
+    let leveledUsers = 0;
+    try {
+      const levelDocs = await db.collection('levels').find().toArray();
+      for (const doc of levelDocs) {
+        if (doc.value && typeof doc.value === 'object') {
+          for (const guildData of Object.values(doc.value)) {
+            if (typeof guildData === 'object') {
+              for (const userData of Object.values(guildData)) {
+                totalXp += userData.xp || 0;
+                leveledUsers++;
+              }
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    let totalTickets = 0;
+    try {
+      totalTickets = await db.collection('tickets').countDocuments();
+    } catch (_) {}
+
+    res.json({
+      totalServers,
+      totalUsers,
+      totalXp,
+      leveledUsers,
+      totalTickets,
+      uptimeSeconds: Math.floor(process.uptime()),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── API: Top servers by total XP ──
+app.get('/api/leaderboard', async (req, res) => {
+  try {
+    const db = mongoose.connection.db;
+    const levelDocs = await db.collection('levels').find().toArray();
+
+    const serverTotals = [];
+    for (const doc of levelDocs) {
+      if (doc.value && typeof doc.value === 'object') {
+        for (const [guildId, guildData] of Object.entries(doc.value)) {
+          if (typeof guildData === 'object') {
+            let xp = 0;
+            for (const userData of Object.values(guildData)) {
+              xp += (userData.xp || 0) + (userData.level || 1) * 100;
+            }
+            const guild = client?.guilds?.cache?.get(guildId);
+            serverTotals.push({ name: guild?.name || `Server ${guildId}`, totalXp: xp });
+          }
+        }
+      }
+    }
+
+    serverTotals.sort((a, b) => b.totalXp - a.totalXp);
+    res.json(serverTotals.slice(0, 10));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── API: Commands list ──
+app.get('/api/commands', (req, res) => {
+  try {
+    const cmds = [...(client?.commands?.values() || [])].map(c => ({
+      name: c.data.name,
+      description: c.data.description,
+    }));
+    res.json(cmds);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.listen(port, () => {
+  console.log(`[SERVER] Dashboard live on port ${port}`);
+});
+
+// ==========================================
+// 6. LOGIN
+// ==========================================
 client.login(process.env.DISCORD_TOKEN);
