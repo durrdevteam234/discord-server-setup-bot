@@ -25,14 +25,14 @@ module.exports = {
         joinMessage = context.options.getString('join_message') || null;
         leaveMessage = context.options.getString('leave_message') || null;
         useEmbed = context.options.getBoolean('embed');
-        if (useEmbed === null) useEmbed = true; // default to embed
+        if (useEmbed === null) useEmbed = true;
       } else {
         targetChannel = context.mentions.channels.first() || context.guild.channels.cache.get(args[0]);
         isEnabled = args[1] ? args[1].toLowerCase() === 'true' : null;
-        useEmbed = true; // prefix always uses embed
+        useEmbed = true;
       }
       if (!targetChannel || isEnabled === null) {
-        const msg = '❌ Invalid Syntax! Use: `|welcome <#channel> <true/false>`';
+        const msg = '❌ Invalid Syntax! Use: `|welcome <#channel> <true/false> [join message] [leave message]`\n**Variables:** `{user}` `{server}` `{memberCount}`';
         return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
       }
       const settings = (await readData('settings.json')) || {};
@@ -40,7 +40,6 @@ module.exports = {
       settings[guildId].welcomeChannelId = targetChannel.id;
       settings[guildId].welcomeEnabled = isEnabled;
       settings[guildId].welcomeEmbed = useEmbed;
-      // Only overwrite messages if new ones were provided, preserve existing ones otherwise
       if (joinMessage) settings[guildId].joinMessage = joinMessage;
       if (leaveMessage) settings[guildId].leaveMessage = leaveMessage;
       await writeData('settings.json', settings);
