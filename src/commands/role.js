@@ -22,7 +22,7 @@ const SUBCOMMANDS = {
 const data = new SlashCommandBuilder()
   .setName("role")
   .setDescription("Role management system")
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles) // Locks command menu to Manage Roles users
   .setDMPermission(false)
   .addSubcommand(sub => sub
     .setName("user")
@@ -105,12 +105,13 @@ function checkPermissions(context, isSlash = false) {
   const member = context.member;
   const me = context.guild.members.me;
 
+  // Verifies user has the Manage Roles permission
   if (!member.permissions.has(PermissionFlagsBits.ManageRoles)) {
-    const err = embed("#ED4245").setTitle("Missing Permissions").setDescription("You need the **Manage Roles** permission.");
+    const err = embed("#ED4245").setTitle("Missing Permissions").setDescription("You need the **Manage Roles** permission to use this command.");
     return { valid: false, response: isSlash ? context.reply({ embeds: [err], ephemeral: true }) : context.reply({ embeds: [err] }) };
   }
   if (!me.permissions.has(PermissionFlagsBits.ManageRoles)) {
-    const err = embed("#ED4245").setTitle("Bot Missing Permissions").setDescription("I need the **Manage Roles** permission.");
+    const err = embed("#ED4245").setTitle("Bot Missing Permissions").setDescription("I need the **Manage Roles** permission to do this.");
     return { valid: false, response: isSlash ? context.reply({ embeds: [err], ephemeral: true }) : context.reply({ embeds: [err] }) };
   }
   return { valid: true };
@@ -296,7 +297,7 @@ async function execute(interaction) {
 async function runPrefix(msg, args) {
   if (!msg.guild) return;
 
-  const sub = (args[0] || "").toLowerCase();
+  const sub = (args || "").toLowerCase();
 
   if (!sub || !SUBCOMMANDS[sub]) {
     const list = Object.entries(SUBCOMMANDS).map(([k, v]) => `\`${PREFIX}role ${k}\` — ${v}`).join("\n");
@@ -308,8 +309,8 @@ async function runPrefix(msg, args) {
 
   if (sub === "user") {
     if (args.length < 3) return usage(msg, "user", `${PREFIX}role user <@member> <@role>`);
-    const member = resolveMember(msg.guild, args[1]);
-    const role   = resolveRole(msg.guild, args[2]);
+    const member = resolveMember(msg.guild, args);
+    const role   = resolveRole(msg.guild, args);
 
     if (!member || !role || !canManageRole(msg.guild, role)) return msg.reply("Invalid data targeting parameters configuration.");
     await member.roles.add(role);
@@ -318,8 +319,8 @@ async function runPrefix(msg, args) {
 
   if (sub === "remove") {
     if (args.length < 3) return usage(msg, "remove", `${PREFIX}role remove <@member> <@role>`);
-    const member = resolveMember(msg.guild, args[1]);
-    const role   = resolveRole(msg.guild, args[2]);
+    const member = resolveMember(msg.guild, args);
+    const role   = resolveRole(msg.guild, args);
 
     if (!member || !role || !canManageRole(msg.guild, role)) return msg.reply("Invalid target structural layout configurations.");
     await member.roles.remove(role);
@@ -328,8 +329,8 @@ async function runPrefix(msg, args) {
 
   if (sub === "create") {
     if (args.length < 2) return usage(msg, "create", `${PREFIX}role create <name> [hex]`);
-    const name = args[1];
-    const color = args[2] || null;
+    const name = args;
+    const color = args || null;
     try {
       const role = await msg.guild.roles.create({ name, color });
       return msg.reply({ embeds: [embed("#57F287").setTitle("Role Created").setDescription(`Role ${role} created.`)] });
@@ -338,7 +339,7 @@ async function runPrefix(msg, args) {
 
   if (sub === "delete") {
     if (args.length < 2) return usage(msg, "delete", `${PREFIX}role delete <@role>`);
-    const role = resolveRole(msg.guild, args[1]);
+    const role = resolveRole(msg.guild, args);
     if (!role || !canManageRole(msg.guild, role) || role.managed) return msg.reply("Cannot target system structural files.");
     await role.delete();
     return msg.reply({ embeds: [embed("#57F287").setTitle("Role Deleted")] });
@@ -346,7 +347,7 @@ async function runPrefix(msg, args) {
 
   if (sub === "everyone") {
     if (args.length < 2) return usage(msg, "everyone", `${PREFIX}role everyone <@role>`);
-    const role = resolveRole(msg.guild, args[1]);
+    const role = resolveRole(msg.guild, args);
     if (!role || !canManageRole(msg.guild, role)) return msg.reply("Hierarchy configuration boundaries violation.");
     
     const loading = await msg.reply("Looping array tracking changes... this may take a while.");
@@ -360,7 +361,7 @@ async function runPrefix(msg, args) {
 
   if (sub === "bots") {
     if (args.length < 2) return usage(msg, "bots", `${PREFIX}role bots <@role>`);
-    const role = resolveRole(msg.guild, args[1]);
+    const role = resolveRole(msg.guild, args);
     if (!role || !canManageRole(msg.guild, role)) return msg.reply("Hierarchy check error.");
     
     const loading = await msg.reply("Processing bots context items...");
@@ -374,7 +375,7 @@ async function runPrefix(msg, args) {
 
   if (sub === "humans") {
     if (args.length < 2) return usage(msg, "humans", `${PREFIX}role humans <@role>`);
-    const role = resolveRole(msg.guild, args[1]);
+    const role = resolveRole(msg.guild, args);
     if (!role || !canManageRole(msg.guild, role)) return msg.reply("Hierarchy check error.");
     
     const loading = await msg.reply("Processing humans context items...");
@@ -388,7 +389,7 @@ async function runPrefix(msg, args) {
 
   if (sub === "info") {
     if (args.length < 2) return usage(msg, "info", `${PREFIX}role info <@role>`);
-    const role = resolveRole(msg.guild, args[1]);
+    const role = resolveRole(msg.guild, args);
     if (!role) return msg.reply("Could not identify the specific structural design profile metadata.");
     return msg.reply({ embeds: [embed(role.hexColor).setTitle(`Role info data: ${role.name}`).setDescription(`ID: ${role.id}\nColor: ${role.hexColor}\nMembers size context count: ${role.members.size}`)] });
   }
@@ -401,15 +402,15 @@ async function runPrefix(msg, args) {
 
   if (sub === "color") {
     if (args.length < 3) return usage(msg, "color", `${PREFIX}role color <@role> <hex>`);
-    const role = resolveRole(msg.guild, args[1]);
-    const hex = args[2];
+    const role = resolveRole(msg.guild, args);
+    const hex = args;
     if (!role || !canManageRole(msg.guild, role)) return msg.reply("Hierarchy error handling targets execution mapping.");
     try { await role.setColor(hex); return msg.reply("Role visual hex code layout configurations updated."); } catch { return msg.reply("Failed parameters tracking."); }
   }
 
   if (sub === "rename") {
     if (args.length < 3) return usage(msg, "rename", `${PREFIX}role rename <@role> <new name>`);
-    const role = resolveRole(msg.guild, args[1]);
+    const role = resolveRole(msg.guild, args);
     const newName = args.slice(2).join(" ");
     if (!role || !canManageRole(msg.guild, role) || !newName) return msg.reply("Invalid execution formatting layout strings.");
     await role.setName(newName);
@@ -418,7 +419,7 @@ async function runPrefix(msg, args) {
 
   if (sub === "hoist") {
     if (args.length < 2) return usage(msg, "hoist", `${PREFIX}role hoist <@role>`);
-    const role = resolveRole(msg.guild, args[1]);
+    const role = resolveRole(msg.guild, args);
     if (!role || !canManageRole(msg.guild, role)) return msg.reply("Hierarchy layout configuration constraints violation.");
     await role.setHoist(!role.hoist);
     return msg.reply("Toggled structural context sidebar layer successfully.");
@@ -426,7 +427,7 @@ async function runPrefix(msg, args) {
 
   if (sub === "mentionable") {
     if (args.length < 2) return usage(msg, "mentionable", `${PREFIX}role mentionable <@role>`);
-    const role = resolveRole(msg.guild, args[1]);
+    const role = resolveRole(msg.guild, args);
     if (!role || !canManageRole(msg.guild, role)) return msg.reply("Hierarchy tracking mismatch configurations error runtime.");
     await role.setMentionable(!role.mentionable);
     return msg.reply("Toggled target layout mention tag constraints configurations parameters.");
