@@ -18,7 +18,7 @@ const SUBCOMMANDS = {
   mentionable: "Toggle whether a role is mentionable",
 };
 
-// 1. COMPREHENSIVE SLASH COMMAND BUILDER REGISTER
+// 1. SLASH COMMAND BUILDER
 const data = new SlashCommandBuilder()
   .setName("role")
   .setDescription("Role management system")
@@ -40,9 +40,9 @@ const data = new SlashCommandBuilder()
     .setName("create")
     .setDescription(SUBCOMMANDS.create)
     .addStringOption(opt => opt.setName("name").setDescription("The name of the new role").setRequired(true))
-    .addStringOption(opt => opt.setName("color").setDescription("The hex color code (e.g. #FF0000)").setRequired(false))
-    .addBooleanOption(opt => opt.setName("hoist").setDescription("Display separately in sidebar?").setRequired(false))
-    .addBooleanOption(opt => opt.setName("mentionable").setDescription("Can anyone mention this role?").setRequired(false))
+    .addStringOption(opt => opt.setName("color").setDescription("The hex color code").setRequired(false))
+    .addBooleanOption(opt => opt.setName("hoist").setDescription("Display separately?").setRequired(false))
+    .addBooleanOption(opt => opt.setName("mentionable").setDescription("Can anyone mention?").setRequired(false))
   )
   .addSubcommand(sub => sub
     .setName("delete")
@@ -62,7 +62,7 @@ const data = new SlashCommandBuilder()
   .addSubcommand(sub => sub
     .setName("humans")
     .setDescription(SUBCOMMANDS.humans)
-    .addRoleOption(opt => opt.setName("role").setDescription("The role to give to all human accounts").setRequired(true))
+    .addRoleOption(opt => opt.setName("role").setDescription("The role to give to all humans").setRequired(true))
   )
   .addSubcommand(sub => sub
     .setName("info")
@@ -77,7 +77,7 @@ const data = new SlashCommandBuilder()
     .setName("color")
     .setDescription(SUBCOMMANDS.color)
     .addRoleOption(opt => opt.setName("role").setDescription("The role to modify").setRequired(true))
-    .addStringOption(opt => opt.setName("hex").setDescription("New hex color code (e.g. #FF0000)").setRequired(true))
+    .addStringOption(opt => opt.setName("hex").setDescription("New hex color code").setRequired(true))
   )
   .addSubcommand(sub => sub
     .setName("rename")
@@ -96,22 +96,20 @@ const data = new SlashCommandBuilder()
     .addRoleOption(opt => opt.setName("role").setDescription("The role to toggle mention status").setRequired(true))
   );
 
-// SYSTEM HELPERS
+// SHARED UTILITIES
 function embed(color = "#5865F2") {
   return new EmbedBuilder().setColor(color).setTimestamp();
 }
 
-function checkPermissions(context, isSlash = false) {
+function checkPermissions(context) {
   const member = context.member;
   const me = context.guild.members.me;
 
   if (!member.permissions.has(PermissionFlagsBits.ManageRoles)) {
-    const err = embed("#ED4245").setTitle("Missing Permissions").setDescription("You need the **Manage Roles** permission to use this command.");
-    return { valid: false, response: isSlash ? context.reply({ embeds: [err], ephemeral: true }) : context.reply({ embeds: [err] }) };
+    return { valid: false, error: "You need the **Manage Roles** permission to use this command." };
   }
   if (!me.permissions.has(PermissionFlagsBits.ManageRoles)) {
-    const err = embed("#ED4245").setTitle("Bot Missing Permissions").setDescription("I need the **Manage Roles** permission to do this.");
-    return { valid: false, response: isSlash ? context.reply({ embeds: [err], ephemeral: true }) : context.reply({ embeds: [err] }) };
+    return { valid: false, error: "I need the **Manage Roles** permission to run this action." };
   }
   return { valid: true };
 }
@@ -139,8 +137,10 @@ function usage(msg, sub, syntax) {
 async function execute(interaction) {
   if (!interaction.guild) return;
   
-  const permCheck = checkPermissions(interaction, true);
-  if (!permCheck.valid) return;
+  const permCheck = checkPermissions(interaction);
+  if (!permCheck.valid) {
+    return interaction.reply({ content: `❌ ${permCheck.error}`, ephemeral: true });
+  }
 
   const sub = interaction.options.getSubcommand();
 
@@ -232,6 +232,10 @@ async function execute(interaction) {
 
   if (sub === "info") {
     const role = interaction.options.getRole("role");
+    
+    // FIX: Forcefully fetch members into local bot memory cache so size isn't 0
+    await interaction.guild.members.fetch();
+
     const infoEmbed = embed(role.hexColor)
       .setTitle(`ℹ️ Role Info: ${role.name}`)
       .addFields(
@@ -296,8 +300,11 @@ async function execute(interaction) {
 async function runPrefix(msg, args) {
   if (!msg.guild) return;
 
-  const sub = (args || "").toLowerCase();
+  // FIX: Safely extracts the action whether your main file passes args as an array or string
+  const subArg = Array.isArray(args) ? args[0] : args;
+  const sub = (subArg || "").toLowerCase().trim();
 
+  // If they just type |role with no choices, or an invalid subcommand, print the help directory
   if (!sub || !SUBCOMMANDS[sub]) {
     const list = Object.entries(SUBCOMMANDS).map(([k, v]) => `\`${PREFIX}role ${k}\` — ${v}`).join("\n");
     return msg.reply({ 
@@ -305,13 +312,15 @@ async function runPrefix(msg, args) {
     });
   }
 
-  const permCheck = checkPermissions(msg, false);
-  if (!permCheck.valid) return;
+  const permCheck = checkPermissions(msg);
+  if (!permCheck.valid) {
+    return msg.reply(`❌ ${permCheck.error}`);
+  }
 
   if (sub === "user") {
-    if (args.length < 3) return usage(msg, "user", `${PREFIX}role user <@member> <@role>`);
-    const member = resolveMember(msg.guild, args);
-    const role   = resolveRole(msg.guild, args);
+    if (!Array.isArray(args) || args.length < 3) return usage(msg, "user", `${PREFIX}role user <@member> <@role>`);
+    const member = resolveMember(msg.guild, args[1]);
+    const role   = resolveRole(msg.guild, args[2]);
 
     if (!member || !role) return msg.reply("❌ Could not find that member or role.");
     if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
@@ -322,9 +331,9 @@ async function runPrefix(msg, args) {
   }
 
   if (sub === "remove") {
-    if (args.length < 3) return usage(msg, "remove", `${PREFIX}role remove <@member> <@role>`);
-    const member = resolveMember(msg.guild, args);
-    const role   = resolveRole(msg.guild, args);
+    if (!Array.isArray(args) || args.length < 3) return usage(msg, "remove", `${PREFIX}role remove <@member> <@role>`);
+    const member = resolveMember(msg.guild, args[1]);
+    const role   = resolveRole(msg.guild, args[2]);
 
     if (!member || !role) return msg.reply("❌ Could not find that member or role.");
     if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
@@ -335,18 +344,18 @@ async function runPrefix(msg, args) {
   }
 
   if (sub === "create") {
-    if (args.length < 2) return usage(msg, "create", `${PREFIX}role create <name> [hex color]`);
-    const name = args;
-    const color = args || null;
+    if (!Array.isArray(args) || args.length < 2) return usage(msg, "create", `${PREFIX}role create <name> [hex color]`);
+    const name = args.slice(1).join(" ");
+    const color = args[2] || null;
     try {
       const role = await msg.guild.roles.create({ name, color });
       return msg.reply({ embeds: [embed("#57F287").setTitle("Role Created").setDescription(`Successfully created role ${role}.`)] });
-    } catch { return msg.reply("❌ Failed to create role. Make sure the color code is a valid hex link (e.g. `#FF0000`)."); }
+    } catch { return msg.reply("❌ Failed to create role. Ensure color layout matches hex coding parameters."); }
   }
 
   if (sub === "delete") {
-    if (args.length < 2) return usage(msg, "delete", `${PREFIX}role delete <@role>`);
-    const role = resolveRole(msg.guild, args);
+    if (!Array.isArray(args) || args.length < 2) return usage(msg, "delete", `${PREFIX}role delete <@role>`);
+    const role = resolveRole(msg.guild, args[1]);
     if (!role) return msg.reply("❌ Could not find that role.");
     if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
     if (role.managed) return msg.reply("❌ That role is managed by an integration and cannot be deleted.");
@@ -357,8 +366,8 @@ async function runPrefix(msg, args) {
   }
 
   if (sub === "everyone") {
-    if (args.length < 2) return usage(msg, "everyone", `${PREFIX}role everyone <@role>`);
-    const role = resolveRole(msg.guild, args);
+    if (!Array.isArray(args) || args.length < 2) return usage(msg, "everyone", `${PREFIX}role everyone <@role>`);
+    const role = resolveRole(msg.guild, args[1]);
     if (!role) return msg.reply("❌ Could not find that role.");
     if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
     
@@ -370,10 +379,9 @@ async function runPrefix(msg, args) {
     for (const [, m] of targets) { try { await m.roles.add(role); ok++; } catch {} }
     return loading.edit({ content: null, embeds: [embed("#57F287").setTitle("Mass Role Added").setDescription(`Successfully added ${role} to **${ok}** members.`)] });
   }
-
   if (sub === "bots") {
-    if (args.length < 2) return usage(msg, "bots", `${PREFIX}role bots <@role>`);
-    const role = resolveRole(msg.guild, args);
+    if (!Array.isArray(args) || args.length < 2) return usage(msg, "bots", `${PREFIX}role bots <@role>`);
+    const role = resolveRole(msg.guild, args[1]);
     if (!role) return msg.reply("❌ Could not find that role.");
     if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
     
@@ -387,8 +395,8 @@ async function runPrefix(msg, args) {
   }
 
   if (sub === "humans") {
-    if (args.length < 2) return usage(msg, "humans", `${PREFIX}role humans <@role>`);
-    const role = resolveRole(msg.guild, args);
+    if (!Array.isArray(args) || args.length < 2) return usage(msg, "humans", `${PREFIX}role humans <@role>`);
+    const role = resolveRole(msg.guild, args[1]);
     if (!role) return msg.reply("❌ Could not find that role.");
     if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
     
@@ -402,10 +410,13 @@ async function runPrefix(msg, args) {
   }
 
   if (sub === "info") {
-    if (args.length < 2) return usage(msg, "info", `${PREFIX}role info <@role>`);
-    const role = resolveRole(msg.guild, args);
+    if (!Array.isArray(args) || args.length < 2) return usage(msg, "info", `${PREFIX}role info <@role>`);
+    const role = resolveRole(msg.guild, args[1]);
     if (!role) return msg.reply("❌ Could not find that role.");
     
+    // Sync local directory structure memory
+    await msg.guild.members.fetch();
+
     const infoEmbed = embed(role.hexColor)
       .setTitle(`ℹ️ Role Info: ${role.name}`)
       .addFields(
@@ -430,9 +441,9 @@ async function runPrefix(msg, args) {
   }
 
   if (sub === "color") {
-    if (args.length < 3) return usage(msg, "color", `${PREFIX}role color <@role> <hex code>`);
-    const role = resolveRole(msg.guild, args);
-    const hex = args;
+    if (!Array.isArray(args) || args.length < 3) return usage(msg, "color", `${PREFIX}role color <@role> <hex code>`);
+    const role = resolveRole(msg.guild, args[1]);
+    const hex = args[2];
     
     if (!role) return msg.reply("❌ Could not find that role.");
     if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
@@ -443,8 +454,8 @@ async function runPrefix(msg, args) {
   }
 
   if (sub === "rename") {
-    if (args.length < 3) return usage(msg, "rename", `${PREFIX}role rename <@role> <new name>`);
-    const role = resolveRole(msg.guild, args);
+    if (!Array.isArray(args) || args.length < 3) return usage(msg, "rename", `${PREFIX}role rename <@role> <new name>`);
+    const role = resolveRole(msg.guild, args[1]);
     const newName = args.slice(2).join(" ");
     
     if (!role) return msg.reply("❌ Could not find that role.");
@@ -457,8 +468,8 @@ async function runPrefix(msg, args) {
   }
 
   if (sub === "hoist") {
-    if (args.length < 2) return usage(msg, "hoist", `${PREFIX}role hoist <@role>`);
-    const role = resolveRole(msg.guild, args);
+    if (!Array.isArray(args) || args.length < 2) return usage(msg, "hoist", `${PREFIX}role hoist <@role>`);
+    const role = resolveRole(msg.guild, args[1]);
     
     if (!role) return msg.reply("❌ Could not find that role.");
     if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
@@ -468,8 +479,8 @@ async function runPrefix(msg, args) {
   }
 
   if (sub === "mentionable") {
-    if (args.length < 2) return usage(msg, "mentionable", `${PREFIX}role mentionable <@role>`);
-    const role = resolveRole(msg.guild, args);
+    if (!Array.isArray(args) || args.length < 2) return usage(msg, "mentionable", `${PREFIX}role mentionable <@role>`);
+    const role = resolveRole(msg.guild, args[1]);
     
     if (!role) return msg.reply("❌ Could not find that role.");
     if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
