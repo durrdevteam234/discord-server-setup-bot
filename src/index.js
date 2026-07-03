@@ -9,7 +9,7 @@ const path = require('path');
 const { Client, Collection, GatewayIntentBits } = require('discord.js');
 const mongoose = require('mongoose');
 const express = require('express');
-const cors = require('cors'); // ADDED: Imports Cross-Origin Resource Sharing
+const cors = require('cors'); // Required for Google AI Studio access
 require('dotenv').config();
 
 // ==========================================
@@ -83,27 +83,17 @@ if (!process.env.MONGODB_URI) {
 }
 
 // ==========================================
-// 5. EXPRESS DASHBOARD + API SERVER
+// 5. EXPRESS API SERVER (CLEANED)
 // ==========================================
 const app = express();
 const port = process.env.PORT || 10000;
 
-// ADDED: Enables CORS middleware to allow external connections (like Google AI Studio/Cloud Run)
+// Universal CORS Activation to accept requests from Google Cloud Run (.run.app)
 app.use(cors());
 
-// Serve all static assets (CSS, images, frontend JS) out of the 'web' folder
-app.use(express.static(path.join(__dirname, 'web')));
-
-// UPDATED: Serves your actual dashboard frontend while satisfying 24/7 uptime pings
+// Root URL endpoint: Keeps your 24/7 cron job happy and returns a safe 200 OK status
 app.get('/', (req, res) => {
-  const dashboardPath = path.join(__dirname, 'web', 'dashboard.html');
-  
-  if (fs.existsSync(dashboardPath)) {
-    res.status(200).sendFile(dashboardPath);
-  } else {
-    // Fail-safe backup response so the server stays awake even if the HTML is misplaced
-    res.status(200).send('ServerMiser Dashboard backend is active, but dashboard.html was not found.');
-  }
+  res.status(200).send('ServerMiser Dashboard API backend is active and fully functional.');
 });
 
 // ── API: General stats ──
@@ -114,10 +104,10 @@ app.get('/api/stats', async (req, res) => {
     const totalServers = client?.guilds?.cache?.size ?? 0;
     const totalUsers = client?.guilds?.cache?.reduce((acc, g) => acc + g.memberCount, 0) ?? 0;
     
-    // ADDED: Reads the active WebSocket heartbeat latency safely from the gateway gateway
+    // Live Gateway WebSocket Ping tracking
     const botPing = client?.ws?.ping !== -1 ? Math.round(client?.ws?.ping ?? 0) : 0;
 
-    // ADDED: Converts raw internal running milliseconds down to standard layout syntax "0h 0m 0s"
+    // Readable running time compilation string
     const totalSeconds = (client?.uptime ?? 0) / 1000;
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -147,7 +137,6 @@ app.get('/api/stats', async (req, res) => {
       totalTickets = await db.collection('tickets').countDocuments();
     } catch (_) {}
 
-    // UPDATED: Standardized payload keys to deliver data parameters
     res.json({
       status: client?.readyAt ? "online" : "offline",
       totalServers,
@@ -208,7 +197,7 @@ app.get('/api/commands', (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`[SERVER] Dashboard live on port ${port}`);
+  console.log(`[SERVER] Live telemetry API server streaming on port ${port}`);
 });
 
 // ==========================================
