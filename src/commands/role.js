@@ -18,7 +18,7 @@ const SUBCOMMANDS = {
   mentionable: "Toggle whether a role is mentionable",
 };
 
-// INITIALIZE BUILDER WITH USER, REMOVE, AND CREATE MANAGEMENT
+// 1. COMPREHENSIVE SLASH COMMAND BUILDER REGISTER
 const data = new SlashCommandBuilder()
   .setName("role")
   .setDescription("Role management system")
@@ -43,8 +43,7 @@ const data = new SlashCommandBuilder()
     .addStringOption(opt => opt.setName("color").setDescription("The hex color code (e.g. #FF0000)").setRequired(false))
     .addBooleanOption(opt => opt.setName("hoist").setDescription("Display separately in sidebar?").setRequired(false))
     .addBooleanOption(opt => opt.setName("mentionable").setDescription("Can anyone mention this role?").setRequired(false))
-  );
-  // CHAIN THESE DIRECTLY UNTO THE DATA BUILDER FROM PART 1
+  )
   .addSubcommand(sub => sub
     .setName("delete")
     .setDescription(SUBCOMMANDS.delete)
@@ -69,8 +68,7 @@ const data = new SlashCommandBuilder()
     .setName("info")
     .setDescription(SUBCOMMANDS.info)
     .addRoleOption(opt => opt.setName("role").setDescription("The target role").setRequired(true))
-  );
-  // CHAIN THESE DIRECTLY TO CLOSES THE DATA BUILDER FROM PART 2
+  )
   .addSubcommand(sub => sub
     .setName("list")
     .setDescription(SUBCOMMANDS.list)
@@ -97,6 +95,7 @@ const data = new SlashCommandBuilder()
     .setDescription(SUBCOMMANDS.mentionable)
     .addRoleOption(opt => opt.setName("role").setDescription("The role to toggle mention status").setRequired(true))
   );
+
 // SYSTEM HELPERS
 function embed(color = "#5865F2") {
   return new EmbedBuilder().setColor(color).setTimestamp();
@@ -136,7 +135,7 @@ function resolveMember(guild, input) {
 function usage(msg, sub, syntax) {
   return msg.reply({ embeds: [embed("#FEE75C").setTitle(`Usage — ${PREFIX}role ${sub}`).setDescription(`\`\`\`${syntax}\`\`\``)] });
 }
-// SLASH COMMAND EXECUTION INTERFACES
+// 2. SLASH COMMAND EXECUTION ROUTER
 async function execute(interaction) {
   if (!interaction.guild) return;
   
@@ -293,7 +292,7 @@ async function execute(interaction) {
     return interaction.reply({ embeds: [embed("#57F287").setTitle("Mentionable Status Toggled")] });
   }
 }
-// PREFIX COMMAND EXECUTION GATEWAY
+// 3. PREFIX COMMAND EXECUTION GATEWAY
 async function runPrefix(msg, args) {
   if (!msg.guild) return;
 
@@ -329,13 +328,16 @@ async function runPrefix(msg, args) {
 
   if (sub === "create") {
     if (args.length < 2) return usage(msg, "create", `${PREFIX}role create <name> [hex]`);
+    const name = args[1];
+    const color = args[2] || null;
     try {
-      const role = await msg.guild.roles.create({ name: args[1], color: args[2] || null });
+      const role = await msg.guild.roles.create({ name, color });
       return msg.reply({ embeds: [embed("#57F287").setTitle("Role Created").setDescription(`Role ${role} created.`)] });
     } catch { return msg.reply("Error handling configuration parameters parsing."); }
   }
 
   if (sub === "delete") {
+    if (args.length < 2) return usage(msg, "delete", `${PREFIX}role delete <@role>`);
     const role = resolveRole(msg.guild, args[1]);
     if (!role || !canManageRole(msg.guild, role) || role.managed) return msg.reply("Cannot target system structural files.");
     await role.delete();
@@ -343,10 +345,11 @@ async function runPrefix(msg, args) {
   }
 
   if (sub === "everyone") {
+    if (args.length < 2) return usage(msg, "everyone", `${PREFIX}role everyone <@role>`);
     const role = resolveRole(msg.guild, args[1]);
     if (!role || !canManageRole(msg.guild, role)) return msg.reply("Hierarchy configuration boundaries violation.");
     
-    const loading = await msg.reply("Looping array tracking changes...");
+    const loading = await msg.reply("Looping array tracking changes... this may take a while.");
     await msg.guild.members.fetch();
     const targets = msg.guild.members.cache.filter(m => !m.roles.cache.has(role.id));
     
@@ -356,6 +359,7 @@ async function runPrefix(msg, args) {
   }
 
   if (sub === "bots") {
+    if (args.length < 2) return usage(msg, "bots", `${PREFIX}role bots <@role>`);
     const role = resolveRole(msg.guild, args[1]);
     if (!role || !canManageRole(msg.guild, role)) return msg.reply("Hierarchy check error.");
     
@@ -369,6 +373,7 @@ async function runPrefix(msg, args) {
   }
 
   if (sub === "humans") {
+    if (args.length < 2) return usage(msg, "humans", `${PREFIX}role humans <@role>`);
     const role = resolveRole(msg.guild, args[1]);
     if (!role || !canManageRole(msg.guild, role)) return msg.reply("Hierarchy check error.");
     
@@ -382,6 +387,7 @@ async function runPrefix(msg, args) {
   }
 
   if (sub === "info") {
+    if (args.length < 2) return usage(msg, "info", `${PREFIX}role info <@role>`);
     const role = resolveRole(msg.guild, args[1]);
     if (!role) return msg.reply("Could not identify the specific structural design profile metadata.");
     return msg.reply({ embeds: [embed(role.hexColor).setTitle(`Role info data: ${role.name}`).setDescription(`ID: ${role.id}\nColor: ${role.hexColor}\nMembers size context count: ${role.members.size}`)] });
@@ -394,19 +400,24 @@ async function runPrefix(msg, args) {
   }
 
   if (sub === "color") {
+    if (args.length < 3) return usage(msg, "color", `${PREFIX}role color <@role> <hex>`);
     const role = resolveRole(msg.guild, args[1]);
+    const hex = args[2];
     if (!role || !canManageRole(msg.guild, role)) return msg.reply("Hierarchy error handling targets execution mapping.");
-    try { await role.setColor(args[2]); return msg.reply("Role visual hex code layout configurations updated."); } catch { return msg.reply("Failed parameters tracking."); }
+    try { await role.setColor(hex); return msg.reply("Role visual hex code layout configurations updated."); } catch { return msg.reply("Failed parameters tracking."); }
   }
 
   if (sub === "rename") {
+    if (args.length < 3) return usage(msg, "rename", `${PREFIX}role rename <@role> <new name>`);
     const role = resolveRole(msg.guild, args[1]);
-    if (!role || !canManageRole(msg.guild, role) || !args[2]) return msg.reply("Invalid execution formatting layout strings.");
-    await role.setName(args.slice(2).join(" "));
+    const newName = args.slice(2).join(" ");
+    if (!role || !canManageRole(msg.guild, role) || !newName) return msg.reply("Invalid execution formatting layout strings.");
+    await role.setName(newName);
     return msg.reply("Successfully updated naming labels schema structural bounds.");
   }
 
   if (sub === "hoist") {
+    if (args.length < 2) return usage(msg, "hoist", `${PREFIX}role hoist <@role>`);
     const role = resolveRole(msg.guild, args[1]);
     if (!role || !canManageRole(msg.guild, role)) return msg.reply("Hierarchy layout configuration constraints violation.");
     await role.setHoist(!role.hoist);
@@ -414,6 +425,7 @@ async function runPrefix(msg, args) {
   }
 
   if (sub === "mentionable") {
+    if (args.length < 2) return usage(msg, "mentionable", `${PREFIX}role mentionable <@role>`);
     const role = resolveRole(msg.guild, args[1]);
     if (!role || !canManageRole(msg.guild, role)) return msg.reply("Hierarchy tracking mismatch configurations error runtime.");
     await role.setMentionable(!role.mentionable);
