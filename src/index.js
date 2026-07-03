@@ -9,6 +9,7 @@ const path = require('path');
 const { Client, Collection, GatewayIntentBits } = require('discord.js');
 const mongoose = require('mongoose');
 const express = require('express');
+const cors = require('cors'); // ADDED: Imports Cross-Origin Resource Sharing
 require('dotenv').config();
 
 // ==========================================
@@ -87,6 +88,9 @@ if (!process.env.MONGODB_URI) {
 const app = express();
 const port = process.env.PORT || 10000;
 
+// ADDED: Enables CORS middleware to allow external connections (like Google AI Studio/Cloud Run)
+app.use(cors());
+
 // Serve all static assets (CSS, images, frontend JS) out of the 'web' folder
 app.use(express.static(path.join(__dirname, 'web')));
 
@@ -109,6 +113,16 @@ app.get('/api/stats', async (req, res) => {
 
     const totalServers = client?.guilds?.cache?.size ?? 0;
     const totalUsers = client?.guilds?.cache?.reduce((acc, g) => acc + g.memberCount, 0) ?? 0;
+    
+    // ADDED: Reads the active WebSocket heartbeat latency safely from the gateway gateway
+    const botPing = client?.ws?.ping !== -1 ? Math.round(client?.ws?.ping ?? 0) : 0;
+
+    // ADDED: Converts raw internal running milliseconds down to standard layout syntax "0h 0m 0s"
+    const totalSeconds = (client?.uptime ?? 0) / 1000;
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = Math.floor(totalSeconds % 60);
+    const uptimeString = client?.readyAt ? `${hours}h ${minutes}m ${seconds}s` : "0h 0m 0s";
 
     let totalXp = 0;
     let leveledUsers = 0;
@@ -133,11 +147,15 @@ app.get('/api/stats', async (req, res) => {
       totalTickets = await db.collection('tickets').countDocuments();
     } catch (_) {}
 
+    // UPDATED: Standardized payload keys to deliver data parameters
     res.json({
+      status: client?.readyAt ? "online" : "offline",
       totalServers,
       totalUsers,
-      totalXp,
+      botPing,
+      uptimeString,
       leveledUsers,
+      totalXp,
       totalTickets,
       uptimeSeconds: Math.floor(process.uptime()),
     });
