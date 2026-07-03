@@ -22,7 +22,7 @@ const SUBCOMMANDS = {
 const data = new SlashCommandBuilder()
   .setName("role")
   .setDescription("Role management system")
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles) // Locks command menu to Manage Roles users
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
   .setDMPermission(false)
   .addSubcommand(sub => sub
     .setName("user")
@@ -105,7 +105,6 @@ function checkPermissions(context, isSlash = false) {
   const member = context.member;
   const me = context.guild.members.me;
 
-  // Verifies user has the Manage Roles permission
   if (!member.permissions.has(PermissionFlagsBits.ManageRoles)) {
     const err = embed("#ED4245").setTitle("Missing Permissions").setDescription("You need the **Manage Roles** permission to use this command.");
     return { valid: false, response: isSlash ? context.reply({ embeds: [err], ephemeral: true }) : context.reply({ embeds: [err] }) };
@@ -234,13 +233,13 @@ async function execute(interaction) {
   if (sub === "info") {
     const role = interaction.options.getRole("role");
     const infoEmbed = embed(role.hexColor)
-      .setTitle(`Role Info: ${role.name}`)
+      .setTitle(`ℹ️ Role Info: ${role.name}`)
       .addFields(
-        { name: "ID", value: role.id, inline: true },
-        { name: "Color", value: role.hexColor, inline: true },
-        { name: "Members", value: `${role.members.size}`, inline: true },
-        { name: "Hoisted", value: role.hoist ? "Yes" : "No", inline: true },
-        { name: "Mentionable", value: role.mentionable ? "Yes" : "No", inline: true }
+        { name: "ID", value: `\`${role.id}\``, inline: true },
+        { name: "Color Hex", value: `\`${role.hexColor}\``, inline: true },
+        { name: "Total Members", value: `\`${role.members.size}\` users`, inline: true },
+        { name: "Hoisted Separately", value: role.hoist ? "🟢 Yes" : "🔴 No", inline: true },
+        { name: "Mentionable By Anyone", value: role.mentionable ? "🟢 Yes" : "🔴 No", inline: true }
       );
     return interaction.reply({ embeds: [infoEmbed] });
   }
@@ -282,7 +281,7 @@ async function execute(interaction) {
     if (!canManageRole(interaction.guild, role)) return interaction.reply({ content: "Role hierarchy issue.", ephemeral: true });
 
     await role.setHoist(!role.hoist);
-    return interaction.reply({ embeds: [embed("#57F287").setTitle("Hoist Status Toggled")] });
+    return interaction.reply({ embeds: [embed("#57F287").setTitle("📌 Hoist Toggled").setDescription(`${role} is now ${role.hoist ? "hoisted (visible separately in sidebar)" : "unhoisted"}.`)] });
   }
 
   if (sub === "mentionable") {
@@ -290,7 +289,7 @@ async function execute(interaction) {
     if (!canManageRole(interaction.guild, role)) return interaction.reply({ content: "Role hierarchy issue.", ephemeral: true });
 
     await role.setMentionable(!role.mentionable);
-    return interaction.reply({ embeds: [embed("#57F287").setTitle("Mentionable Status Toggled")] });
+    return interaction.reply({ embeds: [embed("#57F287").setTitle("💬 Mentionable Toggled").setDescription(`${role} is now ${role.mentionable ? "mentionable" : "not mentionable"}.`)] });
   }
 }
 // 3. PREFIX COMMAND EXECUTION GATEWAY
@@ -301,7 +300,9 @@ async function runPrefix(msg, args) {
 
   if (!sub || !SUBCOMMANDS[sub]) {
     const list = Object.entries(SUBCOMMANDS).map(([k, v]) => `\`${PREFIX}role ${k}\` — ${v}`).join("\n");
-    return msg.reply({ embeds: [embed().setTitle("Role System").setDescription(list)] });
+    return msg.reply({ 
+      embeds: [embed().setTitle("🛡️ Role Management System").setDescription(list).setFooter({ text: "Angle brackets < > = required  |  Square brackets [ ] = optional" })] 
+    });
   }
 
   const permCheck = checkPermissions(msg, false);
@@ -312,9 +313,12 @@ async function runPrefix(msg, args) {
     const member = resolveMember(msg.guild, args);
     const role   = resolveRole(msg.guild, args);
 
-    if (!member || !role || !canManageRole(msg.guild, role)) return msg.reply("Invalid data targeting parameters configuration.");
+    if (!member || !role) return msg.reply("❌ Could not find that member or role.");
+    if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
+    if (member.roles.cache.has(role.id)) return msg.reply("❌ That member already has that role.");
+    
     await member.roles.add(role);
-    return msg.reply({ embeds: [embed("#57F287").setTitle("Role Added")] });
+    return msg.reply({ embeds: [embed("#57F287").setTitle("Role Added").setDescription(`Added ${role} to ${member}.`)] });
   }
 
   if (sub === "remove") {
@@ -322,115 +326,156 @@ async function runPrefix(msg, args) {
     const member = resolveMember(msg.guild, args);
     const role   = resolveRole(msg.guild, args);
 
-    if (!member || !role || !canManageRole(msg.guild, role)) return msg.reply("Invalid target structural layout configurations.");
+    if (!member || !role) return msg.reply("❌ Could not find that member or role.");
+    if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
+    if (!member.roles.cache.has(role.id)) return msg.reply("❌ That member does not have that role.");
+    
     await member.roles.remove(role);
-    return msg.reply({ embeds: [embed("#57F287").setTitle("Role Removed")] });
+    return msg.reply({ embeds: [embed("#57F287").setTitle("Role Removed").setDescription(`Removed ${role} from ${member}.`)] });
   }
 
   if (sub === "create") {
-    if (args.length < 2) return usage(msg, "create", `${PREFIX}role create <name> [hex]`);
+    if (args.length < 2) return usage(msg, "create", `${PREFIX}role create <name> [hex color]`);
     const name = args;
     const color = args || null;
     try {
       const role = await msg.guild.roles.create({ name, color });
-      return msg.reply({ embeds: [embed("#57F287").setTitle("Role Created").setDescription(`Role ${role} created.`)] });
-    } catch { return msg.reply("Error handling configuration parameters parsing."); }
+      return msg.reply({ embeds: [embed("#57F287").setTitle("Role Created").setDescription(`Successfully created role ${role}.`)] });
+    } catch { return msg.reply("❌ Failed to create role. Make sure the color code is a valid hex link (e.g. `#FF0000`)."); }
   }
 
   if (sub === "delete") {
     if (args.length < 2) return usage(msg, "delete", `${PREFIX}role delete <@role>`);
     const role = resolveRole(msg.guild, args);
-    if (!role || !canManageRole(msg.guild, role) || role.managed) return msg.reply("Cannot target system structural files.");
+    if (!role) return msg.reply("❌ Could not find that role.");
+    if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
+    if (role.managed) return msg.reply("❌ That role is managed by an integration and cannot be deleted.");
+    
+    const oldName = role.name;
     await role.delete();
-    return msg.reply({ embeds: [embed("#57F287").setTitle("Role Deleted")] });
+    return msg.reply({ embeds: [embed("#57F287").setTitle("Role Deleted").setDescription(`The role **${oldName}** has been deleted.`)] });
   }
 
   if (sub === "everyone") {
     if (args.length < 2) return usage(msg, "everyone", `${PREFIX}role everyone <@role>`);
     const role = resolveRole(msg.guild, args);
-    if (!role || !canManageRole(msg.guild, role)) return msg.reply("Hierarchy configuration boundaries violation.");
+    if (!role) return msg.reply("❌ Could not find that role.");
+    if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
     
-    const loading = await msg.reply("Looping array tracking changes... this may take a while.");
+    const loading = await msg.reply("🔄 Looping through server members... this may take a while.");
     await msg.guild.members.fetch();
     const targets = msg.guild.members.cache.filter(m => !m.roles.cache.has(role.id));
     
     let ok = 0;
     for (const [, m] of targets) { try { await m.roles.add(role); ok++; } catch {} }
-    return loading.edit({ content: `Complete! Added role to ${ok} structural accounts.` });
+    return loading.edit({ content: null, embeds: [embed("#57F287").setTitle("Mass Role Added").setDescription(`Successfully added ${role} to **${ok}** members.`)] });
   }
 
   if (sub === "bots") {
     if (args.length < 2) return usage(msg, "bots", `${PREFIX}role bots <@role>`);
     const role = resolveRole(msg.guild, args);
-    if (!role || !canManageRole(msg.guild, role)) return msg.reply("Hierarchy check error.");
+    if (!role) return msg.reply("❌ Could not find that role.");
+    if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
     
-    const loading = await msg.reply("Processing bots context items...");
+    const loading = await msg.reply("🔄 Filtering bot accounts...");
     await msg.guild.members.fetch();
     const targets = msg.guild.members.cache.filter(m => m.user.bot && !m.roles.cache.has(role.id));
     
     let ok = 0;
     for (const [, m] of targets) { try { await m.roles.add(role); ok++; } catch {} }
-    return loading.edit({ content: `Complete! Added role to ${ok} bot accounts.` });
+    return loading.edit({ content: null, embeds: [embed("#57F287").setTitle("Bots Assignment Complete").setDescription(`Successfully added ${role} to **${ok}** bots.`)] });
   }
 
   if (sub === "humans") {
     if (args.length < 2) return usage(msg, "humans", `${PREFIX}role humans <@role>`);
     const role = resolveRole(msg.guild, args);
-    if (!role || !canManageRole(msg.guild, role)) return msg.reply("Hierarchy check error.");
+    if (!role) return msg.reply("❌ Could not find that role.");
+    if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
     
-    const loading = await msg.reply("Processing humans context items...");
+    const loading = await msg.reply("🔄 Filtering human accounts...");
     await msg.guild.members.fetch();
     const targets = msg.guild.members.cache.filter(m => !m.user.bot && !m.roles.cache.has(role.id));
     
     let ok = 0;
     for (const [, m] of targets) { try { await m.roles.add(role); ok++; } catch {} }
-    return loading.edit({ content: `Complete! Added role to ${ok} human accounts.` });
+    return loading.edit({ content: null, embeds: [embed("#57F287").setTitle("Humans Assignment Complete").setDescription(`Successfully added ${role} to **${ok}** human members.`)] });
   }
 
   if (sub === "info") {
     if (args.length < 2) return usage(msg, "info", `${PREFIX}role info <@role>`);
     const role = resolveRole(msg.guild, args);
-    if (!role) return msg.reply("Could not identify the specific structural design profile metadata.");
-    return msg.reply({ embeds: [embed(role.hexColor).setTitle(`Role info data: ${role.name}`).setDescription(`ID: ${role.id}\nColor: ${role.hexColor}\nMembers size context count: ${role.members.size}`)] });
+    if (!role) return msg.reply("❌ Could not find that role.");
+    
+    const infoEmbed = embed(role.hexColor)
+      .setTitle(`ℹ️ Role Info: ${role.name}`)
+      .addFields(
+        { name: "ID", value: `\`${role.id}\``, inline: true },
+        { name: "Color Hex", value: `\`${role.hexColor}\``, inline: true },
+        { name: "Total Members", value: `\`${role.members.size}\` users`, inline: true },
+        { name: "Hoisted Separately", value: role.hoist ? "🟢 Yes" : "🔴 No", inline: true },
+        { name: "Mentionable By Anyone", value: role.mentionable ? "🟢 Yes" : "🔴 No", inline: true }
+      );
+    return msg.reply({ embeds: [infoEmbed] });
   }
 
   if (sub === "list") {
     await msg.guild.roles.fetch();
-    const lines = msg.guild.roles.cache.filter(r => r.id !== msg.guild.id).map(r => `${r} — \`${r.members.size}\` members`).join("\n");
-    return msg.reply({ embeds: [embed().setTitle("Role List context").setDescription(lines.slice(0, 2000) || "Clear empty fields.")] });
+    const lines = msg.guild.roles.cache
+      .filter(r => r.id !== msg.guild.id)
+      .sort((a, b) => b.position - a.position)
+      .map(r => `${r} — \`${r.members.size}\` members`)
+      .join("\n");
+      
+    return msg.reply({ embeds: [embed().setTitle("📋 Server Roles List").setDescription(lines.slice(0, 2000) || "No custom roles found.")] });
   }
 
   if (sub === "color") {
-    if (args.length < 3) return usage(msg, "color", `${PREFIX}role color <@role> <hex>`);
+    if (args.length < 3) return usage(msg, "color", `${PREFIX}role color <@role> <hex code>`);
     const role = resolveRole(msg.guild, args);
     const hex = args;
-    if (!role || !canManageRole(msg.guild, role)) return msg.reply("Hierarchy error handling targets execution mapping.");
-    try { await role.setColor(hex); return msg.reply("Role visual hex code layout configurations updated."); } catch { return msg.reply("Failed parameters tracking."); }
+    
+    if (!role) return msg.reply("❌ Could not find that role.");
+    if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
+    try { 
+      await role.setColor(hex); 
+      return msg.reply({ embeds: [embed(hex).setTitle("🎨 Color Updated").setDescription(`Changed color of ${role} to \`${hex}\`.`)] }); 
+    } catch { return msg.reply("❌ Invalid hex color code. Use formatting values like `#FF0000`."); }
   }
 
   if (sub === "rename") {
     if (args.length < 3) return usage(msg, "rename", `${PREFIX}role rename <@role> <new name>`);
     const role = resolveRole(msg.guild, args);
     const newName = args.slice(2).join(" ");
-    if (!role || !canManageRole(msg.guild, role) || !newName) return msg.reply("Invalid execution formatting layout strings.");
+    
+    if (!role) return msg.reply("❌ Could not find that role.");
+    if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
+    if (!newName) return msg.reply("❌ Please provide a valid new name.");
+    
+    const oldName = role.name;
     await role.setName(newName);
-    return msg.reply("Successfully updated naming labels schema structural bounds.");
+    return msg.reply({ embeds: [embed("#57F287").setTitle("✏️ Role Renamed").setDescription(`Renamed **${oldName}** to **${newName}**`)] });
   }
 
   if (sub === "hoist") {
     if (args.length < 2) return usage(msg, "hoist", `${PREFIX}role hoist <@role>`);
     const role = resolveRole(msg.guild, args);
-    if (!role || !canManageRole(msg.guild, role)) return msg.reply("Hierarchy layout configuration constraints violation.");
+    
+    if (!role) return msg.reply("❌ Could not find that role.");
+    if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
+    
     await role.setHoist(!role.hoist);
-    return msg.reply("Toggled structural context sidebar layer successfully.");
+    return msg.reply({ embeds: [embed("#57F287").setTitle("📌 Hoist Toggled").setDescription(`${role} is now ${role.hoist ? "hoisted (visible separately in sidebar)" : "unhoisted"}.`)] });
   }
 
   if (sub === "mentionable") {
     if (args.length < 2) return usage(msg, "mentionable", `${PREFIX}role mentionable <@role>`);
     const role = resolveRole(msg.guild, args);
-    if (!role || !canManageRole(msg.guild, role)) return msg.reply("Hierarchy tracking mismatch configurations error runtime.");
+    
+    if (!role) return msg.reply("❌ Could not find that role.");
+    if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
+    
     await role.setMentionable(!role.mentionable);
-    return msg.reply("Toggled target layout mention tag constraints configurations parameters.");
+    return msg.reply({ embeds: [embed("#57F287").setTitle("💬 Mentionable Toggled").setDescription(`${role} is now ${role.mentionable ? "mentionable" : "not mentionable"}.`)] });
   }
 }
 
