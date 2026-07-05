@@ -8,7 +8,7 @@ const xpCooldowns = new Map();
 module.exports = {
   name: discord.Events.MessageCreate,
   once: false,
-  async execute(message, client) { // Added client parameter explicitly
+  async execute(message, client) {
     try {
       if (!message || !message.author || message.author.bot || message.webhookId) return;
       const prefix = client?.prefix || message.client.prefix || '|';
@@ -112,7 +112,9 @@ module.exports = {
           const successEmbed = new discord.EmbedBuilder().setColor('#00FF00').setTitle('✅ Saved!').setDescription('Layout is now: ' + choice.toUpperCase());
           return message.reply({ embeds: [successEmbed] }).catch(() => null);
         } else {
-          // Dynamic Hybrid Prefix Router
+          // =======================================================
+          // DYNAMIC HYBRID PREFIX ROUTER WITH INTERACTION EMULATOR
+          // =======================================================
           const targetCommand = client.commands.get(commandName);
           if (targetCommand) {
             if (typeof targetCommand.executePrefix === 'function') {
@@ -120,11 +122,45 @@ module.exports = {
             } else if (typeof targetCommand.runPrefix === 'function') {
               await targetCommand.runPrefix(message, args, client).catch(err => console.error(`Legacy runPrefix error inside |${commandName}:`, err));
             } else if (typeof targetCommand.execute === 'function') {
-              // Safe fallback handling: If it's a pure slash command file, don't break execution structures
+              
+              // Emulate an Interaction structure for pure Slash commands running via prefix
+              const mockInteraction = {
+                isCommand: () => true,
+                isChatInputCommand: () => true,
+                deferred: false,
+                replied: false,
+                guild: message.guild,
+                channel: message.channel,
+                user: message.author,
+                member: message.member,
+                client: client,
+                options: {
+                  getString: (name) => args[0] || null,
+                  getUser: (name) => message.mentions.users.first() || null,
+                  getMember: (name) => message.mentions.members.first() || null,
+                  getInteger: (name) => parseInt(args[0]) || null,
+                  get: (name) => ({ value: args[0] || null })
+                },
+                reply: async (options) => {
+                  mockInteraction.replied = true;
+                  if (typeof options === 'string') return message.reply({ content: options });
+                  return message.reply(options);
+                },
+                followUp: async (options) => {
+                  if (typeof options === 'string') return message.reply({ content: options });
+                  return message.reply(options);
+                },
+                deferReply: async (options) => {
+                  mockInteraction.deferred = true;
+                  return null;
+                }
+              };
+
               try {
-                await targetCommand.execute(message, client);
+                await targetCommand.execute(mockInteraction, client);
               } catch (err) {
-                console.error(`Fallback standard execute error inside |${commandName}. Checking if it requires an interaction object:`, err.message);
+                console.error(`Execution failure inside hybrid command |${commandName}:`, err);
+                message.reply('❌ There was an internal error executing this command!').catch(() => null);
               }
             }
           }
