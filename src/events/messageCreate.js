@@ -8,10 +8,10 @@ const xpCooldowns = new Map();
 module.exports = {
   name: discord.Events.MessageCreate,
   once: false,
-  async execute(message) {
+  async execute(message, client) { // Added client parameter explicitly
     try {
       if (!message || !message.author || message.author.bot || message.webhookId) return;
-      const prefix = message.client.prefix || '|';
+      const prefix = client?.prefix || message.client.prefix || '|';
       
       // ==========================================
       // PART A: COMMAND PARSING & EXECUTION
@@ -112,20 +112,26 @@ module.exports = {
           const successEmbed = new discord.EmbedBuilder().setColor('#00FF00').setTitle('✅ Saved!').setDescription('Layout is now: ' + choice.toUpperCase());
           return message.reply({ embeds: [successEmbed] }).catch(() => null);
         } else {
-          // Dynamic Hybrid Prefix Router (Runs executePrefix or falls back to standard execution)
-          const targetCommand = message.client.commands.get(commandName);
+          // Dynamic Hybrid Prefix Router
+          const targetCommand = client.commands.get(commandName);
           if (targetCommand) {
             if (typeof targetCommand.executePrefix === 'function') {
-              await targetCommand.executePrefix(message, args).catch(err => console.error(`Prefix execution error inside |${commandName}:`, err));
+              await targetCommand.executePrefix(message, args, client).catch(err => console.error(`Prefix execution error inside |${commandName}:`, err));
             } else if (typeof targetCommand.runPrefix === 'function') {
-              await targetCommand.runPrefix(message, args).catch(err => console.error(`Legacy runPrefix error inside |${commandName}:`, err));
+              await targetCommand.runPrefix(message, args, client).catch(err => console.error(`Legacy runPrefix error inside |${commandName}:`, err));
             } else if (typeof targetCommand.execute === 'function') {
-              await targetCommand.execute(message, args).catch(err => console.error(`Fallback standard execute error inside |${commandName}:`, err));
+              // Safe fallback handling: If it's a pure slash command file, don't break execution structures
+              try {
+                await targetCommand.execute(message, client);
+              } catch (err) {
+                console.error(`Fallback standard execute error inside |${commandName}. Checking if it requires an interaction object:`, err.message);
+              }
             }
           }
           return;
         }
       }
+      
       // ==========================================
       // PART B: BACKGROUND TRACKING XP ENGINE
       // ==========================================
@@ -138,9 +144,6 @@ module.exports = {
       const mainConfig = mainSettings[guildId] || {};
       const levelConfig = levelingSettings[guildId] || {};
 
-      console.log('--- LEVELING DB LOOKUP DEBUGGER ---');
-      console.log('Raw data returned from levelConfig:', JSON.stringify(levelConfig, null, 2));
-
       const targetStatus = levelConfig.status || levelConfig._doc?.status || levelConfig.enabled || levelConfig._doc?.enabled;
       const mainLevelingStatus = mainConfig.leveling || mainConfig._doc?.leveling;
 
@@ -148,10 +151,7 @@ module.exports = {
         (mainLevelingStatus === 'on' || mainLevelingStatus === true) ||
         (targetStatus === 'on' || targetStatus === true);
 
-      if (!isLevelingActive) {
-        console.log('Leveling execution aborted: Feature evaluated to INACTIVE in configurations.');
-        return; 
-      }
+      if (!isLevelingActive) return; 
 
       const cooldownKey = `${guildId}-${message.author.id}`;
       const now = Date.now();
@@ -193,8 +193,6 @@ module.exports = {
                               mainConfig.channelId ||
                               mainConfig._doc?.channelId;
 
-        console.log('Target Channel Extraction Result ID:', targetChannelId);
-
         let targetChannel = message.channel;
         if (targetChannelId && typeof targetChannelId === 'string') {
           try {
@@ -202,11 +200,8 @@ module.exports = {
                             await message.guild.channels.fetch(targetChannelId) || 
                             message.channel;
           } catch (fetchError) {
-            console.error('Failed to locate target channel via API call, defaulting to message source channel:', fetchError.message);
             targetChannel = message.channel;
           }
-        } else {
-          console.log('No valid String Channel ID matched in your DB documents. Defaulting to source text channel.');
         }
 
         await targetChannel.send({ embeds: [embed] }).catch(() => null);
