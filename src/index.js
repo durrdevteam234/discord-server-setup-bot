@@ -9,7 +9,7 @@ const path = require('path');
 const { Client, Collection, GatewayIntentBits } = require('discord.js');
 const mongoose = require('mongoose');
 const express = require('express');
-const cors = require('cors'); // Required for Google AI Studio access
+const cors = require('cors'); 
 require('dotenv').config();
 
 // ==========================================
@@ -19,7 +19,7 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.MessageContent, // Required to read prefix command text!
     GatewayIntentBits.GuildMembers
   ]
 });
@@ -27,7 +27,7 @@ client.commands = new Collection();
 client.prefix = process.env.PREFIX || '|';
 
 // ==========================================
-// 2. LOAD SLASH COMMANDS DYNAMICALLY
+// 2. LOAD COMMANDS DYNAMICALLY (SLASH & PREFIX)
 // ==========================================
 const commandsPath = path.join(__dirname, 'commands');
 if (fs.existsSync(commandsPath)) {
@@ -36,8 +36,18 @@ if (fs.existsSync(commandsPath)) {
     try {
       const filePath = path.join(commandsPath, file);
       const command = require(filePath);
-      if ('data' in command && 'execute' in command) {
+      
+      // FIX: Check if it's a Slash Command OR a traditional Prefix Command
+      if (command.data && command.data.name) {
+        // Standard slash command setup
         client.commands.set(command.data.name, command);
+      } else if (command.name) {
+        // Traditional prefix command setup (if your legacy files export { name: 'hug', executePrefix: ... })
+        client.commands.set(command.name.toLowerCase(), command);
+      } else if (command.executePrefix) {
+        // If you named the file 'hug.js' but didn't provide a .name inside, use the filename
+        const fallbackName = file.split('.')[0].toLowerCase();
+        client.commands.set(fallbackName, command);
       }
     } catch (cmdErr) {
       console.error('[STARTUP ERROR] Failed to load command file ' + file + ':', cmdErr.message);
@@ -83,15 +93,13 @@ if (!process.env.MONGODB_URI) {
 }
 
 // ==========================================
-// 5. EXPRESS API SERVER (CLEANED)
+// 5. EXPRESS API SERVER
 // ==========================================
 const app = express();
 const port = process.env.PORT || 10000;
 
-// Universal CORS Activation to accept requests from Google Cloud Run (.run.app)
 app.use(cors());
 
-// Root URL endpoint: Keeps your 24/7 cron job happy and returns a safe 200 OK status
 app.get('/', (req, res) => {
   res.status(200).send('ServerMiser Dashboard API backend is active and fully functional.');
 });
@@ -100,14 +108,10 @@ app.get('/', (req, res) => {
 app.get('/api/stats', async (req, res) => {
   try {
     const db = mongoose.connection.db;
-
     const totalServers = client?.guilds?.cache?.size ?? 0;
     const totalUsers = client?.guilds?.cache?.reduce((acc, g) => acc + g.memberCount, 0) ?? 0;
-    
-    // Live Gateway WebSocket Ping tracking
     const botPing = client?.ws?.ping !== -1 ? Math.round(client?.ws?.ping ?? 0) : 0;
 
-    // Readable running time compilation string
     const totalSeconds = (client?.uptime ?? 0) / 1000;
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -187,8 +191,8 @@ app.get('/api/leaderboard', async (req, res) => {
 app.get('/api/commands', (req, res) => {
   try {
     const cmds = [...(client?.commands?.values() || [])].map(c => ({
-      name: c.data.name,
-      description: c.data.description,
+      name: c.data?.name || c.name || "unknown",
+      description: c.data?.description || "Prefix-only command",
     }));
     res.json(cmds);
   } catch (err) {
