@@ -102,7 +102,7 @@ module.exports = {
             return message.reply('❌ Permissions required!').catch(() => null);
           }
           
-          const choice = args ? args.toLowerCase() : null;
+          const choice = args[0] ? args[0].toLowerCase() : null;
           const validStyles = ['off', 'wide', 'smallcaps', 'bubbles'];
           if (!choice || !validStyles.includes(choice)) {
             const embed = new discord.EmbedBuilder().setColor('#FF69B4').setTitle('✨ Font Menu ✨').setDescription('Usage: `|cute <choice>`\n• `off` ➡️ Normal\n• `wide` ➡️ ᴡɪᴅᴇ\n• `smallcaps` ➡️ sᴍᴀʟʟᴄᴀᴘs\n• `bubbles` ➡️ ⓑⓤⓑⓑⓛⓔⓢ');
@@ -112,12 +112,15 @@ module.exports = {
           const successEmbed = new discord.EmbedBuilder().setColor('#00FF00').setTitle('✅ Saved!').setDescription('Layout is now: ' + choice.toUpperCase());
           return message.reply({ embeds: [successEmbed] }).catch(() => null);
         } else {
+          // Dynamic Hybrid Prefix Router (Runs executePrefix or falls back to standard execution)
           const targetCommand = message.client.commands.get(commandName);
           if (targetCommand) {
-            if (typeof targetCommand.runPrefix === 'function') {
-              await targetCommand.runPrefix(message, args).catch(err => console.error(`Prefix error inside |${commandName}:`, err));
+            if (typeof targetCommand.executePrefix === 'function') {
+              await targetCommand.executePrefix(message, args).catch(err => console.error(`Prefix execution error inside |${commandName}:`, err));
+            } else if (typeof targetCommand.runPrefix === 'function') {
+              await targetCommand.runPrefix(message, args).catch(err => console.error(`Legacy runPrefix error inside |${commandName}:`, err));
             } else if (typeof targetCommand.execute === 'function') {
-              await targetCommand.execute(message, args).catch(err => console.error(`Fallback error inside |${commandName}:`, err));
+              await targetCommand.execute(message, args).catch(err => console.error(`Fallback standard execute error inside |${commandName}:`, err));
             }
           }
           return;
@@ -135,11 +138,9 @@ module.exports = {
       const mainConfig = mainSettings[guildId] || {};
       const levelConfig = levelingSettings[guildId] || {};
 
-      // 🛠️ MONGODB DEBUG LOGS: Run 'node .' on your local computer or view Render's Log tab
       console.log('--- LEVELING DB LOOKUP DEBUGGER ---');
       console.log('Raw data returned from levelConfig:', JSON.stringify(levelConfig, null, 2));
 
-      // Supports flat JSON data properties, MongoDB unwrapped documents, and deep properties nested manually
       const targetStatus = levelConfig.status || levelConfig._doc?.status || levelConfig.enabled || levelConfig._doc?.enabled;
       const mainLevelingStatus = mainConfig.leveling || mainConfig._doc?.leveling;
 
@@ -186,8 +187,6 @@ module.exports = {
           )
           .setThumbnail(message.author.displayAvatarURL({ dynamic: true }));
 
-        // 🌟 CACHE RECOVERY ENGINE FOR RENDER DEPLOYMENTS
-        // Looks for channel properties inside basic properties, nested docs, or server configs
         let targetChannelId = levelConfig.channelId || 
                               levelConfig._doc?.channelId || 
                               levelConfig.settings?.channelId || 
@@ -199,7 +198,6 @@ module.exports = {
         let targetChannel = message.channel;
         if (targetChannelId && typeof targetChannelId === 'string') {
           try {
-            // Checks memory cache first, then executes an API call to Discord to fetch missing channels on cold starts
             targetChannel = message.guild.channels.cache.get(targetChannelId) || 
                             await message.guild.channels.fetch(targetChannelId) || 
                             message.channel;
