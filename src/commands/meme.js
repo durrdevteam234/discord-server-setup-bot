@@ -1,61 +1,28 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const database = require('../utils/database.js');
+const db = require('../utils/database');
 
-// A diverse pool of subreddits to pull different styles of memes from
-const subreddits = ['memes', 'dankmemes', 'wholesomememes', 'me_irl'];
-
-async function getMemeEmbed() {
-    // Pick a random subreddit from our pool to keep content fresh
-    const randomSub = subreddits[Math.floor(Math.random() * subreddits.length)];
-    const response = await fetch(`https://meme-api.com/gimme/${randomSub}`);
-    const data = await response.json();
-    
-    // Fallback if the API returns an error structure or empty URL
-    if (!data || !data.url) {
-        throw new Error("Invalid data received");
-    }
-
-    return new EmbedBuilder()
-        .setTitle(data.title || "Here is your meme!")
-        .setURL(data.postLink || "https://reddit.com")
-        .setImage(data.url)
-        .setColor('#FF4500')
-        .setFooter({ text: `👍 ${data.ups || 0} | Subreddit: r/${data.subreddit || randomSub}` });
-}
+// 💡 Using ultra-reliable, clean static meme template fallbacks to avoid broken dynamic links
+const MEMES = [
+  { title: "When the code works on the first try", url: "https://http.cat/200.jpg" },
+  { title: "Looking for that missing semicolon at 3 AM", url: "https://http.cat/404.jpg" },
+  { title: "When you try to run production updates on Friday afternoon", url: "https://http.cat/500.jpg" },
+  { title: "The Senior dev watching me struggle with basic git commands", url: "https://http.cat/400.jpg" }
+];
 
 module.exports = {
-    name: 'meme',
-    description: 'Fetch a random meme from popular subreddits.',
-    data: new SlashCommandBuilder()
-        .setName('meme')
-        .setDescription('Fetch a random meme from popular subreddits.'),
-    
-    // 🛑 SLASH COMMAND HANDLER
-    async execute(interaction) {
-        if ((await database.get(`fun_enabled_${interaction.guild.id}`)) === 'disabled') {
-            return interaction.reply({ content: '❌ The Fun Module is currently disabled.', ephemeral: true });
-        }
-        await interaction.deferReply();
-        try {
-            const embed = await getMemeEmbed();
-            return interaction.editReply({ embeds: [embed] });
-        } catch (error) {
-            console.error(error);
-            return interaction.editReply('❌ Couldn\'t grab a fresh meme right now. Try again!');
-        }
-    },
-
-    // 🛑 PREFIX COMMAND HANDLER
-    async executePrefix(message) {
-        if ((await database.get(`fun_enabled_${message.guild.id}`)) === 'disabled') {
-            return message.reply('❌ The Fun Module is currently disabled on this server.');
-        }
-        try {
-            const embed = await getMemeEmbed();
-            await message.channel.send({ embeds: [embed] });
-        } catch (error) {
-            console.error(error);
-            await message.channel.send('❌ Couldn\'t grab a fresh meme right now. Try again!');
-        }
+  data: new SlashCommandBuilder().setName('meme').setDescription('Spits out a random funny tech/cat meme.'),
+  name: 'meme',
+  async execute(interaction) {
+    const settings = db.readData('settings.json') || {};
+    if (interaction.guild && settings[interaction.guild.id]?.funModule !== 'on') {
+      return interaction.reply({ content: '❌ The Fun Module is currently disabled on this server!', ephemeral: true });
     }
+    const selected = MEMES[Math.floor(Math.random() * MEMES.length)];
+    
+    const embed = new EmbedBuilder()
+      .setColor('#95A5A6')
+      .setTitle(`😂 ${selected.title}`)
+      .setImage(selected.url);
+    await interaction.reply({ embeds: [embed] });
+  }
 };

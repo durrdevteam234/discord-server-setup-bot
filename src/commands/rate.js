@@ -1,19 +1,35 @@
-const { SlashCommandBuilder } = require('discord.js');
-const database = require('../utils/database.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const db = require('../utils/database');
+
+const RATING_COMMENTARY = {
+  low: ["Honestly, this ain't it chief.", "Big yikes from me.", "Absolute bottom tier content."],
+  mid: ["Not terrible, but could be a lot better.", "Perfectly balanced, as all things should be.", "Pretty average, nothing crazy."],
+  high: ["Wow, an absolute masterpiece!", "This is phenomenal!", "10/10, certified legendary state!"]
+};
 
 module.exports = {
-    name: 'rate',
-    description: 'Rate something from 0 to 10.',
-    data: new SlashCommandBuilder().setName('rate').setDescription('Rate something.').addStringOption(opt => opt.setName('thing').setDescription('What to rate').setRequired(true)),
-    
-    async execute(interaction) {
-        if ((await database.get(`fun_enabled_${interaction.guild.id}`)) === 'disabled') return interaction.reply({ content: '❌ Disabled.', ephemeral: true });
-        const thing = interaction.options.getString('thing');
-        await interaction.reply(`🔢 I rate **${thing}** a solid **${Math.floor(Math.random() * 11)}/10**!`);
-    },
-    async executePrefix(message, args) {
-        if ((await database.get(`fun_enabled_${message.guild.id}`)) === 'disabled') return;
-        if (!args.length) return message.reply('❌ What should I rate?');
-        await message.channel.send(`🔢 I rate **${args.join(' ')}** a solid **${Math.floor(Math.random() * 11)}/10**!`);
+  data: new SlashCommandBuilder()
+    .setName('rate')
+    .setDescription('Have the bot rate anything out of 10.')
+    .addStringOption(opt => opt.setName('item').setDescription('What should I rate?').setRequired(true)),
+  name: 'rate',
+  async execute(interaction) {
+    const settings = db.readData('settings.json') || {};
+    if (interaction.guild && settings[interaction.guild.id]?.funModule !== 'on') {
+      return interaction.reply({ content: '❌ The Fun Module is currently disabled on this server!', ephemeral: true });
     }
+    const item = interaction.options.getString('item');
+    const rating = Math.floor(Math.random() * 11);
+    
+    let commentaryPool = RATING_COMMENTARY.mid;
+    if (rating <= 3) commentaryPool = RATING_COMMENTARY.low;
+    if (rating >= 8) commentaryPool = RATING_COMMENTARY.high;
+    const comment = commentaryPool[Math.floor(Math.random() * commentaryPool.length)];
+
+    const embed = new EmbedBuilder()
+      .setColor('#F1C40F')
+      .setTitle('📊 Bot Rating System')
+      .setDescription(`I rate **${item}** a solid **${rating}/10**!\n\n*"${comment}"*`);
+    await interaction.reply({ embeds: [embed] });
+  }
 };

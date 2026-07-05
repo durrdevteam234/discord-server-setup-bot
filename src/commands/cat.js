@@ -1,29 +1,30 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const database = require('../utils/database.js');
+const db = require('../utils/database');
+
+// Clean, ultra-reliable fallback images paired with unique caption options
+const CAT_FACTS = [
+  { text: "Meow! Did you know cats sleep for 70% of their lives?", url: "https://http.cat/100.jpg" },
+  { text: "Purr... Cats have 32 muscles in each ear to control them.", url: "https://http.cat/200.jpg" },
+  { text: "A group of cats is called a clowder!", url: "https://http.cat/302.jpg" },
+  { text: "Cats can make over 100 distinct vocal sounds.", url: "https://http.cat/404.jpg" }
+];
 
 module.exports = {
-    name: 'cat',
-    description: 'Fetch a random cute cat picture.',
-    data: new SlashCommandBuilder().setName('cat').setDescription('Fetch a random cute cat picture.'),
-
-    async execute(interaction) {
-        const currentStatus = (await database.get(`fun_enabled_${interaction.guild.id}`)) || 'enabled';
-        if (currentStatus === 'disabled') return interaction.reply({ content: '🔒 The **Fun Module** is currently disabled on this server.', ephemeral: true });
-
-        const embed = new EmbedBuilder()
-            .setTitle('🐱 Meow!')
-            .setImage(`https://cataas.com/cat?t=${Date.now()}`)
-            .setColor('#9B59B6');
-        await interaction.reply({ embeds: [embed] });
-    },
-    async executePrefix(message) {
-        const currentStatus = (await database.get(`fun_enabled_${message.guild.id}`)) || 'enabled';
-        if (currentStatus === 'disabled') return;
-
-        const embed = new EmbedBuilder()
-            .setTitle('🐱 Meow!')
-            .setImage(`https://cataas.com/cat?t=${Date.now()}`)
-            .setColor('#9B59B6');
-        await message.channel.send({ embeds: [embed] });
+  data: new SlashCommandBuilder().setName('cat').setDescription('Spits out a cute cat picture and a random feline fact.'),
+  name: 'cat',
+  async execute(interaction) {
+    const settings = db.readData('settings.json') || {};
+    if (interaction.guild && settings[interaction.guild.id]?.funModule !== 'on') {
+      return interaction.reply({ content: '❌ The Fun Module is currently disabled on this server!', ephemeral: true });
     }
+    
+    const randomCat = CAT_FACTS[Math.floor(Math.random() * CAT_FACTS.length)];
+    const embed = new EmbedBuilder()
+      .setColor('#E67E22')
+      .setTitle('🐱 Random Cat Content')
+      .setDescription(randomCat.text)
+      .setImage(randomCat.url);
+      
+    await interaction.reply({ embeds: [embed] });
+  }
 };

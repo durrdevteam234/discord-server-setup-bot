@@ -1,45 +1,32 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const database = require('../utils/database.js');
+const db = require('../utils/database');
 
-const slapPhrases = [
-    "swings a wet, smelly yellow trout right across the face of",
-    "slaps around the head with a rolled-up magazine",
-    "launches a gigantic foam pie directly into the face of",
-    "smacks with a legendary white squeaky rubber hammer",
-    "delivered an absolute textbook facepalm hit to"
+const SLAP_ACTIONS = [
+  "slapped {target} across the face with a giant, smelly yellow trout!",
+  "clobbered {target} with a squeaky squeegee toy mallet!",
+  "slapped the keyboard right out from under {target}'s hands!",
+  "hit {target} with a legendary, ultra-powerful backhand slap!",
+  "challenges {target} to reality with a sudden wake-up slap!"
 ];
 
 module.exports = {
-    name: 'slap',
-    description: 'Slap another user with a funny item.',
-    data: new SlashCommandBuilder()
-        .setName('slap')
-        .setDescription('Slap another user with a funny item.')
-        .addUserOption(option => option.setName('user').setDescription('The user to slap').setRequired(true)),
-
-    async execute(interaction) {
-        const currentStatus = (await database.get(`fun_enabled_${interaction.guild.id}`)) || 'enabled';
-        if (currentStatus === 'disabled') return interaction.reply({ content: '🔒 The **Fun Module** is currently disabled on this server.', ephemeral: true });
-
-        const user = interaction.options.getUser('user');
-        const phrase = slapPhrases[Math.floor(Math.random() * slapPhrases.length)];
-
-        const embed = new EmbedBuilder()
-            .setDescription(`💥 **${interaction.user.username}** ${phrase} **${user.username}**!`)
-            .setColor('#9B59B6');
-        await interaction.reply({ embeds: [embed] });
-    },
-    async executePrefix(message) {
-        const currentStatus = (await database.get(`fun_enabled_${message.guild.id}`)) || 'enabled';
-        if (currentStatus === 'disabled') return;
-
-        const member = message.mentions.members.first();
-        if (!member) return message.reply('❌ Please mention a user to slap!');
-
-        const phrase = slapPhrases[Math.floor(Math.random() * slapPhrases.length)];
-        const embed = new EmbedBuilder()
-            .setDescription(`💥 **${message.author.username}** ${phrase} **${member.user.username}**!`)
-            .setColor('#9B59B6');
-        await message.channel.send({ embeds: [embed] });
+  data: new SlashCommandBuilder()
+    .setName('slap')
+    .setDescription('Slap another user with a hilarious item.')
+    .addUserOption(option => option.setName('user').setDescription('The user to slap').setRequired(true)),
+  name: 'slap',
+  async execute(interaction) {
+    const settings = db.readData('settings.json') || {};
+    if (interaction.guild && settings[interaction.guild.id]?.funModule !== 'on') {
+      return interaction.reply({ content: '❌ The Fun Module is currently disabled on this server!', ephemeral: true });
     }
+    const target = interaction.options.getUser('user');
+    const caller = interaction.user;
+
+    const action = SLAP_ACTIONS[Math.floor(Math.random() * SLAP_ACTIONS.length)].replace('{target}', `**${target.username}**`);
+    const embed = new EmbedBuilder()
+      .setColor('#E74C3C')
+      .setDescription(`💥 **${caller.username}** ${action}`);
+    await interaction.reply({ embeds: [embed] });
+  }
 };

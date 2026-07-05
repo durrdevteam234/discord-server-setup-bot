@@ -1,47 +1,29 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const database = require('../utils/database.js');
+const db = require('../utils/database');
 
-const spacePool = [
-    "One day on Venus is longer than one year on Venus.",
-    "The footprint left on the Moon will stay there for 100 million years because there is no wind.",
-    "One million Earths could fit inside the Sun.",
-    "Neutron stars can spin at a rate of 600 rotations per second.",
-    "Space is completely silent because there is no atmosphere for sound waves to travel through.",
-    "The sunset on Mars appears distinctly blue due to fine dust particles filtering light.",
-    "There are more trees on Earth than there are stars in the Milky Way galaxy.",
-    " Uranus spins horizontally on its side like a rolling ball.",
-    "Halley's Comet won't pass by Earth again until the year 2061.",
-    "The International Space Station completes an entire orbit around Earth every 90 minutes.",
-    "Footsteps on the moon don't disappear because there is no liquid water or wind to erode them.",
-    "Venus is the hottest planet in our solar system, reaching temperatures over 450°C.",
-    "A single spacesuit costs around 12 million dollars to construct.",
-    " Saturn has a massive hexagonal storm pattern raging permanently on its north pole.",
-    "Jupiter's Great Red Spot is a giant cosmic storm that is wider than the planet Earth."
+const FACTS = [
+  "One day on Venus is longer than one entire year on Venus.",
+  "Neutron stars are so dense, a single teaspoon of their material would weigh 6 billion tons.",
+  "Space is completely silent because there is no atmosphere for sound waves to travel through.",
+  "Footprints left on the Moon by Apollo astronauts will stay there for at least 100 million years.",
+  "The sun is huge, but in the cosmic scale, it's actually relatively small. One million Earths could fit inside it.",
+  "There is a planet made of diamonds called 55 Cancri e, which is twice the size of Earth.",
+  "Because of lower gravity, a person who weighs 100 pounds on Earth would weigh only 38 pounds on Mars.",
+  "Halley's Comet won't pass by Earth again until July 2061.",
+  "Our Milky Way galaxy is on a collision course with the Andromeda galaxy, but it won't happen for 4 billion years.",
+  "Saturn's rings aren't solid; they are made of billions of chunks of ice, rock, and dust."
 ];
 
 module.exports = {
-    name: 'spacefact',
-    description: 'Get a mind-blowing cosmic space fact.',
-    data: new SlashCommandBuilder().setName('spacefact').setDescription('Get a mind-blowing cosmic space fact.'),
-
-    async execute(interaction) {
-        const currentStatus = (await database.get(`fun_enabled_${interaction.guild.id}`)) || 'enabled';
-        if (currentStatus === 'disabled') return interaction.reply({ content: '🔒 The **Fun Module** is currently disabled on this server.', ephemeral: true });
-
-        const embed = new EmbedBuilder()
-            .setTitle('🌌 Space Fact')
-            .setDescription(spacePool[Math.floor(Math.random() * spacePool.length)])
-            .setColor('#9B59B6');
-        await interaction.reply({ embeds: [embed] });
-    },
-    async executePrefix(message) {
-        const currentStatus = (await database.get(`fun_enabled_${message.guild.id}`)) || 'enabled';
-        if (currentStatus === 'disabled') return;
-
-        const embed = new EmbedBuilder()
-            .setTitle('🌌 Space Fact')
-            .setDescription(spacePool[Math.floor(Math.random() * spacePool.length)])
-            .setColor('#9B59B6');
-        await message.channel.send({ embeds: [embed] });
+  data: new SlashCommandBuilder().setName('spacefact').setDescription('Get a mind-blowing cosmic space fact.'),
+  name: 'spacefact',
+  async execute(interaction) {
+    const settings = db.readData('settings.json') || {};
+    if (interaction.guild && settings[interaction.guild.id]?.funModule !== 'on') {
+      return interaction.reply({ content: '❌ The Fun Module is currently disabled on this server!', ephemeral: true });
     }
+    const fact = FACTS[Math.floor(Math.random() * FACTS.length)];
+    const embed = new EmbedBuilder().setColor('#111133').setTitle('🌌 Cosmic Space Fact').setDescription(fact);
+    await interaction.reply({ embeds: [embed] });
+  }
 };

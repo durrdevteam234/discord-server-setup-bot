@@ -1,47 +1,31 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const database = require('../utils/database.js');
+const db = require('../utils/database');
 
-const fortunePool = [
-    "An exciting adventure awaits you next week!",
-    "A golden opportunity will present itself shortly.",
-    "Do not mistake temptation for opportunity.",
-    "Your hard work will pay off very soon!",
-    "A surprise message will bring joy to your evening.",
-    "Trust your intuition; it is steering you in the right direction.",
-    "An old friend will reconnect with you out of the blue.",
-    "Wealth is coming your way, but it might not be financial.",
-    "A peaceful mind brings inner strength and confidence.",
-    "Your creative talents will soon be recognized by someone important.",
-    "A small step today will lead to a giant leap tomorrow.",
-    "Expect a pleasant shift in your daily routine very soon.",
-    "The answers you seek are closer than you realize.",
-    "Someone is thinking fondly of your kindness right now.",
-    "A long-term project will yield incredible results."
+const FORTUNES = [
+  "An exciting adventure awaits you right around the corner.",
+  "Your hard work will pay off sooner than you expect.",
+  "A brilliant idea will clear your path forward very soon.",
+  "Do not mistake temptation for opportunity.",
+  "Someone close to you is holding a wonderful surprise.",
+  "Your courage will lead you to great places this week.",
+  "A golden opportunity will present itself when you least expect it.",
+  "Be on the lookout for a message that will change your mood entirely.",
+  "Trust your instincts; they are leading you in the right direction.",
+  "You will soon conquer a minor obstacle that has been bothering you.",
+  "A pleasant surprise is in store for you tonight.",
+  "Your creative talents will bring you recognition very shortly."
 ];
 
 module.exports = {
-    name: 'fortune',
-    description: 'Reveals a prediction about your future.',
-    data: new SlashCommandBuilder().setName('fortune').setDescription('Reveals a prediction about your future.'),
-
-    async execute(interaction) {
-        const currentStatus = (await database.get(`fun_enabled_${interaction.guild.id}`)) || 'enabled';
-        if (currentStatus === 'disabled') return interaction.reply({ content: '🔒 The **Fun Module** is currently disabled on this server.', ephemeral: true });
-
-        const embed = new EmbedBuilder()
-            .setTitle('🔮 Your Fortune')
-            .setDescription(fortunePool[Math.floor(Math.random() * fortunePool.length)])
-            .setColor('#9B59B6');
-        await interaction.reply({ embeds: [embed] });
-    },
-    async executePrefix(message) {
-        const currentStatus = (await database.get(`fun_enabled_${message.guild.id}`)) || 'enabled';
-        if (currentStatus === 'disabled') return;
-
-        const embed = new EmbedBuilder()
-            .setTitle('🔮 Your Fortune')
-            .setDescription(fortunePool[Math.floor(Math.random() * fortunePool.length)])
-            .setColor('#9B59B6');
-        await message.channel.send({ embeds: [embed] });
+  data: new SlashCommandBuilder().setName('fortune').setDescription('Reveals a prediction about your future.'),
+  name: 'fortune',
+  async execute(interaction) {
+    const settings = db.readData('settings.json') || {};
+    if (interaction.guild && settings[interaction.guild.id]?.funModule !== 'on') {
+      return interaction.reply({ content: '❌ The Fun Module is currently disabled on this server!', ephemeral: true });
     }
+    const prediction = FORTUNES[Math.floor(Math.random() * FORTUNES.length)];
+    const embed = new EmbedBuilder().setColor('#A020F0').setTitle('🔮 Your Fortune').setDescription(prediction);
+    await interaction.reply({ embeds: [embed] });
+  }
 };

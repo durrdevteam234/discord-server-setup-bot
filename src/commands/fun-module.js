@@ -1,84 +1,58 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
-const database = require('../utils/database.js');
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const db = require('../utils/database');
 
 module.exports = {
-    name: 'fun-module',
-    description: 'Toggle status configurations for the interactive fun systems.',
-    data: new SlashCommandBuilder()
-        .setName('fun-module')
-        .setDescription('Toggle status configurations for the interactive fun systems.')
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+  data: new SlashCommandBuilder()
+    .setName('fun-module')
+    .setDescription('Enable or disable the fun commands module.')
+    .addStringOption(option =>
+      option.setName('status')
+        .setDescription('Choose to enable or disable fun commands')
+        .setRequired(true)
+        .addChoices(
+          { name: 'Enable', value: 'on' },
+          { name: 'Disable', value: 'off' }
+        )),
+  name: 'fun-module',
 
-    async execute(interaction) {
-        const currentStatus = (await database.get(`fun_enabled_${interaction.guild.id}`)) || 'enabled';
+  async execute(interaction) {
+    const guild = interaction.guild;
+    if (!guild) return;
 
-        const embed = new EmbedBuilder()
-            .setTitle('🎮 Fun Module Configurations')
-            .setDescription(`Control all mini-games, joke collections, trivia, and photo generators.\n\nCurrent Server Status: **${currentStatus.toUpperCase()}**`)
-            .setColor(currentStatus === 'enabled' ? '#00FF00' : '#FF0000');
-
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('fun_enable').setLabel('Enable Module').setStyle(ButtonStyle.Success).setDisabled(currentStatus === 'enabled'),
-            new ButtonBuilder().setCustomId('fun_disable').setLabel('Disable Module').setStyle(ButtonStyle.Danger).setDisabled(currentStatus === 'disabled')
-        );
-
-        const response = await interaction.reply({ embeds: [embed], components: [row], fetchReply: true });
-        const collector = response.createMessageComponentCollector({ time: 60000 });
-
-        collector.on('collect', async i => {
-            if (i.user.id !== interaction.user.id) return i.reply({ content: '❌ Not your panel.', ephemeral: true });
-            
-            const newStatus = i.customId === 'fun_enable' ? 'enabled' : 'disabled';
-            await database.set(`fun_enabled_${interaction.guild.id}`, newStatus);
-
-            const updatedEmbed = EmbedBuilder.from(embed)
-                .setDescription(`Control all mini-games, joke collections, trivia, and photo generators.\n\nCurrent Server Status: **${newStatus.toUpperCase()}**`)
-                .setColor(newStatus === 'enabled' ? '#00FF00' : '#FF0000');
-
-            const updatedRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('fun_enable').setLabel('Enable Module').setStyle(ButtonStyle.Success).setDisabled(newStatus === 'enabled'),
-                new ButtonBuilder().setCustomId('fun_disable').setLabel('Disable Module').setStyle(ButtonStyle.Danger).setDisabled(newStatus === 'disabled')
-            );
-
-            await i.update({ embeds: [updatedEmbed], components: [updatedRow] });
-        });
-    },
-
-    async executePrefix(message) {
-        if (!message.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-            return message.reply('❌ Permissions required!');
-        }
-        const currentStatus = (await database.get(`fun_enabled_${message.guild.id}`)) || 'enabled';
-
-        const embed = new EmbedBuilder()
-            .setTitle('🎮 Fun Module Configurations')
-            .setDescription(`Current Server Status: **${currentStatus.toUpperCase()}**`)
-            .setColor(currentStatus === 'enabled' ? '#00FF00' : '#FF0000');
-
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('fun_enable').setLabel('Enable Module').setStyle(ButtonStyle.Success).setDisabled(currentStatus === 'enabled'),
-            new ButtonBuilder().setCustomId('fun_disable').setLabel('Disable Module').setStyle(ButtonStyle.Danger).setDisabled(currentStatus === 'disabled')
-        );
-
-        const response = await message.channel.send({ embeds: [embed], components: [row] });
-        const collector = response.createMessageComponentCollector({ time: 60000 });
-
-        collector.on('collect', async i => {
-            if (i.user.id !== message.author.id) return i.reply({ content: '❌ Not your panel.', ephemeral: true });
-
-            const newStatus = i.customId === 'fun_enable' ? 'enabled' : 'disabled';
-            await database.set(`fun_enabled_${message.guild.id}`, newStatus);
-
-            const updatedEmbed = EmbedBuilder.from(embed)
-                .setDescription(`Current Server Status: **${newStatus.toUpperCase()}**`)
-                .setColor(newStatus === 'enabled' ? '#00FF00' : '#FF0000');
-
-            const updatedRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('fun_enable').setLabel('Enable Module').setStyle(ButtonStyle.Success).setDisabled(newStatus === 'enabled'),
-                new ButtonBuilder().setCustomId('fun_disable').setLabel('Disable Module').setStyle(ButtonStyle.Danger).setDisabled(newStatus === 'disabled')
-            );
-
-            await i.update({ embeds: [updatedEmbed], components: [updatedRow] });
-        });
+    // Permissions gate check
+    const member = interaction.member;
+    if (!member.permissions.has(PermissionFlagsBits.Administrator) && !member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+      return interaction.reply({ content: '❌ You require Manager or Administrator permissions to toggle modules.', ephemeral: true });
     }
+
+    const choice = interaction.options.getString('status');
+    const settings = db.readData('settings.json') || {};
+    
+    if (!settings[guild.id]) settings[guild.id] = {};
+    settings[guild.id].funModule = choice; // Saves cleanly as 'on' or 'off'
+    
+    db.writeData('settings.json', settings);
+
+    const embed = new EmbedBuilder()
+      .setColor(choice === 'on' ? '#00FF00' : '#FF0000')
+      .setTitle('🎛️ Module Configuration Saved')
+      .setDescription(`The **Fun Module** features have been flipped **${choice.toUpperCase()}** for this guild.`);
+
+    await interaction.reply({ embeds: [embed] });
+  },
+
+  async executePrefix(message, args, client) {
+    const choice = args[0] ? args[0].toLowerCase() : null;
+    if (choice !== 'on' && choice !== 'off') {
+      return message.reply('❌ Usage: `|fun-module <on|off>`').catch(() => null);
+    }
+
+    const mockInteraction = {
+      guild: message.guild,
+      member: message.member,
+      options: { getString: () => choice },
+      reply: async (options) => message.reply(options)
+    };
+    await this.execute(mockInteraction);
+  }
 };

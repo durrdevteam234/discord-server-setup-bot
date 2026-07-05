@@ -1,47 +1,32 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const database = require('../utils/database.js');
+const { SlashCommandBuilder } = require('discord.js');
+const db = require('../utils/database');
 
-const jokePool = [
-    "Why don't scientists trust atoms? Because they make up everything!",
-    "What do you call a fake noodle? An impasta.",
-    "How does a penguin build its house? Igloos it together!",
-    "Why did the scarecrow win an award? Because he was outstanding in his field!",
-    "What do you call a factory that makes okay products? A satisfactory.",
-    "Why do we tell actors to 'break a leg'? Because every play has a cast.",
-    "Why did the bicycle fall over? Because it was two-tired!",
-    "What do you call a sleeping dinosaur? A dino-snore!",
-    "Why did the golfer bring two pairs of pants? In case he got a hole in one.",
-    "What do you call cheese that isn't yours? Nacho cheese.",
-    "Why can't a nose be 12 inches long? Because then it would be a foot.",
-    "What kind of shoes do ninjas wear? Sneakers.",
-    "How do celebrities stay cool? They have many fans.",
-    "Why did the tomato turn red? Because it saw the salad dressing!",
-    "What do you call a dynamic magician on a tractor? A dirt magician doing farming tricks."
+const JOKES = [
+  "Why do programmers wear glasses? Because they can't C#!",
+  "There are 10 types of people in this world: those who understand binary, and those who don't.",
+  "How many programmers does it take to change a light bulb? None, that's a hardware problem.",
+  "A SQL query goes into a bar, walks up to two tables and asks, 'Can I join you?'",
+  "['hip', 'hip'] (hip hip array!)",
+  "Why did the programmer quit his job? Because he didn't get arrays.",
+  "To understand what recursion is, you must first understand what recursion is.",
+  "There are two ways to write error-free programs; only the third one works.",
+  "An optimist says: 'The glass is half full.' A pessimist says: 'The glass is half empty.' A programmer says: 'The glass is twice as large as it needs to be.'",
+  "A programmer's wife tells him, 'Go to the store and buy a loaf of bread. If they have eggs, buy a dozen.' He comes back with 12 loaves of bread.",
+  "What is a programmer's favorite hangout place? Foo Bar.",
+  "Why do Java programmers wear glasses? Because they don't C#!",
+  "What's the object-oriented way to become wealthy? Inheritance.",
+  "Why was the JavaScript developer sad? Because he didn't know how to 'Null' his feelings."
 ];
 
 module.exports = {
-    name: 'joke',
-    description: 'Get a clean, funny joke.',
-    data: new SlashCommandBuilder().setName('joke').setDescription('Get a clean, funny joke.'),
-
-    async execute(interaction) {
-        const currentStatus = (await database.get(`fun_enabled_${interaction.guild.id}`)) || 'enabled';
-        if (currentStatus === 'disabled') return interaction.reply({ content: '🔒 The **Fun Module** is currently disabled on this server.', ephemeral: true });
-
-        const embed = new EmbedBuilder()
-            .setTitle('😂 Random Joke')
-            .setDescription(jokePool[Math.floor(Math.random() * jokePool.length)])
-            .setColor('#9B59B6');
-        await interaction.reply({ embeds: [embed] });
-    },
-    async executePrefix(message) {
-        const currentStatus = (await database.get(`fun_enabled_${message.guild.id}`)) || 'enabled';
-        if (currentStatus === 'disabled') return;
-
-        const embed = new EmbedBuilder()
-            .setTitle('😂 Random Joke')
-            .setDescription(jokePool[Math.floor(Math.random() * jokePool.length)])
-            .setColor('#9B59B6');
-        await message.channel.send({ embeds: [embed] });
+  data: new SlashCommandBuilder().setName('joke').setDescription('Get a massive, hilarious developer joke.'),
+  name: 'joke',
+  async execute(interaction) {
+    const settings = db.readData('settings.json') || {};
+    if (interaction.guild && settings[interaction.guild.id]?.funModule !== 'on') {
+      return interaction.reply({ content: '❌ The Fun Module is currently disabled on this server!', ephemeral: true });
     }
+    const randomJoke = JOKES[Math.floor(Math.random() * JOKES.length)];
+    await interaction.reply(randomJoke);
+  }
 };

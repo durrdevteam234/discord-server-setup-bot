@@ -1,45 +1,32 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const database = require('../utils/database.js');
+const db = require('../utils/database');
 
-const hugGifs = [
-    "wrapped their arms tightly around",
-    "gave a giant, warm bear-hug to",
-    "sent a lovely virtual squeeze across the network to",
-    "tackled and hugged",
-    "gave a reassuring, cozy side-hug to"
+const HUG_ACTIONS = [
+  "wrapped their arms tightly around {target} for a massive, warm bear hug!",
+  "gives {target} a comforting squeeze. Everything is going to be okay!",
+  "tackles {target} with an unexpected, joyful surprise hug!",
+  "gives {target} a polite but deeply genuine virtual embrace.",
+  "runs over and engulfs {target} in a cozy, warm blanket-style hug!"
 ];
 
 module.exports = {
-    name: 'hug',
-    description: 'Give a member a warm, fuzzy virtual hug.',
-    data: new SlashCommandBuilder()
-        .setName('hug')
-        .setDescription('Give a member a warm, fuzzy virtual hug.')
-        .addUserOption(option => option.setName('user').setDescription('The user to hug').setRequired(true)),
-
-    async execute(interaction) {
-        const currentStatus = (await database.get(`fun_enabled_${interaction.guild.id}`)) || 'enabled';
-        if (currentStatus === 'disabled') return interaction.reply({ content: '🔒 The **Fun Module** is currently disabled on this server.', ephemeral: true });
-
-        const user = interaction.options.getUser('user');
-        const phrase = hugGifs[Math.floor(Math.random() * hugGifs.length)];
-
-        const embed = new EmbedBuilder()
-            .setDescription(`🤗 **${interaction.user.username}** ${phrase} **${user.username}**!`)
-            .setColor('#9B59B6');
-        await interaction.reply({ embeds: [embed] });
-    },
-    async executePrefix(message) {
-        const currentStatus = (await database.get(`fun_enabled_${message.guild.id}`)) || 'enabled';
-        if (currentStatus === 'disabled') return;
-
-        const member = message.mentions.members.first();
-        if (!member) return message.reply('❌ Please mention a user to hug!');
-
-        const phrase = hugGifs[Math.floor(Math.random() * hugGifs.length)];
-        const embed = new EmbedBuilder()
-            .setDescription(`🤗 **${message.author.username}** ${phrase} **${member.user.username}**!`)
-            .setColor('#9B59B6');
-        await message.channel.send({ embeds: [embed] });
+  data: new SlashCommandBuilder()
+    .setName('hug')
+    .setDescription('Give a member a warm, fuzzy virtual hug.')
+    .addUserOption(option => option.setName('user').setDescription('The user to hug').setRequired(true)),
+  name: 'hug',
+  async execute(interaction) {
+    const settings = db.readData('settings.json') || {};
+    if (interaction.guild && settings[interaction.guild.id]?.funModule !== 'on') {
+      return interaction.reply({ content: '❌ The Fun Module is currently disabled on this server!', ephemeral: true });
     }
+    const target = interaction.options.getUser('user');
+    const caller = interaction.user;
+    
+    const action = HUG_ACTIONS[Math.floor(Math.random() * HUG_ACTIONS.length)].replace('{target}', `**${target.username}**`);
+    const embed = new EmbedBuilder()
+      .setColor('#FFC0CB')
+      .setDescription(`🤗 **${caller.username}** ${action}`);
+    await interaction.reply({ embeds: [embed] });
+  }
 };
