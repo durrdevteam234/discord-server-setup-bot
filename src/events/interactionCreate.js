@@ -1,24 +1,36 @@
 module.exports = {
     name: 'interactionCreate',
-    async execute(interaction) {
-        // Essential Guard: Let the command file collectors manage button responses directly
-        // This ensures prefix button menus do not cause error crashes in the slash command router
+    async execute(interaction, client) { // explicitly passed down client
+        // 1. Safety Gate: Completely ignore message components (Buttons, Select Menus)
+        // Let the command collector handlers catch them locally.
         if (interaction.isMessageComponent()) return;
 
-        // Process Chat Input / Slash Commands below cleanly:
+        // 2. Safety Gate: Completely ignore Autocomplete / Modals / Context Menus
+        // If it isn't a traditional typed /slash command, skip it instantly.
         if (!interaction.isChatInputCommand()) return;
         
-        const command = interaction.client.commands.get(interaction.commandName);
-        if (!command) return;
+        // 3. Command Resolution Safe Lookup
+        const commandName = interaction.commandName;
+        if (!commandName) return;
+
+        const command = interaction.client.commands.get(commandName) || client?.commands?.get(commandName);
+        if (!command) {
+            console.warn(`[WARNING] Received slash interaction for /${commandName}, but it is not registered in client.commands.`);
+            return;
+        }
 
         try {
-            await command.execute(interaction);
+            // Ensure client instance is safely passed if your slash handler uses it
+            await command.execute(interaction, client || interaction.client);
         } catch (error) {
-            console.error(error);
+            console.error(`❌ Slash Command Error [/${commandName}]:`, error);
+            
+            const errorPayload = { content: '❌ There was an error executing this command!', ephemeral: true };
+            
             if (interaction.replied || interaction.deferred) {
-                await interaction.followUp({ content: '❌ There was an error executing this command!', ephemeral: true });
+                await interaction.followUp(errorPayload).catch(() => null);
             } else {
-                await interaction.reply({ content: '❌ There was an error executing this command!', ephemeral: true });
+                await interaction.reply(errorPayload).catch(() => null);
             }
         }
     },
