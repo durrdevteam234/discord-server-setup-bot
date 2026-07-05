@@ -11,6 +11,10 @@ module.exports = {
     async execute(interaction) {
         const currentStatus = (await database.get(`fun_enabled_${interaction.guild.id}`)) || 'enabled';
         
+        if (currentStatus === 'disabled') {
+            return interaction.reply({ content: '🔒 The **Fun Module** is currently disabled by server administrators.', ephemeral: true });
+        }
+
         const embed = new EmbedBuilder()
             .setTitle('🎯 Interactive Fun Module')
             .setDescription(`Welcome to the server's entertainment hub! This module packs mini-games, random generators, trivia, and community actions to keep the chat active and vibrant.\n\n🟢 Current Status: **${currentStatus.toUpperCase()}**`)
@@ -22,11 +26,11 @@ module.exports = {
                 },
                 { 
                     name: '✨ Media & Fun Facts', 
-                    value: '• `/cat` - Fetch a random cute cat picture from Reddit.\n• `/dog` - Fetch a random cute dog or puppy picture from Reddit.\n• `/joke` - Get a clean, funny joke from a massive database.\n• `/spacefact` - Get a mind-blowing cosmic space fact.\n• `/fortune` - Reveals a prediction about your future.' 
+                    value: '• `/cat` - Fetch a random cute cat picture.\n• `/dog` - Fetch a random cute dog picture.\n• `/joke` - Get a clean, funny joke.\n• `/spacefact` - Get a mind-blowing cosmic space fact.\n• `/fortune` - Reveals a prediction about your future.' 
                 },
                 { 
                     name: '💞 Community Interactions', 
-                    value: '• `/hug <user>` - Give a member a warm, fuzzy virtual hug.\n• `/slap <user>` - Slap another user with a giant, smelly yellow trout.\n• `/predict-love <a, b>` - Calculate compatibility percentage between two items.' 
+                    value: '• `/hug <user>` - Give a member a warm, fuzzy virtual hug.\n• `/slap <user>` - Slap another user with a giant yellow trout.\n• `/predict-love <a, b>` - Calculate compatibility percentage between two items.' 
                 }
             )
             .setFooter({ text: 'Use any command above to get started!' });
@@ -36,23 +40,24 @@ module.exports = {
 
     async executePrefix(message) {
         const currentStatus = (await database.get(`fun_enabled_${message.guild.id}`)) || 'enabled';
+        if (currentStatus === 'disabled') return; // Silent ignore if disabled
 
         const embed = new EmbedBuilder()
             .setTitle('🎯 Interactive Fun Module')
-            .setDescription(`Welcome to the server's entertainment hub! This module packs mini-games, random generators, trivia, and community actions.\n\n🟢 Current Status: **${currentStatus.toUpperCase()}**`)
+            .setDescription('Welcome to the server\'s entertainment hub! Use any command listed below to get started.')
             .setColor('#9B59B6')
             .addFields(
                 { 
                     name: '🎲 Games & Quizzes', 
-                    value: '• `|trivia` - Spits out a random brain-teaser trivia question.\n• `|capital-quiz` - Tests your geographic knowledge of world capitals.\n• `|dice-duel @user` - Challenge another user to a dice duel.\n• `|wouldyourather` - Presents an impossible split decision prompt.' 
+                    value: '• `|trivia` \n• `|capital-quiz` \n• `|dice-duel @user` \n• `|wouldyourather`' 
                 },
                 { 
                     name: '✨ Media & Fun Facts', 
-                    value: '• `|cat` - Fetch a random cute cat picture.\n• `|dog` - Fetch a random cute dog picture.\n• `|joke` - Get a clean, funny joke.\n• `|spacefact` - Get a mind-blowing cosmic space fact.\n• `|fortune` - Reveals a prediction about your future.' 
+                    value: '• `|cat` \n• `|dog` \n• `|joke` \n• `|spacefact` \n• `|fortune`' 
                 },
                 { 
                     name: '💞 Community Interactions', 
-                    value: '• `|hug @user` - Give a member a warm virtual hug.\n• `|slap @user` - Slap another user with a giant yellow trout.\n• `|predict-love item1, item2` - Calculate compatibility between two items.' 
+                    value: '• `|hug @user` \n• `|slap @user` \n• `|predict-love item1, item2` ' 
                 }
             );
 

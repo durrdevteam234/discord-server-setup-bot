@@ -1,46 +1,29 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const database = require('../utils/database.js');
 
-async function getCatEmbed() {
-    const subs = ['catpictures', 'cats'];
-    const randomSub = subs[Math.floor(Math.random() * subs.length)];
-    const response = await fetch(`https://meme-api.com/gimme/${randomSub}`);
-    const data = await response.json();
-    
-    if (!data || !data.url) throw new Error("Invalid data received");
-
-    return new EmbedBuilder()
-        .setTitle(data.title || "🐱 Meow! Look at this cute cat!")
-        .setURL(data.postLink || "https://reddit.com")
-        .setImage(data.url)
-        .setColor('#FFB6C1')
-        .setFooter({ text: `Subreddit: r/${data.subreddit}` });
-}
-
 module.exports = {
     name: 'cat',
     description: 'Fetch a random cute cat picture.',
     data: new SlashCommandBuilder().setName('cat').setDescription('Fetch a random cute cat picture.'),
-    
+
     async execute(interaction) {
-        if ((await database.get(`fun_enabled_${interaction.guild.id}`)) === 'disabled') {
-            return interaction.reply({ content: '❌ The Fun Module is currently disabled.', ephemeral: true });
-        }
-        await interaction.deferReply();
-        try {
-            const embed = await getCatEmbed();
-            return interaction.editReply({ embeds: [embed] });
-        } catch {
-            return interaction.editReply('❌ Couldn\'t grab a cat picture right now.');
-        }
+        const currentStatus = (await database.get(`fun_enabled_${interaction.guild.id}`)) || 'enabled';
+        if (currentStatus === 'disabled') return interaction.reply({ content: '🔒 The **Fun Module** is currently disabled on this server.', ephemeral: true });
+
+        const embed = new EmbedBuilder()
+            .setTitle('🐱 Meow!')
+            .setImage(`https://cataas.com/cat?t=${Date.now()}`)
+            .setColor('#9B59B6');
+        await interaction.reply({ embeds: [embed] });
     },
     async executePrefix(message) {
-        if ((await database.get(`fun_enabled_${message.guild.id}`)) === 'disabled') return message.reply('❌ Disabled.');
-        try {
-            const embed = await getCatEmbed();
-            await message.channel.send({ embeds: [embed] });
-        } catch {
-            await message.channel.send('❌ Couldn\'t grab a cat picture right now.');
-        }
+        const currentStatus = (await database.get(`fun_enabled_${message.guild.id}`)) || 'enabled';
+        if (currentStatus === 'disabled') return;
+
+        const embed = new EmbedBuilder()
+            .setTitle('🐱 Meow!')
+            .setImage(`https://cataas.com/cat?t=${Date.now()}`)
+            .setColor('#9B59B6');
+        await message.channel.send({ embeds: [embed] });
     }
 };

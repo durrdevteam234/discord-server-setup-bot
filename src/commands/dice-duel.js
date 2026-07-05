@@ -1,34 +1,52 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const database = require('../utils/database.js');
 
 module.exports = {
     name: 'dice-duel',
-    description: 'Challenge another user to an instant randomized dice rolling duel.',
-    data: new SlashCommandBuilder().setName('dice-duel').setDescription('Duel a user.').addUserOption(o => o.setName('opponent').setDescription('The user').setRequired(true)),
-    
+    description: 'Challenge another user to an instant dice rolling duel.',
+    data: new SlashCommandBuilder()
+        .setName('dice-duel')
+        .setDescription('Challenge another user to an instant dice rolling duel.')
+        .addUserOption(option => option.setName('opponent').setDescription('The member you want to duel').setRequired(true)),
+
     async execute(interaction) {
-        if ((await database.get(`fun_enabled_${interaction.guild.id}`)) === 'disabled') return interaction.reply({ content: '❌ Disabled.', ephemeral: true });
-        const opp = interaction.options.getUser('opponent');
+        const currentStatus = (await database.get(`fun_enabled_${interaction.guild.id}`)) || 'enabled';
+        if (currentStatus === 'disabled') return interaction.reply({ content: '🔒 The **Fun Module** is currently disabled on this server.', ephemeral: true });
+
+        const opponent = interaction.options.getUser('opponent');
+        if (opponent.id === interaction.user.id) return interaction.reply({ content: '❌ You cannot duel yourself!', ephemeral: true });
+
         const p1 = Math.floor(Math.random() * 6) + 1;
         const p2 = Math.floor(Math.random() * 6) + 1;
-        let finalStr = `⚔️ **Dice Duel Between ${interaction.user.username} and ${opp.username}!**\n`;
-        finalStr += `🎲 ${interaction.user.username} rolled: **${p1}**\n🎲 ${opp.username} rolled: **${p2}**\n\n`;
-        if (p1 > p2) finalStr += `🏆 **${interaction.user.username} wins the duel!**`;
-        else if (p2 > p1) finalStr += `🏆 **${opp.username} wins the duel!**`;
-        else finalStr += `🤝 It's a flat **Tie!**`;
-        await interaction.reply(finalStr);
+        
+        let subtext = "";
+        if (p1 === 6 && p2 === 1) subtext = "\n*Total devastation!*";
+        if (p1 === 1 && p2 === 1) subtext = "\n*Double snake eyes! Incredible disappointment.*";
+
+        let result = p1 > p2 ? `🏆 **${interaction.user.username}** wins!` : p1 < p2 ? `🏆 **${opponent.username}** wins!` : "🎲 It's a flat tie!";
+
+        const embed = new EmbedBuilder()
+            .setTitle('🎲 Instant Dice Duel')
+            .setDescription(`**${interaction.user.username}** rolled: \`${p1}\`\n**${opponent.username}** rolled: \`${p2}\`\n\n${result}${subtext}`)
+            .setColor('#9B59B6');
+        await interaction.reply({ embeds: [embed] });
     },
-    async executePrefix(message) {
-        if ((await database.get(`fun_enabled_${message.guild.id}`)) === 'disabled') return;
-        const opp = message.mentions.users.first();
-        if (!opp) return message.reply('❌ Mention your opponent!');
+    async executePrefix(message, args) {
+        const currentStatus = (await database.get(`fun_enabled_${message.guild.id}`)) || 'enabled';
+        if (currentStatus === 'disabled') return;
+
+        const opponent = message.mentions.users.first();
+        if (!opponent) return message.reply('❌ Please mention a user to challenge! Example: `|dice-duel @user`');
+        if (opponent.id === message.author.id) return message.reply('❌ You cannot duel yourself!');
+
         const p1 = Math.floor(Math.random() * 6) + 1;
         const p2 = Math.floor(Math.random() * 6) + 1;
-        let finalStr = `⚔️ **Dice Duel Between ${message.author.username} and ${opp.username}!**\n`;
-        finalStr += `🎲 ${message.author.username} rolled: **${p1}**\n🎲 ${opp.username} rolled: **${p2}**\n\n`;
-        if (p1 > p2) finalStr += `🏆 **${message.author.username} wins the duel!**`;
-        else if (p2 > p1) finalStr += `🏆 **${opp.username} wins the duel!**`;
-        else finalStr += `🤝 It's a flat **Tie!**`;
-        await message.channel.send(finalStr);
+        let result = p1 > p2 ? `🏆 **${message.author.username}** wins!` : p1 < p2 ? `🏆 **${opponent.username}** wins!` : "🎲 It's a flat tie!";
+
+        const embed = new EmbedBuilder()
+            .setTitle('🎲 Instant Dice Duel')
+            .setDescription(`**${message.author.username}** rolled: \`${p1}\`\n**${opponent.username}** rolled: \`${p2}\`\n\n${result}`)
+            .setColor('#9B59B6');
+        await message.channel.send({ embeds: [embed] });
     }
 };

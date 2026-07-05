@@ -1,45 +1,47 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const database = require('../utils/database.js');
 
-const fortunes = [
-    "A legendary gaming session is near.",
-    "Beware of typos in your next config update.",
-    "Great fortune awaits you if you ignore the next bad pun.",
-    "An old friend will message you out of the blue with a strange proposition.",
-    "You will soon find something you thought was lost forever.",
-    "A major victory is coming your way in an unexpected competitive setting.",
-    "The next code you copy-paste will actually work flawlessly on the first try.",
-    "Do not trust the vending machine tomorrow; it has eyes.",
-    "Your creative energy is peaking; pick up that project you abandoned months ago.",
-    "Someone on this server is thinking highly of you right now.",
-    "Your luck will drastically shift for the better when the moon enters its next phase.",
-    "An unexpected gift will arrive shortly, bringing immense joy.",
-    "A great opportunity is hidden behind a minor inconvenience you will encounter tomorrow.",
-    "Your storage space is running low, but your spiritual capacity is completely full.",
-    "Rest up; you will need your energy for an epic adventure coming this weekend.",
-    "A mystery person will soon provide the answers you’ve been looking for.",
-    "Avoid making major decisions while your phone battery is below 15%.",
-    "Your hard work will finally catch the eye of someone who matters.",
-    "Adventure is right around the corner. Make sure you leave your comfort zone.",
-    "A clear path will soon reveal itself through the chaos of your current situation.",
-    "The next song you hear on shuffle will perfectly describe your upcoming week.",
-    "A token of appreciation is heading your way from an unexpected source.",
-    "Trust your gut today; your instincts are operating at 100% capacity.",
-    "You will soon conquer a minor fear that has been holding you back.",
-    "Be patient. The best things in life take time, much like a massive game update."
+const fortunePool = [
+    "An exciting adventure awaits you next week!",
+    "A golden opportunity will present itself shortly.",
+    "Do not mistake temptation for opportunity.",
+    "Your hard work will pay off very soon!",
+    "A surprise message will bring joy to your evening.",
+    "Trust your intuition; it is steering you in the right direction.",
+    "An old friend will reconnect with you out of the blue.",
+    "Wealth is coming your way, but it might not be financial.",
+    "A peaceful mind brings inner strength and confidence.",
+    "Your creative talents will soon be recognized by someone important.",
+    "A small step today will lead to a giant leap tomorrow.",
+    "Expect a pleasant shift in your daily routine very soon.",
+    "The answers you seek are closer than you realize.",
+    "Someone is thinking fondly of your kindness right now.",
+    "A long-term project will yield incredible results."
 ];
 
 module.exports = {
     name: 'fortune',
-    description: 'Reveals a massive pool prediction about your future.',
+    description: 'Reveals a prediction about your future.',
     data: new SlashCommandBuilder().setName('fortune').setDescription('Reveals a prediction about your future.'),
-    
+
     async execute(interaction) {
-        if ((await database.get(`fun_enabled_${interaction.guild.id}`)) === 'disabled') return interaction.reply({ content: '❌ Disabled.', ephemeral: true });
-        await interaction.reply(`🔮 **Your Fortune:** ${fortunes[Math.floor(Math.random() * fortunes.length)]}`);
+        const currentStatus = (await database.get(`fun_enabled_${interaction.guild.id}`)) || 'enabled';
+        if (currentStatus === 'disabled') return interaction.reply({ content: '🔒 The **Fun Module** is currently disabled on this server.', ephemeral: true });
+
+        const embed = new EmbedBuilder()
+            .setTitle('🔮 Your Fortune')
+            .setDescription(fortunePool[Math.floor(Math.random() * fortunePool.length)])
+            .setColor('#9B59B6');
+        await interaction.reply({ embeds: [embed] });
     },
     async executePrefix(message) {
-        if ((await database.get(`fun_enabled_${message.guild.id}`)) === 'disabled') return;
-        await message.channel.send(`🔮 **Your Fortune:** ${fortunes[Math.floor(Math.random() * fortunes.length)]}`);
+        const currentStatus = (await database.get(`fun_enabled_${message.guild.id}`)) || 'enabled';
+        if (currentStatus === 'disabled') return;
+
+        const embed = new EmbedBuilder()
+            .setTitle('🔮 Your Fortune')
+            .setDescription(fortunePool[Math.floor(Math.random() * fortunePool.length)])
+            .setColor('#9B59B6');
+        await message.channel.send({ embeds: [embed] });
     }
 };
