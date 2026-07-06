@@ -7,9 +7,10 @@ module.exports = {
   name: 'help',
 
   async execute(interaction) {
-    const isInteraction = interaction.isCommand ? interaction.isCommand() : false;
+    // 🌟 FIX: Checked for ChatInputCommand safely without using broken function calls
+    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options ? true : false);
 
-    // 🌟 FIX: Instantly tell Discord to wait so it never times out
+    // 🌟 FIX: Instantly extend the Discord token lifetime to 15 minutes
     if (isInteraction) {
       await interaction.deferReply().catch(() => null);
     }
@@ -48,6 +49,24 @@ module.exports = {
       "`/meme` - Spits out a random funny, relatable lifestyle meme.";
 
     // =========================================================
+    // EMBED LAYOUT BUILDER BLOCKS
+    // =========================================================
+    const embedPage1 = new EmbedBuilder()
+      .setColor('#00FF00')
+      .setTitle('📚 Help Menu — Page 1/4 (User Commands)')
+      .setDescription('Use the action row buttons below to browse instructions.')
+      .addFields({ name: '👤 Public User Utilities', value: userCommandsPart1 })
+      .setFooter({ text: prefixText })
+      .setTimestamp();
+
+    const embedPage2 = new EmbedBuilder()
+      .setColor('#FF69B4')
+      .setTitle('📚 Help Menu — Page 2/4 (User Commands Cont.)')
+      .setDescription('Use the action row buttons below to browse instructions.')
+      .addFields({ name: '🎭 Interactive & Whimsical Modules', value: userCommandsPart2 })
+      .setFooter({ text: prefixText })
+      .setTimestamp();
+    // =========================================================
     // PAGE 3: STAFF COMMANDS (UTILITIES & UTILITY SWITCHES)
     // =========================================================
     const staffCommandsPart1 =
@@ -81,22 +100,6 @@ module.exports = {
       "`/unban <username> [reason]` - Revoke a server ban using their unique username.\n" +
       "`/reactionroles <subcommand>` - Deploy, edit, or test custom button/dropdown role panels.";
 
-    const embedPage1 = new EmbedBuilder()
-      .setColor('#00FF00')
-      .setTitle('📚 Help Menu — Page 1/4 (User Commands)')
-      .setDescription('Use the action row buttons below to browse instructions.')
-      .addFields({ name: '👤 Public User Utilities', value: userCommandsPart1 })
-      .setFooter({ text: prefixText })
-      .setTimestamp();
-
-    const embedPage2 = new EmbedBuilder()
-      .setColor('#FF69B4')
-      .setTitle('📚 Help Menu — Page 2/4 (User Commands Cont.)')
-      .setDescription('Use the action row buttons below to browse instructions.')
-      .addFields({ name: '🎭 Interactive & Whimsical Modules', value: userCommandsPart2 })
-      .setFooter({ text: prefixText })
-      .setTimestamp();
-
     const embedPage3 = new EmbedBuilder()
       .setColor('#5865F2')
       .setTitle('🛡️ Help Menu — Page 3/4 (Staff Commands)')
@@ -120,7 +123,7 @@ module.exports = {
       new ButtonBuilder().setCustomId('help_page4').setLabel('Page 4 (Staff)').setStyle(ButtonStyle.Secondary)
     );
 
-    // 🌟 FIX: Use editReply for slash commands
+    // 🌟 FIX: Complete deferred token cycle with editReply for slash tracking
     const response = isInteraction 
       ? await interaction.editReply({ embeds: [embedPage1], components: [buttons] })
       : await interaction.reply({ embeds: [embedPage1], components: [buttons], fetchReply: true });
@@ -161,13 +164,17 @@ module.exports = {
 
   async executePrefix(message, args, client) {
     const mockInteraction = {
+      guild: message.guild,
+      guildId: message.guild?.id,
+      member: message.member,
       author: message.author,
+      isChatInputCommand: () => false,
       reply: async (options) => message.reply(options),
       editReply: async (options) => {
-        const msg = await message.channel.messages.fetch(message.id).catch(() => null);
-        if (msg) return msg.edit(options);
+        if (typeof options === 'string') return message.channel.send({ content: options });
+        return message.channel.send(options);
       }
     };
-    await this.execute(mockInteraction);
+    await this.execute(mockInteraction, client).catch(() => null);
   }
 };

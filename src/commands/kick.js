@@ -12,7 +12,8 @@ module.exports = {
   name: 'kick',
 
   async execute(interaction, client) {
-    const isInteraction = interaction.isCommand ? interaction.isCommand() : false;
+    // 🌟 FIX: Check ChatInputCommand format safely without triggering legacy function properties
+    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options ? true : false);
     
     // 🌟 ENFORCED PATTERN: Instantly extend the timeout lifetime to 15 minutes
     if (isInteraction) {
@@ -22,7 +23,7 @@ module.exports = {
     }
 
     const guild = interaction.guild;
-    const author = interaction.user; 
+    const author = isInteraction ? interaction.user : interaction.author; // 🌟 FIX: Standardized user fallbacks
     const memberExecutor = interaction.member;
     const guildId = interaction.guildId;
 
@@ -88,4 +89,29 @@ module.exports = {
       return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
     }
   },
+
+  // 🌟 ADDED: Complete prefix execution block to handle text channel triggers flawlessly
+  async executePrefix(message, argsArray, client) {
+    let targetUser = message.mentions.users.first();
+    if (!targetUser && argsArray && argsArray.length > 0) {
+      const pureId = argsArray.replace(/[^0-9]/g, '');
+      if (pureId.length >= 17 && pureId.length <= 20) {
+        targetUser = await client.users.fetch(pureId).catch(() => null);
+      }
+    }
+    const reasonText = argsArray && argsArray.length > 1 ? argsArray.slice(1).join(' ') : 'No reason provided';
+
+    const mockInteraction = {
+      guild: message.guild,
+      guildId: message.guild.id,
+      member: message.member,
+      author: message.author,
+      options: {
+        getUser: (name) => targetUser,
+        getString: (name) => reasonText
+      },
+      reply: async (options) => message.reply(options)
+    };
+    await this.execute(mockInteraction, client).catch(() => null);
+  }
 };

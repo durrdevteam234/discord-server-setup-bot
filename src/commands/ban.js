@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { logAction } = require('../utils/auditLog');
-const database = require('../utils/database');
+const db = require('../utils/database'); // Restored your dynamic helper model
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -12,9 +12,9 @@ module.exports = {
   name: 'ban',
 
   async execute(interaction, client) {
-    const isInteraction = interaction.isCommand ? interaction.isCommand() : false;
+    // Safely verify if invocation layer stems from a native chat slash command
+    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options ? true : false);
     
-    // 🌟 FIX: Instantly tell Discord to wait before querying MongoDB
     if (isInteraction) {
       await interaction.deferReply().catch(() => null);
     } else {
@@ -22,7 +22,7 @@ module.exports = {
     }
 
     const guild = interaction.guild;
-    const author = interaction.user; 
+    const author = isInteraction ? interaction.user : interaction.author; 
     const memberExecutor = interaction.member;
     const guildId = interaction.guildId;
 
@@ -54,10 +54,12 @@ module.exports = {
 
       await guild.members.ban(user.id, { reason });
 
-      const guildConfig = await database.findOne({ guildId: guildId }).catch(() => null) || {};
+      // MATCHED DATABASE OPERATIONS: Scrapes config objects using your schema maps
+      const settings = (await db.readData('settings.json')) || {};
+      const currentGuildSettings = settings[guildId] || {};
       
-      if (guildConfig.modLogsEnabled && guildConfig.unifiedLogChannelId) {
-        const modLogsChannel = guild.channels.cache.get(guildConfig.unifiedLogChannelId) || await guild.channels.fetch(guildConfig.unifiedLogChannelId).catch(() => null);
+      if (currentGuildSettings.modLogsEnabled && currentGuildSettings.unifiedLogChannelId) {
+        const modLogsChannel = guild.channels.cache.get(currentGuildSettings.unifiedLogChannelId) || await guild.channels.fetch(currentGuildSettings.unifiedLogChannelId).catch(() => null);
         if (modLogsChannel) {
           const embedLog = new EmbedBuilder()
             .setColor('#FF0000')
@@ -79,7 +81,6 @@ module.exports = {
         .setTitle('✅ User Banned')
         .setDescription(`${user.username} has been banned.\nReason: ${reason}`);
 
-      // 🌟 FIX: Use editReply for slash commands
       return isInteraction ? interaction.editReply({ embeds: [embed] }) : interaction.reply({ embeds: [embed] });
     } catch (error) {
       console.error('Ban error:', error);
@@ -87,4 +88,29 @@ module.exports = {
       return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
     }
   },
+
+  // ADDED: Complete prefix execution loop to translate prefix calls flawlessly
+  async executePrefix(message, argsArray, client) {
+    let targetUser = message.mentions.users.first();
+    if (!targetUser && argsArray && argsArray.length > 0) {
+      const pureId = argsArray[0].replace(/[^0-9]/g, '');
+      if (pureId.length >= 17 && pureId.length <= 20) {
+        targetUser = await client.users.fetch(pureId).catch(() => null);
+      }
+    }
+    const reasonText = argsArray && argsArray.length > 1 ? argsArray.slice(1).join(' ') : 'No reason provided';
+
+    const mockInteraction = {
+      guild: message.guild,
+      guildId: message.guild.id,
+      member: message.member,
+      author: message.author,
+      options: {
+        getUser: (name) => targetUser,
+        getString: (name) => reasonText
+      },
+      reply: async (options) => message.reply(options)
+    };
+    await this.execute(mockInteraction, client).catch(() => null);
+  }
 };

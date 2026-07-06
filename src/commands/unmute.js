@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { logAction } = require('../utils/auditLog');
-const database = require('../utils/database'); // Updated to point directly to your MongoDB client model
+const db = require('../utils/database');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -11,60 +11,51 @@ module.exports = {
   name: 'unmute',
 
   async execute(interaction, client) {
-    const isInteraction = interaction.isCommand ? interaction.isCommand() : false;
+    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options ? true : false);
+
+    if (isInteraction) {
+      await interaction.deferReply().catch(() => null);
+    } else {
+      await interaction.reply('⏳ Processing unmute transaction...').catch(() => null);
+    }
+
     const guild = interaction.guild;
-    const author = interaction.user; 
+    const author = isInteraction ? interaction.user : interaction.author; 
     const memberExecutor = interaction.member;
     const guildId = interaction.guildId;
 
     if (!memberExecutor.permissions.has(PermissionFlagsBits.ModerateMembers)) {
       const msg = '❌ You need Moderate Members permission!';
-      return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
+      return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
     }
 
     try {
-      let user;
-
-      if (isInteraction) {
-        user = interaction.options.getUser('user');
-      } else {
-        user = interaction.options.getUser('user');
-      }
+      const user = interaction.options.getUser('user');
 
       if (!user) {
         const msg = '❌ Please mention a valid user or provide a valid user ID.';
-        return interaction.reply({ content: msg, ephemeral: true }).catch(() => null);
+        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
       }
 
       const member = await guild.members.fetch(user.id).catch(() => null);
       if (!member) {
         const msg = '❌ This user is not in the server.';
-        return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
+        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
       }
 
-      // Remove the native Discord timeout
       await member.timeout(null);
 
-      // ========================================================
-      // NEW: MONGO-DB ACTIVE TIMEOUT RECORD CLEANUP
-      // ========================================================
-      await database.findOneAndUpdate(
-        { guildId: guildId },
-        { 
-          $unset: { 
-            [`activeMutes.${user.id}`]: "" 
-          } 
-        }
-      ).catch(() => null);
+      const mutes = (await db.readData('mutes.json')) || {};
+      if (mutes[guildId] && mutes[guildId][user.id]) {
+        delete mutes[guildId][user.id];
+        await db.writeData('mutes.json', mutes);
+      }
 
-      // ========================================================
-      // MONGO-DB UNIFIED MOD LOGS SYSTEM RESOLUTION
-      // ========================================================
-      const guildConfig = await database.findOne({ guildId: guildId }).catch(() => null) || {};
-      
-      if (guildConfig.modLogsEnabled && guildConfig.unifiedLogChannelId) {
-        const modLogsChannel = guild.channels.cache.get(guildConfig.unifiedLogChannelId) || await guild.channels.fetch(guildConfig.unifiedLogChannelId).catch(() => null);
-        
+      const settings = (await db.readData('settings.json')) || {};
+      const currentGuildSettings = settings[guildId] || {};
+
+      if (currentGuildSettings.modLogsEnabled && currentGuildSettings.unifiedLogChannelId) {
+        const modLogsChannel = guild.channels.cache.get(currentGuildSettings.unifiedLogChannelId) || await guild.channels.fetch(currentGuildSettings.unifiedLogChannelId).catch(() => null);
         if (modLogsChannel) {
           const embedLog = new EmbedBuilder()
             .setColor('#00FF00')
@@ -85,11 +76,33 @@ module.exports = {
         .setTitle('✅ User Unmuted')
         .setDescription(`${user.username} has been unmuted.`);
 
-      return interaction.reply({ embeds: [embed] });
+      return isInteraction ? interaction.editReply({ embeds: [embed] }) : interaction.reply({ embeds: [embed] });
     } catch (error) {
       console.error('Unmute error:', error);
       const msg = `❌ Error unmuting user: ${error.message}`;
-      return interaction.reply({ content: msg, ephemeral: true }).catch(() => null);
+      return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
     }
   },
+
+  async executePrefix(message, argsArray, client) {
+    let targetUser = message.mentions.users.first();
+    if (!targetUser && argsArray && argsArray.length > 0) {
+      const pureId = argsArray.replace(/[^0-9]/g, '');
+      if (pureId.length >= 17 && pureId.length <= 20) {
+        targetUser = await client.users.fetch(pureId).catch(() => null);
+      }
+    }
+
+    const mockInteraction = {
+      guild: message.guild,
+      guildId: message.guild?.id,
+      member: message.member,
+      author: message.author,
+      options: {
+        getUser: (name) => targetUser
+      },
+      reply: async (options) => message.reply(options)
+    };
+    await this.execute(mockInteraction, client).catch(() => null);
+  }
 };

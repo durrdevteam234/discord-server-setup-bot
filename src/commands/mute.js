@@ -17,7 +17,8 @@ module.exports = {
   name: 'mute',
 
   async execute(interaction, client) {
-    const isInteraction = interaction.isCommand ? interaction.isCommand() : false;
+    // 🌟 FIX: Checked for ChatInputCommand safely without using broken function calls
+    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options ? true : false);
 
     if (isInteraction) {
       await interaction.deferReply().catch(() => null);
@@ -26,7 +27,7 @@ module.exports = {
     }
 
     const guild = interaction.guild;
-    const author = interaction.user; 
+    const author = isInteraction ? interaction.user : interaction.author; // 🌟 FIX: Handled user fallbacks
     const memberExecutor = interaction.member;
     const guildId = interaction.guildId;
 
@@ -88,7 +89,6 @@ module.exports = {
 
       await member.timeout(durationMs, reason);
 
-      // 🌟 ADAPTER RESOLUTION: Safe write data processing back to collection schemas
       const mutes = (await db.readData('mutes.json')) || {};
       if (!mutes[guildId]) mutes[guildId] = {};
       mutes[guildId][user.id] = { muteEnd: Date.now() + durationMs, reason };
@@ -129,4 +129,30 @@ module.exports = {
       return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
     }
   },
+
+  // 🌟 ADDED: Complete prefix execution block to handle text commands flawlessly
+  async executePrefix(message, argsArray, client) {
+    let targetUser = message.mentions.users.first();
+    if (!targetUser && argsArray && argsArray.length > 0) {
+      const pureId = argsArray[0].replace(/[^0-9]/g, '');
+      if (pureId.length >= 17 && pureId.length <= 20) {
+        targetUser = await client.users.fetch(pureId).catch(() => null);
+      }
+    }
+    const durationText = argsArray && argsArray[1] ? argsArray[1] : '';
+    const reasonText = argsArray && argsArray.length > 2 ? argsArray.slice(2).join(' ') : 'No reason provided';
+
+    const mockInteraction = {
+      guild: message.guild,
+      guildId: message.guild?.id,
+      member: message.member,
+      author: message.author,
+      options: {
+        getUser: (name) => targetUser,
+        getString: (name) => name === 'duration' ? durationText : reasonText
+      },
+      reply: async (options) => message.reply(options)
+    };
+    await this.execute(mockInteraction, client).catch(() => null);
+  }
 };

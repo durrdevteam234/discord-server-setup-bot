@@ -1,7 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const db = require('../utils/database');
 
-// Expanded pool featuring 10 unique, hilarious slap actions
 const SLAP_ACTIONS = [
   "slapped {target} across the face with a giant, smelly yellow trout! 🐟",
   "clobbered {target} with a loud, squeaky cartoon toy mallet! 🔨",
@@ -15,12 +14,11 @@ const SLAP_ACTIONS = [
   "hits {target} with a swift, perfectly timed triple-slap combination! 🌪️"
 ];
 
-// High-quality, vetted anime slap visual assets
 const SLAP_GIFS = [
-  "https://giphy.com",
-  "https://giphy.com",
-  "https://giphy.com",
-  "https://giphy.com"
+  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOTZmMGttaThicmc4cWRkYWVic2k5enNjMXZyYTZ2Y2hwODUxa2hweiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/XHzDQSWl8wC7VhWz4d/giphy.gif",
+  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOTZmMGttaThicmc4cWRkYWVic2k5enNjMXZyYTZ2Y2hwODUxa2hweiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/UtGH7Lez5X3vomTWSB/giphy.gif",
+  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOTZmMGttaThicmc4cWRkYWVic2k5enNjMXZyYTZ2Y2hwODUxa2hweiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/arHk362F33HGh0y83C/giphy.gif",
+  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOTZmMGttaThicmc4cWRkYWVic2k5enNjMXZyYTZ2Y2hwODUxa2hweiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/MdvyuBd0fdGYWmAQ35/giphy.gif"
 ];
 
 module.exports = {
@@ -30,33 +28,41 @@ module.exports = {
     .addUserOption(option => option.setName('user').setDescription('The user to slap').setRequired(true)),
   name: 'slap',
 
-  async execute(interaction) {
-    const settings = db.readData('settings.json') || {};
+  async execute(interaction, client) {
+    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options ? true : false);
+
+    // 🌟 ADAPTER UPDATE: Enforce async reading for MongoDB dynamic mapper patterns
+    const settings = (await db.readData('settings.json')) || {};
     const currentGuildSettings = settings[interaction.guildId] || {};
 
-    // Standard structural safety framework filter matching boolean configurations
-    if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false) {
-      return interaction.reply({ 
-        content: '❌ The Fun Module is currently disabled on this server!', 
-        flags: [MessageFlags.Ephemeral] 
-      }).catch(() => null);
+    if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false || currentGuildSettings.funModule === 'off') {
+      const disabledMsg = '❌ The Fun Module is currently disabled on this server!';
+      return isInteraction 
+        ? interaction.reply({ content: disabledMsg, flags: [MessageFlags.Ephemeral] }).catch(() => null)
+        : interaction.reply(disabledMsg).catch(() => null);
     }
     
     const target = interaction.options.getUser('user');
     if (!target) {
-      return interaction.reply({ content: '❌ Could not resolve that user profile target.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
+      const missingUserMsg = '❌ Could not resolve that user profile target.';
+      return isInteraction 
+        ? interaction.reply({ content: missingUserMsg, flags: [MessageFlags.Ephemeral] }).catch(() => null)
+        : interaction.reply(missingUserMsg).catch(() => null);
     }
 
-    const caller = interaction.user;
+    const caller = isInteraction ? interaction.user : interaction.author;
     if (target.id === caller.id) {
-      return interaction.reply({ content: '💥 You swing and somehow wind up slapping your own face. Ouch! 🤕', flags: [MessageFlags.Ephemeral] }).catch(() => null);
+      const selfSlapMsg = '💥 You swing and somehow wind up slapping your own face. Ouch! 🤕';
+      return isInteraction 
+        ? interaction.reply({ content: selfSlapMsg, flags: [MessageFlags.Ephemeral] }).catch(() => null)
+        : interaction.reply(selfSlapMsg).catch(() => null);
     }
 
     const randomAction = SLAP_ACTIONS[Math.floor(Math.random() * SLAP_ACTIONS.length)].replace('{target}', `**${target.username}**`);
     const randomGif = SLAP_GIFS[Math.floor(Math.random() * SLAP_GIFS.length)];
     
-    let cuteStyle = 'off';
-    try { const cuteData = db.readData('cute.json') || {}; cuteStyle = cuteData[interaction.guildId] || 'off'; } catch (e) {}
+    const cuteData = (await db.readData('cute.json')) || {};
+    const cuteStyle = cuteData[interaction.guildId] || 'off';
     const isCuteActive = cuteStyle !== 'off';
 
     const embed = new EmbedBuilder()
@@ -68,18 +74,32 @@ module.exports = {
     await interaction.reply({ embeds: [embed] }).catch(() => null);
   },
 
-  async executePrefix(message, args, client) {
-    const settings = db.readData('settings.json') || {};
-    const currentGuildSettings = settings[message.guild?.id] || {};
-
-    if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false) {
-      return message.reply('❌ The complete **Fun Command Suite** has been globally disabled by a server administrator.').catch(() => null);
+  // 🌟 FIXED: Implemented full arguments resolution matching your text router pipeline
+  async executePrefix(message, argsArray, client) {
+    let targetUser = message.mentions.users.first();
+    if (!targetUser && argsArray && argsArray.length > 0) {
+      // Remove notation templates out of plain string IDs
+      const pureId = argsArray.replace(/[^0-9]/g, '');
+      if (pureId.length >= 17 && pureId.length <= 20) {
+        targetUser = await client.users.fetch(pureId).catch(() => null);
+      }
     }
 
-    // Rely explicitly on the unified messageCreate interaction emulator pipeline
-    const targetCommand = client.commands.get('slap');
-    if (targetCommand) {
-      return; 
+    if (!targetUser) {
+      return message.reply('❌ Please mention a valid user to slap! Usage: `|slap @user`').catch(() => null);
     }
+
+    const mockInteraction = {
+      guild: message.guild,
+      guildId: message.guild?.id,
+      member: message.member,
+      author: message.author,
+      options: {
+        getUser: (name) => targetUser
+      },
+      reply: async (options) => message.reply(options)
+    };
+
+    await this.execute(mockInteraction, client).catch(() => null);
   }
 };
