@@ -10,17 +10,31 @@ module.exports = {
   once: false,
   async execute(message, client) {
     try {
+      // 1. Safety Gate: Completely ignore bots, webhooks, and empty messages
       if (!message || !message.author || message.author.bot || message.webhookId) return;
-      const prefix = client?.prefix || message.client.prefix || '|';
       
+      const prefix = client?.prefix || '|';
       // ==========================================
       // PART A: COMMAND PARSING & EXECUTION
       // ==========================================
       if (message.content && message.content.startsWith(prefix)) {
-        const args = message.content.slice(prefix.length).trim().split(/ +/);
-        if (args.length === 0) return;
-        const commandName = args.shift().toLowerCase();
+        const argsArray = message.content.slice(prefix.length).trim().split(/ +/);
+        if (argsArray.length === 0) return;
+        
+        const commandName = argsArray.shift().toLowerCase();
+        const rawArgsString = argsArray.join(' ').trim();
 
+        // Check Global Server Configuration Switch For Fun Modules
+        const mainSettings = db.readData('settings.json') || {};
+        const currentGuildSettings = mainSettings[message.guild?.id] || {};
+        const coreUtilityCommands = ['setup', 'cute', 'fun-module']; 
+        
+        if (!coreUtilityCommands.includes(commandName)) {
+          if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false) {
+            return message.reply('❌ The complete **Fun Command Suite** has been globally disabled by a server administrator.').catch(() => null);
+          }
+        }
+        // 2. Main Administration Setup Router Block
         if (commandName === 'setup') {
           const guild = message.guild; if (!guild) return;
           const member = message.member || await guild.members.fetch(message.author.id).catch(() => null);
@@ -29,8 +43,8 @@ module.exports = {
             return message.reply('❌ Permissions required!').catch(() => null);
           }
           
-          const templateArg = args[0] ? args[0].toLowerCase() : null;
-          const clearArg = args[1] ? args[1].toLowerCase() : null;
+          const templateArg = argsArray[0] ? argsArray[0].toLowerCase() : null;
+          const clearArg = argsArray[1] ? argsArray[1].toLowerCase() : null;
           const clear = clearArg === 'clear' || clearArg === 'true';
           const validTemplates = ['gaming', 'community', 'study', 'business'];
           
@@ -89,9 +103,17 @@ module.exports = {
               const createdChannel = await guild.channels.create({ name: channelData.name, type: channelData.type, parent: channelData.parent });
               if (key === 'general') createdGeneralChannelId = createdChannel.id;
             }
-            const settings = db.readData('settings.json') || {};
-            settings[guild.id] = { template: templateArg, channels: Object.keys(channels), welcomeChannelId: createdGeneralChannelId, roles: [adminRole.id, modRole.id, memberRole.id], setupComplete: true, setupDate: new Date().toISOString() };
-            db.writeData('settings.json', settings);
+            
+            currentGuildSettings.template = templateArg;
+            currentGuildSettings.channels = Object.keys(channels);
+            currentGuildSettings.welcomeChannelId = createdGeneralChannelId;
+            currentGuildSettings.roles = [adminRole.id, modRole.id, memberRole.id];
+            currentGuildSettings.setupComplete = true;
+            currentGuildSettings.setupDate = new Date().toISOString();
+            
+            mainSettings[guild.id] = currentGuildSettings;
+            db.writeData('settings.json', mainSettings);
+            
             const embed = new discord.EmbedBuilder().setColor(isCuteActive ? '#FF69B4' : '#00FF00').setTitle(isCuteActive ? '✨ Setup Complete! ✨' : '✅ Setup Complete!').addFields({ name: 'Template', value: templateArg, inline: true }, { name: 'Categories', value: '3', inline: true }, { name: 'Channels', value: Object.keys(channels).length.toString(), inline: true });
             if (statusMessage) await statusMessage.edit({ content: ' ', embeds: [embed] }).catch(() => null);
           } catch (error) { console.error(error); }
@@ -102,7 +124,7 @@ module.exports = {
             return message.reply('❌ Permissions required!').catch(() => null);
           }
           
-          const choice = args[0] ? args[0].toLowerCase() : null;
+          const choice = argsArray[0] ? argsArray[0].toLowerCase() : null;
           const validStyles = ['off', 'wide', 'smallcaps', 'bubbles'];
           if (!choice || !validStyles.includes(choice)) {
             const embed = new discord.EmbedBuilder().setColor('#FF69B4').setTitle('✨ Font Menu ✨').setDescription('Usage: `|cute <choice>`\n• `off` ➡️ Normal\n• `wide` ➡️ ᴡɪᴅᴇ\n• `smallcaps` ➡️ sᴍᴀʟʟᴄᴀᴘs\n• `bubbles` ➡️ ⓑⓤⓑⓑⓛⓔⓢ');
@@ -113,42 +135,69 @@ module.exports = {
           return message.reply({ embeds: [successEmbed] }).catch(() => null);
         } else {
           // =======================================================
-          // DYNAMIC HYBRID PREFIX ROUTER WITH INTERACTION EMULATOR
+          // FIXED RESILIENT DYNAMIC PREFIX ROUTER WITH EMULATOR
           // =======================================================
           const targetCommand = client.commands.get(commandName);
           if (targetCommand) {
             if (typeof targetCommand.executePrefix === 'function') {
-              await targetCommand.executePrefix(message, args, client).catch(err => console.error(`Prefix execution error inside |${commandName}:`, err));
+              await targetCommand.executePrefix(message, argsArray, client).catch(err => console.error(`Prefix execution error inside |${commandName}:`, err));
             } else if (typeof targetCommand.runPrefix === 'function') {
-              await targetCommand.runPrefix(message, args, client).catch(err => console.error(`Legacy runPrefix error inside |${commandName}:`, err));
+              await targetCommand.runPrefix(message, argsArray, client).catch(err => console.error(`Legacy runPrefix error inside |${commandName}:`, err));
             } else if (typeof targetCommand.execute === 'function') {
               
-              // Emulate an Interaction structure for pure Slash commands running via prefix
+              let explicitRawId = null;
+              if (rawArgsString) {
+                const pureNumbersOnly = rawArgsString.replace(/[^0-9]/g, '');
+                if (pureNumbersOnly.length >= 17 && pureNumbersOnly.length <= 20) {
+                  explicitRawId = pureNumbersOnly;
+                }
+              }
+
+              let resolvedTargetUser = message.mentions.users.first() || null;
+              let resolvedTargetMember = message.mentions.members.first() || null;
+
+              if (!resolvedTargetUser && explicitRawId && message.guild) {
+                try {
+                  resolvedTargetMember = message.guild.members.cache.get(explicitRawId) || await message.guild.members.fetch(explicitRawId).catch(() => null);
+                  if (resolvedTargetMember) resolvedTargetUser = resolvedTargetMember.user;
+                } catch (_) {}
+              }
               const mockInteraction = {
                 isCommand: () => true,
                 isChatInputCommand: () => true,
                 deferred: false,
                 replied: false,
+                id: message.id,
+                guildId: message.guildId,
+                channelId: message.channelId,
                 guild: message.guild,
                 channel: message.channel,
                 user: message.author,
                 member: message.member,
                 client: client,
                 options: {
-                  getString: (name) => args[0] || null,
-                  getUser: (name) => message.mentions.users.first() || null,
-                  getMember: (name) => message.mentions.members.first() || null,
-                  getInteger: (name) => parseInt(args[0]) || null,
-                  get: (name) => ({ value: args[0] || null })
+                  getString: (name) => rawArgsString.length > 0 ? rawArgsString : null,
+                  getUser: (name) => resolvedTargetUser,
+                  getMember: (name) => resolvedTargetMember,
+                  getInteger: (name) => {
+                    const processedInt = parseInt(argsArray[0]);
+                    return isNaN(processedInt) ? null : processedInt;
+                  },
+                  get: (name) => ({ value: rawArgsString || null })
                 },
                 reply: async (options) => {
+                  if (mockInteraction.replied || mockInteraction.deferred) {
+                    return mockInteraction.followUp(options);
+                  }
                   mockInteraction.replied = true;
                   if (typeof options === 'string') return message.reply({ content: options });
+                  if (options && options.flags) delete options.flags; 
                   return message.reply(options);
                 },
                 followUp: async (options) => {
-                  if (typeof options === 'string') return message.reply({ content: options });
-                  return message.reply(options);
+                  if (typeof options === 'string') return message.channel.send({ content: options });
+                  if (options && options.flags) delete options.flags;
+                  return message.channel.send(options);
                 },
                 deferReply: async (options) => {
                   mockInteraction.deferred = true;
@@ -167,21 +216,17 @@ module.exports = {
           return;
         }
       }
-      
       // ==========================================
       // PART B: BACKGROUND TRACKING XP ENGINE
       // ==========================================
       const guildId = message.guild?.id;
       if (!guildId) return;
 
-      const mainSettings = db.readData('settings.json') || {};
       const levelingSettings = db.readData('leveling_settings.json') || {};
-      
-      const mainConfig = mainSettings[guildId] || {};
       const levelConfig = levelingSettings[guildId] || {};
 
       const targetStatus = levelConfig.status || levelConfig._doc?.status || levelConfig.enabled || levelConfig._doc?.enabled;
-      const mainLevelingStatus = mainConfig.leveling || mainConfig._doc?.leveling;
+      const mainLevelingStatus = currentGuildSettings.leveling || currentGuildSettings._doc?.leveling;
 
       const isLevelingActive = 
         (mainLevelingStatus === 'on' || mainLevelingStatus === true) ||
@@ -226,8 +271,8 @@ module.exports = {
         let targetChannelId = levelConfig.channelId || 
                               levelConfig._doc?.channelId || 
                               levelConfig.settings?.channelId || 
-                              mainConfig.channelId ||
-                              mainConfig._doc?.channelId;
+                              currentGuildSettings.channelId ||
+                              currentGuildSettings._doc?.channelId;
 
         let targetChannel = message.channel;
         if (targetChannelId && typeof targetChannelId === 'string') {
