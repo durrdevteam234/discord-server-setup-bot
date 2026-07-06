@@ -1,7 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const db = require('../utils/database');
 
-// Expanded pool featuring 20 sharp, comedic roasts
 const ROASTS = [
   "your secrets are safe with me. I never even listened in the first place.",
   "I'm not saying I hate you, but I would unplug your life support to charge my phone.",
@@ -36,7 +35,6 @@ module.exports = {
     const settings = db.readData('settings.json') || {};
     const currentGuildSettings = settings[interaction.guildId] || {};
 
-    // Standard structural safety framework filter matching boolean configurations
     if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false) {
       return interaction.reply({ 
         content: '❌ The Fun Module is currently disabled on this server!', 
@@ -77,15 +75,39 @@ module.exports = {
       return message.reply('❌ The complete **Fun Command Suite** has been globally disabled by a server administrator.').catch(() => null);
     }
 
-    // Hands off context processing to the unified messageCreate interaction emulator
-    const targetCommand = client.commands.get('roast');
-    if (targetCommand) {
-      return; 
+    // RESOLVE USER: Target via mention or trailing raw snowflake string IDs
+    let target = message.mentions.users.first();
+    if (!target && args && args.length > 0) {
+      const pureId = args.replace(/[^0-9]/g, '');
+      if (pureId.length >= 17 && pureId.length <= 20) {
+        target = await client.users.fetch(pureId).catch(() => null);
+      }
     }
+
+    if (!target) {
+      return message.reply('❌ Please mention a valid user to roast! Usage: `|roast @user`').catch(() => null);
+    }
+
+    if (target.id === client.user.id) {
+      return message.reply('🤖 Nice try! You cannot roast me; my code is flawless.').catch(() => null);
+    }
+
+    const randomRoast = ROASTS[Math.floor(Math.random() * ROASTS.length)];
+    
+    let cuteStyle = 'off';
+    try { const cuteData = db.readData('cute.json') || {}; cuteStyle = cuteData[message.guild?.id] || 'off'; } catch (e) {}
+    const isCuteActive = cuteStyle !== 'off';
+
+    const embedPrefix = new EmbedBuilder()
+      .setColor(isCuteActive ? '#FF69B4' : '#D35400')
+      .setTitle(isCuteActive ? '✨ 🔥 SAVAGE ROAST 🔥 ✨' : '🔥 Roasted!')
+      .setDescription(`**${target.username}**, ${randomRoast}`)
+      .setFooter({ text: `Requested by ${message.author.username}` });
+
+    return message.reply({ embeds: [embedPrefix] }).catch(() => null);
   }
 };
 
-// Helper utility to safely fetch client user data fields
 function activeClientUser(interaction) {
   return interaction.client?.user || interaction.user;
 }
