@@ -1,26 +1,30 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const db = require('../utils/database');
 
-// Expanded pool featuring 10 unique hug action variations
 const HUG_ACTIONS = [
   "wrapped their arms tightly around {target} for a massive, warm bear hug! 🧸",
-  "gives {target} a comforting squeeze. Everything is going to be okay! 💕",
-  "tackles {target} with an unexpected, joyful surprise hug! ⚡",
-  "gives {target} a polite but deeply genuine virtual embrace. ✨",
+  "gives {target} a comforting squeeze. Everything is going to be completely okay! 💕",
+  "tackles {target} with an unexpected, joyful surprise virtual hug! ⚡",
+  "gives {target} a polite but deeply genuine, heartwarming embrace. ✨",
   "runs over and engulfs {target} in a cozy, warm blanket-style hug! 🧣",
-  "gives {target} a gentle, warm side-hug to brighten up their day! ☀️",
-  "sneaks up behind {target} and gives them a sudden, happy back-hug! 🤗",
-  "gives {target} an absolute mega-hug that lifts them completely off the ground! 🚀",
-  "shares a quiet, comforting, long-lasting embrace with {target}. 💤",
-  "flings their arms wide open and wraps {target} in a pure, wholesome cloud-like hug! ☁️"
+  "gives {target} a gentle, warm side-hug to brighten up their entire day! ☀️",
+  "sneaks up quietly behind {target} and gives them a sudden, happy back-hug! 🤗",
+  "gives {target} an absolute mega-hug that lifts them completely off the room floor! 🚀",
+  "shares a quiet, comforting, long-lasting embrace with {target} to ease their mind. 💤",
+  "flings their arms wide open and wraps {target} in a pure, wholesome cloud-like hug! ☁️",
+  "gives {target} a quick, cheerful high-five that naturally rolls into a warm embrace! 👋",
+  "spreads total positivity by throwing a friendly cushion-style hug right at {target}! 🛋️",
+  "stops everything they are doing just to give {target} the most well-deserved hug ever! 🏆",
+  "pats {target} on the back and wraps them in a highly supportive team hug! 👥",
+  "sends a million digital micro-hugs flying straight into {target}'s active chat stream! 💻"
 ];
 
-// Clean, ultra-reliable open-source anime hug visual resources 
+// Permanent Discord hosted asset nodes that bypass client block screens completely
 const HUG_GIFS = [
-  "https://giphy.com",
-  "https://giphy.com",
-  "https://giphy.com",
-  "https://giphy.com"
+  "https://discordapp.com",
+  "https://discordapp.com",
+  "https://discordapp.com",
+  "https://discordapp.com"
 ];
 
 module.exports = {
@@ -34,7 +38,6 @@ module.exports = {
     const settings = db.readData('settings.json') || {};
     const currentGuildSettings = settings[interaction.guildId] || {};
 
-    // Standard structural safety framework filter matching boolean configurations
     if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false) {
       return interaction.reply({ 
         content: '❌ The Fun Module is currently disabled on this server!', 
@@ -43,9 +46,7 @@ module.exports = {
     }
     
     const target = interaction.options.getUser('user');
-    if (!target) {
-      return interaction.reply({ content: '❌ Could not resolve that user profile target.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
-    }
+    if (!target) return interaction.reply({ content: '❌ User target not found.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
 
     const caller = interaction.user;
     if (target.id === caller.id) {
@@ -61,11 +62,13 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setColor(isCuteActive ? '#FF69B4' : '#FFC0CB')
-      .setTitle(isCuteActive ? '✨ 🤗 WHolesome EMBRACE ✨' : '🤗 Virtual Hug!')
-      .setDescription(`**${caller.username}** ${randomAction}`)
-      .setImage(randomGif);
+      .setTitle(isCuteActive ? '✨ 🤗 WHOLESOME EMBRACE ✨' : '🤗 Virtual Hug!')
+      .setDescription(`**${caller.username}** ${randomAction}`);
       
-    await interaction.reply({ embeds: [embed] }).catch(() => null);
+    await interaction.reply({ 
+      content: `🎬 **Animated Action Preview:** ${randomGif}`,
+      embeds: [embed] 
+    }).catch(() => null);
   },
 
   async executePrefix(message, args, client) {
@@ -75,13 +78,6 @@ module.exports = {
     if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false) {
       return message.reply('❌ The complete **Fun Command Suite** has been globally disabled by a server administrator.').catch(() => null);
     }
-
-    // Call the master router mapping loader to look up commands dynamically 
-    const targetCommand = client.commands.get('hug');
-    if (targetCommand) {
-      // The emulation context router in messageCreate handles ID/mention stripping smoothly 
-      // We pass the message downstream to take complete advantage of our framework fixes
-      return; 
-    }
+    return; // messageCreate.js handles prefix injection routing automatically
   }
 };

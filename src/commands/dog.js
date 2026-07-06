@@ -2,26 +2,21 @@ const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js'
 const db = require('../utils/database');
 
 const DOG_FACTS = [
-  { text: "Woof! A dog's sense of smell is up to 100,000 times stronger than a human's.", url: "https://unsplash.com" },
-  { text: "Dogs have three eyelids to keep their eyes clean, lubricated, and protected!", url: "https://unsplash.com" },
-  { text: "Three dogs actually survived the historical sinking of the Titanic in 1912.", url: "https://unsplash.com" },
-  { text: "All newborn puppies are born functionally deaf, blind, and without any teeth.", url: "https://unsplash.com" },
-  { text: "A dog's nose print is completely unique, much like a human fingerprint!", url: "https://unsplash.com" },
-  { text: "Greyhounds can reach sprinting speeds of up to 45 miles per hour!", url: "https://unsplash.com" },
-  { text: "Dogs curl up in a ball when they sleep due to an age-old instinct to protect vital organs from predators.", url: "https://unsplash.com" },
-  { text: "A dog's whiskers are highly sensitive tactile hairs called vibrissae, which help them navigate in low light.", url: "https://unsplash.com" },
-  { text: "Dalmatian puppies are completely pure white when born; they develop their iconic spots as they age.", url: "https://unsplash.com" },
-  { text: "Dogs sweat exclusively through the pads of their paws, relying primarily on panting to cool down.", url: "https://unsplash.com" },
-  { text: "Your dog can read your emotional states! They process vocal inflections and human facial expressions similarly to us.", url: "https://unsplash.com" },
-  { text: "The Basenji is the world's only breed of dog that cannot bark; instead, they make a unique yodeling sound.", url: "https://unsplash.com" },
-  { text: "A dog's normal body temperature is slightly higher than a human's, averaging around 38.3°C to 39.2°C (101°F to 102.5°F).", url: "https://unsplash.com" },
-  { text: "Ancient Egyptians revered dogs highly; when a family dog died, owners would shave their eyebrows as a sign of mourning.", url: "https://unsplash.com" },
-  { text: "Dogs have about 1,700 taste buds on their tongues, compared to humans who have roughly 9,000.", url: "https://unsplash.com" },
-  { text: "The position of a dog's tail wag can convey specific meanings; a wag more to the right suggests positive feelings.", url: "https://unsplash.com" },
-  { text: "An adult dog has 42 permanent teeth in their mouth, compared to adult humans who have 32.", url: "https://unsplash.com" },
-  { text: "Service dogs are trained to explicitly look out for traffic changes and can map out safe paths independently.", url: "https://unsplash.com" },
-  { text: "Dogs possess a specialized dynamic grouping of muscles that lets them rotate their ears completely independently.", url: "https://unsplash.com" },
-  { text: "Chow Chows and Shar-Peis are the only two dog breeds known to natively have completely blue-black tongues.", url: "https://unsplash.com" }
+  { text: "Woof! A dog's sense of smell is up to 100,000 times more powerful than a human's.", url: "https://dog.ceo" },
+  { text: "Dogs possess three distinct eyelids to keep their eyes clean, lubricated, and structurally protected!", url: "https://dog.ceo" },
+  { text: "Three registered dogs actually survived the historic sinking of the Titanic passenger ship in 1912.", url: "https://dog.ceo" },
+  { text: "All newborn puppies are born functionally deaf, blind, and completely without any teeth.", url: "https://dog.ceo" },
+  { text: "A dog's nose print is entirely unique, much like a human fingerprint, and can be used for identification.", url: "https://dog.ceo" },
+  { text: "Greyhounds can reach incredible sprinting speeds of up to 45 miles per hour in a matter of seconds!", url: "https://dog.ceo" },
+  { text: "Dogs curl up tightly in a ball when they sleep due to an age-old instinct to protect vital internal organs.", url: "https://dog.ceo" },
+  { text: "A dog's whiskers are highly sensitive tactile hairs called vibrissae, which help them navigate in dark rooms.", url: "https://dog.ceo" },
+  { text: "Dalmatian puppies are completely pure white when born; they develop their iconic spots as they grow older.", url: "https://dog.ceo" },
+  { text: "Dogs sweat exclusively through the pads of their paws, relying primarily on panting to cool themselves down.", url: "https://dog.ceo" },
+  { text: "Your dog can read your emotional states! They process vocal inflections and human facial expressions similarly to us.", url: "https://dog.ceo" },
+  { text: "The Basenji is the world's only breed of dog that cannot bark; instead, they make a unique yodeling sound.", url: "https://dog.ceo" },
+  { text: "A dog's normal body temperature is slightly higher than a human's, averaging around 38.3°C to 39.2°C (101°F to 102.5°F).", url: "https://dog.ceo" },
+  { text: "Chow Chows and Shar-Peis are the only two dog breeds known to natively have completely blue-black tongues.", url: "https://dog.ceo" },
+  { text: "Dogs have about 1,700 taste buds on their tongues, compared to humans who possess roughly 9,000.", url: "https://dog.ceo" }
 ];
 
 module.exports = {
@@ -50,10 +45,12 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setColor(isCuteActive ? '#FF69B4' : '#3498DB')
       .setTitle(isCuteActive ? '✨ 🐶 RANDOM DOG CONTENT ✨' : '🐶 Random Dog Content')
-      .setDescription(randomDog.text)
-      .setImage(randomDog.url);
+      .setDescription(randomDog.text);
       
-    await interaction.reply({ embeds: [embed] }).catch(() => null);
+    await interaction.reply({ 
+      content: `🐾 **Puppy Image Stream:** ${randomDog.url}`,
+      embeds: [embed] 
+    }).catch(() => null);
   },
 
   async executePrefix(message, args, client) {
@@ -73,9 +70,11 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setColor(isCuteActive ? '#FF69B4' : '#3498DB')
       .setTitle(isCuteActive ? '✨ 🐶 RANDOM DOG CONTENT ✨' : '🐶 Random Dog Content')
-      .setDescription(randomDog.text)
-      .setImage(randomDog.url);
+      .setDescription(randomDog.text);
       
-    await message.reply({ embeds: [embed] }).catch(() => null);
+    await message.reply({ 
+      content: `🐾 **Puppy Image Stream:** ${randomDog.url}`,
+      embeds: [embed] 
+    }).catch(() => null);
   }
 };
