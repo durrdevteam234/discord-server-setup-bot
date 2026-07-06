@@ -6,7 +6,8 @@ module.exports = {
     .setDescription('View the full list of available bot commands across pages.'),
   name: 'help',
 
-  async execute(interaction) {
+  // 🌟 FIXED: Unified signature mapping by passing client parameters natively
+  async execute(interaction, client) {
     const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options && !interaction.isMock ? true : false);
 
     if (isInteraction) {
@@ -47,24 +48,6 @@ module.exports = {
       "`/meme` - Spits out a random funny, relatable lifestyle meme.";
 
     // =========================================================
-    // EMBED LAYOUT BUILDER BLOCKS
-    // =========================================================
-    const embedPage1 = new EmbedBuilder()
-      .setColor('#00FF00')
-      .setTitle('📚 Help Menu — Page 1/4 (User Commands)')
-      .setDescription('Use the action row buttons below to browse instructions.')
-      .addFields({ name: '👤 Public User Utilities', value: userCommandsPart1 })
-      .setFooter({ text: prefixText })
-      .setTimestamp();
-
-    const embedPage2 = new EmbedBuilder()
-      .setColor('#FF69B4')
-      .setTitle('📚 Help Menu — Page 2/4 (User Commands Cont.)')
-      .setDescription('Use the action row buttons below to browse instructions.')
-      .addFields({ name: '🎭 Interactive & Whimsical Modules', value: userCommandsPart2 })
-      .setFooter({ text: prefixText })
-      .setTimestamp();
-    // =========================================================
     // PAGE 3: STAFF COMMANDS (UTILITIES & UTILITY SWITCHES)
     // =========================================================
     const staffCommandsPart1 =
@@ -98,6 +81,25 @@ module.exports = {
       "`/unban <username> [reason]` - Revoke a server ban using their unique username.\n" +
       "`/reactionroles <subcommand>` - Deploy, edit, or test custom button/dropdown role panels.";
 
+    // =========================================================
+    // EMBED LAYOUT BUILDER BLOCKS
+    // =========================================================
+    const embedPage1 = new EmbedBuilder()
+      .setColor('#00FF00')
+      .setTitle('📚 Help Menu — Page 1/4 (User Commands)')
+      .setDescription('Use the action row buttons below to browse instructions.')
+      .addFields({ name: '👤 Public User Utilities', value: userCommandsPart1 })
+      .setFooter({ text: prefixText })
+      .setTimestamp();
+
+    const embedPage2 = new EmbedBuilder()
+      .setColor('#FF69B4')
+      .setTitle('📚 Help Menu — Page 2/4 (User Commands Cont.)')
+      .setDescription('Use the action row buttons below to browse instructions.')
+      .addFields({ name: '🎭 Interactive & Whimsical Modules', value: userCommandsPart2 })
+      .setFooter({ text: prefixText })
+      .setTimestamp();
+
     const embedPage3 = new EmbedBuilder()
       .setColor('#5865F2')
       .setTitle('🛡️ Help Menu — Page 3/4 (Staff Commands)')
@@ -113,71 +115,73 @@ module.exports = {
       .addFields({ name: '🔒 Server Security & Role Administration', value: staffCommandsPart2 })
       .setFooter({ text: prefixText })
       .setTimestamp();
-
-    const buttons = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('help_page1').setLabel('Page 1 (User)').setStyle(ButtonStyle.Primary).setDisabled(true),
-      new ButtonBuilder().setCustomId('help_page2').setLabel('Page 2 (User)').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('help_page3').setLabel('Page 3 (Staff)').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('help_page4').setLabel('Page 4 (Staff)').setStyle(ButtonStyle.Secondary)
-    );
-
-    const response = isInteraction 
-      ? await interaction.editReply({ embeds: [embedPage1], components: [buttons] }).catch(() => null)
-      : await interaction.reply({ embeds: [embedPage1], components: [buttons], fetchReply: true }).catch(() => null);
-
-    if (!response) return;
-
-    const collector = response.createMessageComponentCollector({
-      componentType: ComponentType.Button,
-      time: 90000
-    });
-    collector.on('collect', async (btnInteraction) => {
-      const authorId = isInteraction ? interaction.user.id : interaction.author.id;
-      if (btnInteraction.user.id !== authorId) {
-        return btnInteraction.reply({ content: '❌ Run the command yourself to flip pages!', ephemeral: true }).catch(() => null);
-      }
-
-      buttons.components.forEach(btn => btn.setDisabled(false));
-
-      if (btnInteraction.customId === 'help_page1') {
-        buttons.components[0].setDisabled(true);
-        await btnInteraction.update({ embeds: [embedPage1], components: [buttons] }).catch(() => null);
-      } else if (btnInteraction.customId === 'help_page2') {
-        buttons.components[1].setDisabled(true);
-        await btnInteraction.update({ embeds: [embedPage2], components: [buttons] }).catch(() => null);
-      } else if (btnInteraction.customId === 'help_page3') {
-        buttons.components[2].setDisabled(true);
-        await btnInteraction.update({ embeds: [embedPage3], components: [buttons] }).catch(() => null);
-      } else if (btnInteraction.customId === 'help_page4') {
-        buttons.components[3].setDisabled(true);
-        await btnInteraction.update({ embeds: [embedPage4], components: [buttons] }).catch(() => null);
-      }
-    });
-
-    collector.on('end', () => {
-      buttons.components.forEach(btn => btn.setDisabled(true));
-      if (isInteraction) {
-        interaction.editReply({ components: [buttons] }).catch(() => null);
-      } else {
-        response.edit({ components: [buttons] }).catch(() => null);
-      }
-    });
-  },
-
-  async executePrefix(message, args, client) {
-    const mockInteraction = {
-      isMock: true,
-      guild: message.guild,
-      guildId: message.guild?.id,
-      member: message.member,
-      author: message.author,
-      isChatInputCommand: () => false,
-      reply: async (options) => message.reply(options),
-      editReply: async (options) => {
-        if (typeof options === 'string') return message.channel.send({ content: options });
-        return message.channel.send(options);
-      }
-    };
-    await this.execute(mockInteraction, client).catch(() => null);
-  }
-};
+      const buttons = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('help_page1').setLabel('Page 1 (User)').setStyle(ButtonStyle.Primary).setDisabled(true),
+        new ButtonBuilder().setCustomId('help_page2').setLabel('Page 2 (User)').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('help_page3').setLabel('Page 3 (Staff)').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('help_page4').setLabel('Page 4 (Staff)').setStyle(ButtonStyle.Secondary)
+      );
+  
+      const response = isInteraction 
+        ? await interaction.editReply({ embeds: [embedPage1], components: [buttons] }).catch(() => null)
+        : await interaction.reply({ embeds: [embedPage1], components: [buttons], fetchReply: true }).catch(() => null);
+  
+      if (!response) return;
+  
+      const collector = response.createMessageComponentCollector({
+        componentType: ComponentType.Button,
+        time: 90000
+      });
+  
+      collector.on('collect', async (btnInteraction) => {
+        const authorId = isInteraction ? interaction.user.id : interaction.author.id;
+        if (btnInteraction.user.id !== authorId) {
+          return btnInteraction.reply({ content: '❌ Run the command yourself to flip pages!', ephemeral: true }).catch(() => null);
+        }
+  
+        buttons.components.forEach(btn => btn.setDisabled(false));
+  
+        // 🌟 FIXED: Native target mapping targeting precise integer indices inside arrays
+        if (btnInteraction.customId === 'help_page1') {
+          buttons.components[0].setDisabled(true);
+          await btnInteraction.update({ embeds: [embedPage1], components: [buttons] }).catch(() => null);
+        } else if (btnInteraction.customId === 'help_page2') {
+          buttons.components[1].setDisabled(true);
+          await btnInteraction.update({ embeds: [embedPage2], components: [buttons] }).catch(() => null);
+        } else if (btnInteraction.customId === 'help_page3') {
+          buttons.components[2].setDisabled(true);
+          await btnInteraction.update({ embeds: [embedPage3], components: [buttons] }).catch(() => null);
+        } else if (btnInteraction.customId === 'help_page4') {
+          buttons.components[3].setDisabled(true);
+          await btnInteraction.update({ embeds: [embedPage4], components: [buttons] }).catch(() => null);
+        }
+      });
+  
+      collector.on('end', () => {
+        buttons.components.forEach(btn => btn.setDisabled(true));
+        if (isInteraction) {
+          interaction.editReply({ components: [buttons] }).catch(() => null);
+        } else {
+          response.edit({ components: [buttons] }).catch(() => null);
+        }
+      });
+    },
+  
+    async executePrefix(message, args, client) {
+      const mockInteraction = {
+        isMock: true,
+        guild: message.guild,
+        guildId: message.guild?.id,
+        member: message.member,
+        author: message.author,
+        isChatInputCommand: () => false,
+        reply: async (options) => message.reply(options),
+        editReply: async (options) => {
+          if (typeof options === 'string') return message.channel.send({ content: options });
+          return message.channel.send(options);
+        }
+      };
+      await this.execute(mockInteraction, client).catch(() => null);
+    }
+  };
+  
