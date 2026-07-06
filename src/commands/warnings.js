@@ -10,14 +10,14 @@ module.exports = {
   name: 'warnings',
 
   async execute(interaction, client) {
-    // 🌟 FIX: Checked for ChatInputCommand safely without using broken function calls
-    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options ? true : false);
+    // Standardize checking layer to see if it is a real interaction or text mock
+    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options && !interaction.isMock ? true : false);
 
-    // 🌟 ENFORCED PATTERN: Instantly extend the timeout lifetime to 15 minutes
     if (isInteraction) {
       await interaction.deferReply().catch(() => null);
     } else {
-      await interaction.reply('⏳ Querying collection histories...').catch(() => null);
+      // Safely monitor prefix status updates to prevent multiple text outputs
+      interaction.processingMessage = await interaction.reply('⏳ Querying collection histories...').catch(() => null);
     }
 
     const guild = interaction.guild;
@@ -69,25 +69,38 @@ module.exports = {
     }
   },
 
-  // 🌟 ADDED: Complete prefix execution block to handle text commands flawlessly
+  // 🌟 FIXED: Target index 0 of the string array and map tracking status overrides cleanly
   async executePrefix(message, argsArray, client) {
     let targetUser = message.mentions.users.first();
+    
+    // Correct index selection mapping implemented to handle text searches safely
     if (!targetUser && argsArray && argsArray.length > 0) {
-      const pureId = argsArray.replace(/[^0-9]/g, '');
+      const pureId = argsArray[0].replace(/[^0-9]/g, '');
       if (pureId.length >= 17 && pureId.length <= 20) {
         targetUser = await client.users.fetch(pureId).catch(() => null);
       }
     }
 
     const mockInteraction = {
+      isMock: true,
       guild: message.guild,
       guildId: message.guild?.id,
       member: message.member,
       author: message.author,
+      processingMessage: null,
       options: {
         getUser: (name) => targetUser || message.author
       },
-      reply: async (options) => message.reply(options)
+      reply: async (options) => {
+        return message.reply(options);
+      },
+      // Redirect state updates back onto the processing message instance
+      editReply: async (options) => {
+        if (mockInteraction.processingMessage) {
+          return mockInteraction.processingMessage.edit(options);
+        }
+        return message.reply(options);
+      }
     };
     await this.execute(mockInteraction, client).catch(() => null);
   }

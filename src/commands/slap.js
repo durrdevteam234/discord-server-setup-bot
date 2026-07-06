@@ -29,9 +29,9 @@ module.exports = {
   name: 'slap',
 
   async execute(interaction, client) {
-    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options ? true : false);
+    // Correct checking layer to see if it is a real interaction or text mock
+    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options && !interaction.isMock ? true : false);
 
-    // 🌟 ADAPTER UPDATE: Enforce async reading for MongoDB dynamic mapper patterns
     const settings = (await db.readData('settings.json')) || {};
     const currentGuildSettings = settings[interaction.guildId] || {};
 
@@ -39,7 +39,7 @@ module.exports = {
       const disabledMsg = '❌ The Fun Module is currently disabled on this server!';
       return isInteraction 
         ? interaction.reply({ content: disabledMsg, flags: [MessageFlags.Ephemeral] }).catch(() => null)
-        : interaction.reply(disabledMsg).catch(() => null);
+        : interaction.reply({ content: disabledMsg }).catch(() => null);
     }
     
     const target = interaction.options.getUser('user');
@@ -47,7 +47,7 @@ module.exports = {
       const missingUserMsg = '❌ Could not resolve that user profile target.';
       return isInteraction 
         ? interaction.reply({ content: missingUserMsg, flags: [MessageFlags.Ephemeral] }).catch(() => null)
-        : interaction.reply(missingUserMsg).catch(() => null);
+        : interaction.reply({ content: missingUserMsg }).catch(() => null);
     }
 
     const caller = isInteraction ? interaction.user : interaction.author;
@@ -55,7 +55,7 @@ module.exports = {
       const selfSlapMsg = '💥 You swing and somehow wind up slapping your own face. Ouch! 🤕';
       return isInteraction 
         ? interaction.reply({ content: selfSlapMsg, flags: [MessageFlags.Ephemeral] }).catch(() => null)
-        : interaction.reply(selfSlapMsg).catch(() => null);
+        : interaction.reply({ content: selfSlapMsg }).catch(() => null);
     }
 
     const randomAction = SLAP_ACTIONS[Math.floor(Math.random() * SLAP_ACTIONS.length)].replace('{target}', `**${target.username}**`);
@@ -74,12 +74,13 @@ module.exports = {
     await interaction.reply({ embeds: [embed] }).catch(() => null);
   },
 
-  // 🌟 FIXED: Implemented full arguments resolution matching your text router pipeline
+  // 🌟 FIXED: Fixed array selection index to block runtime crashes completely
   async executePrefix(message, argsArray, client) {
     let targetUser = message.mentions.users.first();
+    
+    // Fix: Access index 0 of argsArray instead of replacing string methods across arrays
     if (!targetUser && argsArray && argsArray.length > 0) {
-      // Remove notation templates out of plain string IDs
-      const pureId = argsArray.replace(/[^0-9]/g, '');
+      const pureId = argsArray[0].replace(/[^0-9]/g, '');
       if (pureId.length >= 17 && pureId.length <= 20) {
         targetUser = await client.users.fetch(pureId).catch(() => null);
       }
@@ -90,6 +91,7 @@ module.exports = {
     }
 
     const mockInteraction = {
+      isMock: true,
       guild: message.guild,
       guildId: message.guild?.id,
       member: message.member,
@@ -97,7 +99,11 @@ module.exports = {
       options: {
         getUser: (name) => targetUser
       },
-      reply: async (options) => message.reply(options)
+      // Safely process nested options payload objects without crashing
+      reply: async (options) => {
+        if (options.embeds) return message.reply({ embeds: options.embeds });
+        return message.reply(options.content || options);
+      }
     };
 
     await this.execute(mockInteraction, client).catch(() => null);

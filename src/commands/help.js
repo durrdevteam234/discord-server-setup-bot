@@ -7,10 +7,8 @@ module.exports = {
   name: 'help',
 
   async execute(interaction) {
-    // 🌟 FIX: Checked for ChatInputCommand safely without using broken function calls
-    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options ? true : false);
+    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options && !interaction.isMock ? true : false);
 
-    // 🌟 FIX: Instantly extend the Discord token lifetime to 15 minutes
     if (isInteraction) {
       await interaction.deferReply().catch(() => null);
     }
@@ -123,20 +121,20 @@ module.exports = {
       new ButtonBuilder().setCustomId('help_page4').setLabel('Page 4 (Staff)').setStyle(ButtonStyle.Secondary)
     );
 
-    // 🌟 FIX: Complete deferred token cycle with editReply for slash tracking
     const response = isInteraction 
-      ? await interaction.editReply({ embeds: [embedPage1], components: [buttons] })
-      : await interaction.reply({ embeds: [embedPage1], components: [buttons], fetchReply: true });
+      ? await interaction.editReply({ embeds: [embedPage1], components: [buttons] }).catch(() => null)
+      : await interaction.reply({ embeds: [embedPage1], components: [buttons], fetchReply: true }).catch(() => null);
+
+    if (!response) return;
 
     const collector = response.createMessageComponentCollector({
       componentType: ComponentType.Button,
       time: 90000
     });
-
     collector.on('collect', async (btnInteraction) => {
       const authorId = isInteraction ? interaction.user.id : interaction.author.id;
       if (btnInteraction.user.id !== authorId) {
-        return btnInteraction.reply({ content: '❌ Run the command yourself to flip pages!', ephemeral: true });
+        return btnInteraction.reply({ content: '❌ Run the command yourself to flip pages!', ephemeral: true }).catch(() => null);
       }
 
       buttons.components.forEach(btn => btn.setDisabled(false));
@@ -158,12 +156,17 @@ module.exports = {
 
     collector.on('end', () => {
       buttons.components.forEach(btn => btn.setDisabled(true));
-      if (isInteraction) interaction.editReply({ components: [buttons] }).catch(() => null);
+      if (isInteraction) {
+        interaction.editReply({ components: [buttons] }).catch(() => null);
+      } else {
+        response.edit({ components: [buttons] }).catch(() => null);
+      }
     });
   },
 
   async executePrefix(message, args, client) {
     const mockInteraction = {
+      isMock: true,
       guild: message.guild,
       guildId: message.guild?.id,
       member: message.member,

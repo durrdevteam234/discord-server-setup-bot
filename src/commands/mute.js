@@ -17,17 +17,18 @@ module.exports = {
   name: 'mute',
 
   async execute(interaction, client) {
-    // 🌟 FIX: Checked for ChatInputCommand safely without using broken function calls
-    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options ? true : false);
+    // Correct checking layer to see if it is a real interaction or text mock
+    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options && !interaction.isMock ? true : false);
 
     if (isInteraction) {
       await interaction.deferReply().catch(() => null);
     } else {
-      await interaction.reply('⏳ Processing mute transaction...').catch(() => null);
+      // Keep track of the initial processing status message for text commands
+      interaction.processingMessage = await interaction.reply('⏳ Processing mute transaction...').catch(() => null);
     }
 
     const guild = interaction.guild;
-    const author = isInteraction ? interaction.user : interaction.author; // 🌟 FIX: Handled user fallbacks
+    const author = isInteraction ? interaction.user : interaction.author; 
     const memberExecutor = interaction.member;
     const guildId = interaction.guildId;
 
@@ -130,9 +131,11 @@ module.exports = {
     }
   },
 
-  // 🌟 ADDED: Complete prefix execution block to handle text commands flawlessly
+  // 🌟 FIXED: Added correct input selectors and state tracking redirects
   async executePrefix(message, argsArray, client) {
     let targetUser = message.mentions.users.first();
+    
+    // Correct index selection mapping implemented
     if (!targetUser && argsArray && argsArray.length > 0) {
       const pureId = argsArray[0].replace(/[^0-9]/g, '');
       if (pureId.length >= 17 && pureId.length <= 20) {
@@ -143,15 +146,26 @@ module.exports = {
     const reasonText = argsArray && argsArray.length > 2 ? argsArray.slice(2).join(' ') : 'No reason provided';
 
     const mockInteraction = {
+      isMock: true,
       guild: message.guild,
       guildId: message.guild?.id,
       member: message.member,
       author: message.author,
+      processingMessage: null,
       options: {
         getUser: (name) => targetUser,
         getString: (name) => name === 'duration' ? durationText : reasonText
       },
-      reply: async (options) => message.reply(options)
+      reply: async (options) => {
+        return message.reply(options);
+      },
+      // Redirect status message updates cleanly onto the text message instance
+      editReply: async (options) => {
+        if (mockInteraction.processingMessage) {
+          return mockInteraction.processingMessage.edit(options);
+        }
+        return message.reply(options);
+      }
     };
     await this.execute(mockInteraction, client).catch(() => null);
   }

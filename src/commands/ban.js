@@ -12,13 +12,14 @@ module.exports = {
   name: 'ban',
 
   async execute(interaction, client) {
-    // Safely verify if invocation layer stems from a native chat slash command
-    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options ? true : false);
+    // Correct checking layer to see if it is a real interaction or text mock
+    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options && !interaction.isMock ? true : false);
     
     if (isInteraction) {
       await interaction.deferReply().catch(() => null);
     } else {
-      await interaction.reply('⏳ Processing ban command...').catch(() => null);
+      // For prefix commands, we send a processing message and keep track of it
+      interaction.processingMessage = await interaction.reply('⏳ Processing ban command...').catch(() => null);
     }
 
     const guild = interaction.guild;
@@ -101,15 +102,27 @@ module.exports = {
     const reasonText = argsArray && argsArray.length > 1 ? argsArray.slice(1).join(' ') : 'No reason provided';
 
     const mockInteraction = {
+      isMock: true,
       guild: message.guild,
       guildId: message.guild.id,
       member: message.member,
       author: message.author,
+      processingMessage: null,
       options: {
         getUser: (name) => targetUser,
         getString: (name) => reasonText
       },
-      reply: async (options) => message.reply(options)
+      // First reply sends the initial confirmation status
+      reply: async (options) => {
+        return message.reply(options);
+      },
+      // editReply edits the initial status text to display the final embed clean summary
+      editReply: async (options) => {
+        if (mockInteraction.processingMessage) {
+          return mockInteraction.processingMessage.edit(options);
+        }
+        return message.reply(options);
+      }
     };
     await this.execute(mockInteraction, client).catch(() => null);
   }

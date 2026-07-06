@@ -20,17 +20,20 @@ module.exports = {
   name: 'unban',
 
   async execute(interaction, client) {
-    const isInteraction = interaction.isCommand ? interaction.isCommand() : false;
-    const guild = interaction.guild;
-    const author = interaction.user; 
-    const memberExecutor = interaction.member;
-    const guildId = interaction.guildId;
-
+    // Standardize checking layer to see if it is a real interaction or text mock
+    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options && !interaction.isMock ? true : false);
+    
     if (isInteraction) {
       await interaction.deferReply().catch(() => null);
     } else {
-      await interaction.reply('⏳ Querying ban list registries...').catch(() => null);
+      // Safely monitor prefix status updates to prevent multiple text outputs
+      interaction.processingMessage = await interaction.reply('⏳ Querying ban list registries...').catch(() => null);
     }
+
+    const guild = interaction.guild;
+    const author = isInteraction ? interaction.user : interaction.author; 
+    const memberExecutor = interaction.member;
+    const guildId = interaction.guildId;
 
     if (!memberExecutor.permissions.has(PermissionFlagsBits.BanMembers)) {
       const msg = '❌ You need Ban Members permission to revoke bans!';
@@ -38,16 +41,8 @@ module.exports = {
     }
 
     try {
-      let targetName;
-      let reason;
-
-      if (isInteraction) {
-        targetName = interaction.options.getString('username').trim();
-        reason = interaction.options.getString('reason') || 'No reason provided';
-      } else {
-        targetName = interaction.options.getString('username');
-        reason = interaction.options.getString('reason') || 'No reason provided';
-      }
+      const targetName = interaction.options.getString('username')?.trim();
+      const reason = interaction.options.getString('reason') || 'No reason provided';
 
       if (!targetName) {
         const msg = '❌ Please specify a username to unban! Example: `|unban john_doe`';
@@ -63,7 +58,8 @@ module.exports = {
       const targetNameLower = targetName.toLowerCase();
       const banEntry = banList.find(b => 
         b.user.username.toLowerCase() === targetNameLower || 
-        b.user.tag.toLowerCase() === targetNameLower
+        b.user.tag.toLowerCase() === targetNameLower ||
+        b.user.id === targetNameLower
       );
 
       if (!banEntry) {
@@ -109,26 +105,37 @@ module.exports = {
     }
   },
 
+  // 🌟 FIXED: Unified properties alignment, safe text selection indices, and redirect handlers
   async executePrefix(message, argsArray, client) {
     if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
       return message.reply('❌ Permissions required!').catch(() => null);
     }
 
-    const usernameArg = argsArray[0] ? argsArray[0].trim() : null;
+    const usernameArg = argsArray && argsArray[0] ? argsArray[0].trim() : null;
     const reasonArg = argsArray && argsArray.length > 1 ? argsArray.slice(1).join(' ') : 'No reason provided';
 
     const mockInteraction = {
+      isMock: true,
       guild: message.guild,
       guildId: message.guild.id,
       member: message.member,
-      user: message.author,
-      isCommand: () => false,
+      author: message.author, // Aligns beautifully with text sender scopes
+      processingMessage: null,
       options: {
         getString: (name) => name === 'username' ? usernameArg : reasonArg
       },
-      reply: async (options) => message.reply(options)
+      reply: async (options) => {
+        return message.reply(options);
+      },
+      // Redirect state corrections directly onto processing message instances
+      editReply: async (options) => {
+        if (mockInteraction.processingMessage) {
+          return mockInteraction.processingMessage.edit(options);
+        }
+        return message.reply(options);
+      }
     };
 
-    await this.execute(mockInteraction, client).catch(err => console.error('Error handling inline unban prefix wrapper:', err));
+    await this.execute(mockInteraction, client).catch(err => console.error('Error handling unban prefix wrapper:', err));
   }
 };

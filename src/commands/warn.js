@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { logAction } = require('../utils/auditLog');
-const db = require('../utils/database'); // Points to your old-shape mapping framework
+const db = require('../utils/database'); // Restored your internal adapter mapping
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -12,18 +12,18 @@ module.exports = {
   name: 'warn',
 
   async execute(interaction, client) {
-    // 🌟 FIX: Checked for ChatInputCommand safely without using broken function calls
-    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options ? true : false);
+    // Standardize checking layer to see if it is a real interaction or text mock
+    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options && !interaction.isMock ? true : false);
 
-    // 🌟 ENFORCED PATTERN: Instantly extend the timeout lifetime to 15 minutes
     if (isInteraction) {
       await interaction.deferReply().catch(() => null);
     } else {
-      await interaction.reply('⏳ Writing infraction to cluster logs...').catch(() => null);
+      // Safely monitor prefix status updates to prevent multiple text outputs
+      interaction.processingMessage = await interaction.reply('⏳ Writing infraction to cluster logs...').catch(() => null);
     }
 
     const guild = interaction.guild;
-    const author = isInteraction ? interaction.user : interaction.author; // 🌟 FIX: Handled user fallbacks
+    const author = isInteraction ? interaction.user : interaction.author; 
     const memberExecutor = interaction.member;
     const guildId = interaction.guildId;
 
@@ -105,11 +105,13 @@ module.exports = {
     }
   },
 
-  // 🌟 ADDED: Complete prefix execution block to handle text commands flawlessly
+  // 🌟 FIXED: Implemented clean argument text parsing index and status update redirects
   async executePrefix(message, argsArray, client) {
     let targetUser = message.mentions.users.first();
+    
+    // Correct index check targeting index 0 directly to prevent crashes
     if (!targetUser && argsArray && argsArray.length > 0) {
-      const pureId = argsArray.replace(/[^0-9]/g, '');
+      const pureId = argsArray[0].replace(/[^0-9]/g, '');
       if (pureId.length >= 17 && pureId.length <= 20) {
         targetUser = await client.users.fetch(pureId).catch(() => null);
       }
@@ -117,15 +119,26 @@ module.exports = {
     const reasonText = argsArray && argsArray.length > 1 ? argsArray.slice(1).join(' ') : '';
 
     const mockInteraction = {
+      isMock: true,
       guild: message.guild,
       guildId: message.guild?.id,
       member: message.member,
       author: message.author,
+      processingMessage: null,
       options: {
         getUser: (name) => targetUser,
         getString: (name) => reasonText
       },
-      reply: async (options) => message.reply(options)
+      reply: async (options) => {
+        return message.reply(options);
+      },
+      // Redirect state updates back to the temporary message reference seamlessly
+      editReply: async (options) => {
+        if (mockInteraction.processingMessage) {
+          return mockInteraction.processingMessage.edit(options);
+        }
+        return message.reply(options);
+      }
     };
     await this.execute(mockInteraction, client).catch(() => null);
   }

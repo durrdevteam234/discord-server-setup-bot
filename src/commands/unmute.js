@@ -11,12 +11,14 @@ module.exports = {
   name: 'unmute',
 
   async execute(interaction, client) {
-    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options ? true : false);
+    // Correct checking layer to see if it is a real interaction or text mock
+    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options && !interaction.isMock ? true : false);
 
     if (isInteraction) {
       await interaction.deferReply().catch(() => null);
     } else {
-      await interaction.reply('⏳ Processing unmute transaction...').catch(() => null);
+      // Keep track of the initial processing status message for text commands
+      interaction.processingMessage = await interaction.reply('⏳ Processing unmute transaction...').catch(() => null);
     }
 
     const guild = interaction.guild;
@@ -84,24 +86,38 @@ module.exports = {
     }
   },
 
+  // 🌟 FIXED: Safe argument string conversion and modular state tracking placeholders
   async executePrefix(message, argsArray, client) {
     let targetUser = message.mentions.users.first();
+    
+    // Correct index selection mapping implemented to avoid crashes
     if (!targetUser && argsArray && argsArray.length > 0) {
-      const pureId = argsArray.replace(/[^0-9]/g, '');
+      const pureId = argsArray[0].replace(/[^0-9]/g, '');
       if (pureId.length >= 17 && pureId.length <= 20) {
         targetUser = await client.users.fetch(pureId).catch(() => null);
       }
     }
 
     const mockInteraction = {
+      isMock: true,
       guild: message.guild,
       guildId: message.guild?.id,
       member: message.member,
       author: message.author,
+      processingMessage: null,
       options: {
         getUser: (name) => targetUser
       },
-      reply: async (options) => message.reply(options)
+      reply: async (options) => {
+        return message.reply(options);
+      },
+      // Safely redirects edit status calls directly back to the active channel thread
+      editReply: async (options) => {
+        if (mockInteraction.processingMessage) {
+          return mockInteraction.processingMessage.edit(options);
+        }
+        return message.reply(options);
+      }
     };
     await this.execute(mockInteraction, client).catch(() => null);
   }
