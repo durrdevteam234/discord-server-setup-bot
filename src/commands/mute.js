@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { logAction } = require('../utils/auditLog');
-const database = require('../utils/database'); // Updated to use your live MongoDB layout connection
+const db = require('../utils/database'); // Restored your internal adapter mapping
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -18,6 +18,13 @@ module.exports = {
 
   async execute(interaction, client) {
     const isInteraction = interaction.isCommand ? interaction.isCommand() : false;
+
+    if (isInteraction) {
+      await interaction.deferReply().catch(() => null);
+    } else {
+      await interaction.reply('⏳ Processing mute transaction...').catch(() => null);
+    }
+
     const guild = interaction.guild;
     const author = interaction.user; 
     const memberExecutor = interaction.member;
@@ -25,38 +32,28 @@ module.exports = {
 
     if (!memberExecutor.permissions.has(PermissionFlagsBits.ModerateMembers)) {
       const msg = '❌ You need Moderate Members permission!';
-      return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
+      return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
     }
 
     try {
-      let user;
-      let durationInput;
-      let reason;
-
-      if (isInteraction) {
-        user = interaction.options.getUser('user');
-        durationInput = interaction.options.getString('duration');
-        reason = interaction.options.getString('reason') || 'No reason provided';
-      } else {
-        user = interaction.options.getUser('user');
-        durationInput = interaction.options.getString('duration');
-        reason = interaction.options.getString('reason') || 'No reason provided';
-      }
+      const user = interaction.options.getUser('user');
+      const durationInput = interaction.options.getString('duration');
+      const reason = interaction.options.getString('reason') || 'No reason provided';
 
       if (!user) {
         const msg = '❌ Please mention a valid user or provide a valid user ID.';
-        return interaction.reply({ content: msg, ephemeral: true }).catch(() => null);
+        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
       }
 
       const member = await guild.members.fetch({ user: user.id, force: true }).catch(() => null);
       if (!member) {
         const msg = '❌ This user is not in the server! You cannot mute someone who is not here.';
-        return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
+        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
       }
 
       if (!durationInput) {
         const msg = '❌ Please specify a duration. Example: `30m`, `4h`, `5d`, `2w`';
-        return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
+        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
       }
 
       const durationRegex = /^(\d+)([mhdw])$/i;
@@ -64,7 +61,7 @@ module.exports = {
 
       if (!match) {
         const msg = '❌ Invalid format! Use numbers followed by unit: `m` (minutes), `h` (hours), `d` (days), `w` (weeks).';
-        return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
+        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
       }
 
       const amount = parseInt(match[1], 10);
@@ -81,37 +78,27 @@ module.exports = {
 
       if (durationMs < MIN_MS || durationMs > MAX_MS) {
         const msg = '❌ Duration must be between **1 minute (1m)** and **28 days (28d)**!';
-        return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
+        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
       }
 
       if (!member.moderatable) {
         const msg = '❌ I cannot mute this user! Their roles might be higher than mine or yours.';
-        return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
+        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
       }
 
       await member.timeout(durationMs, reason);
 
-      // ========================================================
-      // NEW: MONGO-DB TIMEOUT BACKEND INFRASTRUCTURE WRITING
-      // ========================================================
-      const muteExpiryTime = Date.now() + durationMs;
-      await database.findOneAndUpdate(
-        { guildId: guildId },
-        { 
-          $set: { 
-            [`activeMutes.${user.id}`]: { muteEnd: muteExpiryTime, reason: reason }
-          } 
-        },
-        { upsert: true }
-      ).catch(() => null);
+      // 🌟 ADAPTER RESOLUTION: Safe write data processing back to collection schemas
+      const mutes = (await db.readData('mutes.json')) || {};
+      if (!mutes[guildId]) mutes[guildId] = {};
+      mutes[guildId][user.id] = { muteEnd: Date.now() + durationMs, reason };
+      await db.writeData('mutes.json', mutes);
 
-      // ========================================================
-      // MONGO-DB UNIFIED MOD LOGS SYSTEM RESOLUTION
-      // ========================================================
-      const guildConfig = await database.findOne({ guildId: guildId }).catch(() => null) || {};
+      const settings = (await db.readData('settings.json')) || {};
+      const currentGuildSettings = settings[guildId] || {};
       
-      if (guildConfig.modLogsEnabled && guildConfig.unifiedLogChannelId) {
-        const modLogsChannel = guild.channels.cache.get(guildConfig.unifiedLogChannelId) || await guild.channels.fetch(guildConfig.unifiedLogChannelId).catch(() => null);
+      if (currentGuildSettings.modLogsEnabled && currentGuildSettings.unifiedLogChannelId) {
+        const modLogsChannel = guild.channels.cache.get(currentGuildSettings.unifiedLogChannelId) || await guild.channels.fetch(currentGuildSettings.unifiedLogChannelId).catch(() => null);
         
         if (modLogsChannel) {
           const embedLog = new EmbedBuilder()
@@ -135,11 +122,11 @@ module.exports = {
         .setTitle('✅ User Muted')
         .setDescription(`${user.username} has been muted for ${durationInput.toLowerCase()}.\nReason: ${reason}`);
 
-      return interaction.reply({ embeds: [embed] });
+      return isInteraction ? interaction.editReply({ embeds: [embed] }) : interaction.reply({ embeds: [embed] });
     } catch (error) {
       console.error('Mute error:', error);
       const msg = `❌ Error muting user: ${error.message}`;
-      return interaction.reply({ content: msg, ephemeral: true }).catch(() => null);
+      return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
     }
   },
 };

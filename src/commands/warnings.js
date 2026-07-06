@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
-const database = require('../utils/database'); // Updated to point directly to your MongoDB client model
+const db = require('../utils/database'); // Points to your old-shape mapping framework
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -11,66 +11,60 @@ module.exports = {
 
   async execute(interaction, client) {
     const isInteraction = interaction.isCommand ? interaction.isCommand() : false;
+
+    // 🌟 ENFORCED PATTERN: Instantly extend the timeout lifetime to 15 minutes
+    if (isInteraction) {
+      await interaction.deferReply().catch(() => null);
+    } else {
+      await interaction.reply('⏳ Querying collection histories...').catch(() => null);
+    }
+
     const guild = interaction.guild;
     const memberExecutor = interaction.member;
     const guildId = interaction.guildId;
 
     if (!memberExecutor.permissions.has(PermissionFlagsBits.ModerateMembers)) {
       const msg = '❌ You need Moderate Members permission!';
-      return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
+      return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
     }
 
     try {
-      let user;
-
-      if (isInteraction) {
-        user = interaction.options.getUser('user');
-      } else {
-        user = interaction.options.getUser('user');
-      }
+      const user = interaction.options.getUser('user');
 
       if (!user) {
         const msg = '❌ Please mention a valid user or provide a valid user ID.';
-        return interaction.reply({ content: msg, ephemeral: true }).catch(() => null);
+        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
       }
 
-      // ========================================================
-      // NEW: FETCH HISTORICAL INFRASTRUCTURE LOGS FROM MONGO-DB
-      // ========================================================
-      const guildConfig = await database.findOne({ guildId: guildId }).catch(() => null) || {};
-      const userWarnings = guildConfig.warnings?.[user.id] || [];
+      // 🌟 ADAPTER RECONSTRUCTION: Safely parsing historical records out of your setup array maps
+      const warnings = (await db.readData('warnings.json')) || {};
+      const userWarnings = warnings[guildId]?.[user.id] || [];
 
       if (userWarnings.length === 0) {
         const msg = `✅ **${user.username}** has no active warnings on this server!`;
-        return interaction.reply({ content: msg }).catch(() => null);
+        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply({ content: msg });
       }
-
-      let cuteStyle = 'off';
-      try {
-        cuteStyle = guildConfig.cuteStyle || 'off'; // Reads cute configuration mapping straight from doc schema
-      } catch (_) {}
       
       const embed = new EmbedBuilder()
         .setColor('#FF6600')
         .setTitle(`📜 Warnings History: ${user.username}`)
-        .setDescription(`Total Tracked Server Infractions: **${userWarnings.length}**`);
+        .setDescription('Total Tracked Server Infractions: **' + userWarnings.length + '**');
 
-      // Limit fields to 25 to prevent hitting hard Discord embed limits on messy targets
       userWarnings.slice(0, 25).forEach((warning, index) => {
         const timestampMs = warning.timestamp ? Math.floor(new Date(warning.timestamp).getTime() / 1000) : null;
-        const timeDisplay = timestampMs ? `<t:${timestampMs}:R>` : '`Unknown Date`';
+        const timeDisplay = timestampMs ? '<t:' + timestampMs + ':R>' : '`Unknown Date`';
 
         embed.addFields({
-          name: `⚠️ Infraction Entry #${index + 1}`,
-          value: `**Reason:** ${warning.reason}\n**Staff ID:** <@${warning.moderatorId}>\n**Issued:** ${timeDisplay}`,
+          name: '⚠️ Infraction Entry #' + (index + 1),
+          value: '**Reason:** ' + warning.reason + '\n**Staff ID:** <@' + warning.moderatorId + '>\n**Issued:** ' + timeDisplay,
         });
       });
 
-      return interaction.reply({ embeds: [embed] });
+      return isInteraction ? interaction.editReply({ embeds: [embed] }) : interaction.reply({ embeds: [embed] });
     } catch (error) {
       console.error('Warnings error:', error);
       const msg = `❌ Error fetching warnings: ${error.message}`;
-      return interaction.reply({ content: msg, ephemeral: true }).catch(() => null);
+      return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
     }
   },
 };

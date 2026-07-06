@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { logAction } = require('../utils/auditLog');
-const database = require('../utils/database'); // Points to your live MongoDB client model
+const db = require('../utils/database'); // Restored your internal adapter mapping
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -26,9 +26,15 @@ module.exports = {
     const memberExecutor = interaction.member;
     const guildId = interaction.guildId;
 
+    if (isInteraction) {
+      await interaction.deferReply().catch(() => null);
+    } else {
+      await interaction.reply('⏳ Querying ban list registries...').catch(() => null);
+    }
+
     if (!memberExecutor.permissions.has(PermissionFlagsBits.BanMembers)) {
       const msg = '❌ You need Ban Members permission to revoke bans!';
-      return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
+      return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
     }
 
     try {
@@ -45,17 +51,15 @@ module.exports = {
 
       if (!targetName) {
         const msg = '❌ Please specify a username to unban! Example: `|unban john_doe`';
-        return interaction.reply({ content: msg, ephemeral: true }).catch(() => null);
+        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
       }
 
-      // Fetch the full server ban registry directly from the Discord API
       const banList = await guild.bans.fetch({ cache: false }).catch(() => null);
       if (!banList || banList.size === 0) {
         const msg = '❌ There are no banned users registered on this server!';
-        return interaction.reply({ content: msg, ephemeral: true }).catch(() => null);
+        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
       }
 
-      // 🔍 SCANNING ROUTINE: Search for a matching profile name inside the ban collection
       const targetNameLower = targetName.toLowerCase();
       const banEntry = banList.find(b => 
         b.user.username.toLowerCase() === targetNameLower || 
@@ -64,20 +68,17 @@ module.exports = {
 
       if (!banEntry) {
         const msg = `❌ Could not find a banned user named **${targetName}**! Ensure spelling matches exactly.`;
-        return interaction.reply({ content: msg, ephemeral: true }).catch(() => null);
+        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
       }
 
       const user = banEntry.user;
-
-      // Execute the native unban operation using the discovered user ID
       await guild.members.unban(user.id, reason);
-      // ========================================================
-      // MONGO-DB UNIFIED MOD LOGS SYSTEM RESOLUTION
-      // ========================================================
-      const guildConfig = await database.findOne({ guildId: guildId }).catch(() => null) || {};
+
+      const settings = (await db.readData('settings.json')) || {};
+      const currentGuildSettings = settings[guildId] || {};
       
-      if (guildConfig.modLogsEnabled && guildConfig.unifiedLogChannelId) {
-        const modLogsChannel = guild.channels.cache.get(guildConfig.unifiedLogChannelId) || await guild.channels.fetch(guildConfig.unifiedLogChannelId).catch(() => null);
+      if (currentGuildSettings.modLogsEnabled && currentGuildSettings.unifiedLogChannelId) {
+        const modLogsChannel = guild.channels.cache.get(currentGuildSettings.unifiedLogChannelId) || await guild.channels.fetch(currentGuildSettings.unifiedLogChannelId).catch(() => null);
         
         if (modLogsChannel) {
           const embedLog = new EmbedBuilder()
@@ -100,24 +101,22 @@ module.exports = {
         .setTitle('✅ User Unbanned')
         .setDescription(`**${user.username}** has been successfully unbanned.\nReason: ${reason}`);
 
-      return interaction.reply({ embeds: [embed] });
+      return isInteraction ? interaction.editReply({ embeds: [embed] }) : interaction.reply({ embeds: [embed] });
     } catch (error) {
       console.error('Unban error:', error);
       const msg = `❌ Error unbanning user: ${error.message}`;
-      return interaction.reply({ content: msg, ephemeral: true }).catch(() => null);
+      return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
     }
   },
 
-  // Prefix translation pipeline parsing strings for username lookup compatibility
   async executePrefix(message, argsArray, client) {
     if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
       return message.reply('❌ Permissions required!').catch(() => null);
     }
 
-    const usernameArg = argsArray ? argsArray.trim() : null;
+    const usernameArg = argsArray[0] ? argsArray[0].trim() : null;
     const reasonArg = argsArray && argsArray.length > 1 ? argsArray.slice(1).join(' ') : 'No reason provided';
 
-    // Mock options emulator mapping text string metrics to target execute checks
     const mockInteraction = {
       guild: message.guild,
       guildId: message.guild.id,
@@ -133,4 +132,3 @@ module.exports = {
     await this.execute(mockInteraction, client).catch(err => console.error('Error handling inline unban prefix wrapper:', err));
   }
 };
-

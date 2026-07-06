@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { logAction } = require('../utils/auditLog');
-const database = require('../utils/database'); // Updated to use your live MongoDB layout connection
+const db = require('../utils/database'); // Points to your old-shape mapping framework
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -13,6 +13,14 @@ module.exports = {
 
   async execute(interaction, client) {
     const isInteraction = interaction.isCommand ? interaction.isCommand() : false;
+
+    // 🌟 ENFORCED PATTERN: Instantly extend the timeout lifetime to 15 minutes
+    if (isInteraction) {
+      await interaction.deferReply().catch(() => null);
+    } else {
+      await interaction.reply('⏳ Writing infraction to cluster logs...').catch(() => null);
+    }
+
     const guild = interaction.guild;
     const author = interaction.user; 
     const memberExecutor = interaction.member;
@@ -20,71 +28,51 @@ module.exports = {
 
     if (!memberExecutor.permissions.has(PermissionFlagsBits.ModerateMembers)) {
       const msg = '❌ You need Moderate Members permission to issue warnings!';
-      return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
+      return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
     }
 
     try {
-      let user;
-      let reason;
-
-      if (isInteraction) {
-        user = interaction.options.getUser('user');
-        reason = interaction.options.getString('reason');
-      } else {
-        user = interaction.options.getUser('user');
-        reason = interaction.options.getString('reason');
-      }
+      const user = interaction.options.getUser('user');
+      const reason = interaction.options.getString('reason');
 
       if (!user) {
         const msg = '❌ Please mention a valid user or provide a valid user ID.';
-        return interaction.reply({ content: msg, ephemeral: true }).catch(() => null);
+        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
       }
 
-      // 🛑 ANTI-GHOST CHECK (Bypass Cache to verify presence)
       const member = await guild.members.fetch({ user: user.id, force: true }).catch(() => null);
       if (!member) {
         const msg = '❌ This user is not in the server! You cannot warn someone who is not here.';
-        return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
+        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
       }
 
       if (!reason) {
         const msg = '❌ Please provide a reason for the warning. Use: `|warn @user <reason>`';
-        return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
+        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
       }
 
-      // ========================================================
-      // NEW: MONGO-DB WARNING PERSISTENCE INFRASTRUCTURE
-      // ========================================================
-      const newWarning = {
+      // 🌟 ADAPTER OPERATION: Safely updating through your custom json/mongodb schema wrapper
+      const warnings = (await db.readData('warnings.json')) || {};
+      if (!warnings[guildId]) warnings[guildId] = {};
+      if (!warnings[guildId][user.id]) warnings[guildId][user.id] = [];
+
+      warnings[guildId][user.id].push({
         moderatorId: author.id,
         reason: reason,
         timestamp: new Date().toISOString()
-      };
+      });
+      await db.writeData('warnings.json', warnings);
 
-      // Push warning object directly into the nested guild config document
-      const updatedConfig = await database.findOneAndUpdate(
-        { guildId: guildId },
-        { 
-          $push: { 
-            [`warnings.${user.id}`]: newWarning 
-          } 
-        },
-        { upsert: true, new: true } // 'new: true' returns the modified document so we can read the warning length
-      ).catch(() => null) || {};
-
-      // Safeguard warning length extraction
-      const totalWarnings = updatedConfig.warnings?.[user.id]?.length || 1;
+      const totalWarnings = warnings[guildId][user.id].length;
 
       // DM the user safely
       await user.send(`⚠️ You have been warned in **${guild.name}**.\n**Reason:** ${reason}`).catch(() => null);
 
-      // ========================================================
-      // MONGO-DB UNIFIED MOD LOGS SYSTEM RESOLUTION
-      // ========================================================
-      const guildConfig = await database.findOne({ guildId: guildId }).catch(() => null) || {};
+      const settings = (await db.readData('settings.json')) || {};
+      const currentGuildSettings = settings[guildId] || {};
       
-      if (guildConfig.modLogsEnabled && guildConfig.unifiedLogChannelId) {
-        const modLogsChannel = guild.channels.cache.get(guildConfig.unifiedLogChannelId) || await guild.channels.fetch(guildConfig.unifiedLogChannelId).catch(() => null);
+      if (currentGuildSettings.modLogsEnabled && currentGuildSettings.unifiedLogChannelId) {
+        const modLogsChannel = guild.channels.cache.get(currentGuildSettings.unifiedLogChannelId) || await guild.channels.fetch(currentGuildSettings.unifiedLogChannelId).catch(() => null);
         
         if (modLogsChannel) {
           const embedLog = new EmbedBuilder()
@@ -108,11 +96,11 @@ module.exports = {
         .setTitle('⚠️ User Warned')
         .setDescription(`${user.username} has been warned.\nReason: ${reason}\nTotal warnings: **${totalWarnings}**`);
 
-      return interaction.reply({ embeds: [embed] });
+      return isInteraction ? interaction.editReply({ embeds: [embed] }) : interaction.reply({ embeds: [embed] });
     } catch (error) {
       console.error('Warn error:', error);
       const msg = `❌ Error running warning system: ${error.message}`;
-      return interaction.reply({ content: msg, ephemeral: true }).catch(() => null);
+      return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
     }
   },
 };

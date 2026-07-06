@@ -1,84 +1,92 @@
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require('discord.js');
-const database = require('../utils/database.js'); 
+const db = require('../utils/database.js'); // Points back to your native helper wrapper
 
 module.exports = {
     name: 'setup-audit',
-    description: 'Configure or disable the server audit log channel.',
+    description: 'Configure, enable, or disable the server audit log channel.',
     data: new SlashCommandBuilder()
         .setName('setup-audit')
-        .setDescription('Configure or disable the server audit log channel.')
+        .setDescription('Configure, enable, or disable the server audit log channel.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator | PermissionFlagsBits.ManageGuild)
+        .addStringOption(option =>
+            option.setName('action')
+                .setDescription('Select whether to enable or disable the audit log engine')
+                .setRequired(true)
+                .addChoices(
+                    { name: 'Enable Logs', value: 'enable' },
+                    { name: 'Disable Logs', value: 'disable' }
+                )
+        )
         .addChannelOption(option => 
             option.setName('channel')
-                .setDescription('The text channel to send audit logs to')
+                .setDescription('The target channel to send logs to (Required if enabling)')
                 .addChannelTypes(ChannelType.GuildText)
-                .setRequired(false)
-        )
-        .addStringOption(option =>
-            option.setName('status')
-                .setDescription('Disable the audit logging engine completely')
-                .addChoices({ name: 'Disable Logs', value: 'disable' })
                 .setRequired(false)
         ),
 
     async execute(interaction) {
+        const isInteraction = interaction.isCommand ? interaction.isCommand() : false;
+
+        // Extend interaction token lifetime right away to stop timeout crashes
+        if (isInteraction) {
+            await interaction.deferReply().catch(() => null);
+        }
+
         const guildId = interaction.guildId;
-        const channelOption = interaction.options.getChannel('channel');
-        const statusOption = interaction.options.getString('status');
+        const actionOption = isInteraction ? interaction.options.getString('action') : interaction.options.getString('action');
+        const channelOption = isInteraction ? interaction.options.getChannel('channel') : interaction.options.getChannel('channel');
 
-        if (statusOption === 'disable') {
-            // Update MongoDB document to unset or wipe the channel ID
-            await database.findOneAndUpdate(
-                { guildId: guildId },
-                { $set: { auditChannelId: null } },
-                { upsert: true }
-            ).catch(() => null);
-            return interaction.reply({ content: '🛑 Audit logs have been disabled for this server.', ephemeral: false }).catch(() => null);
+        // Fetch current active server settings through your specific dynamic adapter format
+        const settings = (await db.readData('settings.json')) || {};
+        if (!settings[guildId]) settings[guildId] = {};
+
+        if (actionOption === 'disable') {
+            settings[guildId].auditChannelId = null;
+            await db.writeData('settings.json', settings);
+
+            const msg = '🛑 Audit logs have been successfully disabled for this server.';
+            return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
         }
 
-        if (channelOption) {
-            // Update MongoDB document to save the new channel ID
-            await database.findOneAndUpdate(
-                { guildId: guildId },
-                { $set: { auditChannelId: channelOption.id } },
-                { upsert: true }
-            ).catch(() => null);
-            return interaction.reply({ content: `✅ Audit logs have been successfully enabled in ${channelOption}!`, ephemeral: false }).catch(() => null);
-        }
+        if (actionOption === 'enable') {
+            if (!channelOption) {
+                const msg = '❌ Please specify a target channel to send logs to! Usage: `/setup-audit action:Enable Logs channel:#channel`';
+                return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+            }
 
-        return interaction.reply({ 
-            content: "❌ Please provide a target channel or select status disable parameter option fields. Usage: `/setup-audit channel:#channel`", 
-            ephemeral: true 
-        }).catch(() => null);
+            settings[guildId].auditChannelId = channelOption.id;
+            await db.writeData('settings.json', settings);
+
+            const msg = `✅ Audit logs have been successfully enabled and routed to ${channelOption}!`;
+            return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+        }
     },
 
-    async executePrefix(message, args, client) {
+    async executePrefix(message, argsArray, client) {
         if (!message.member.permissions.has(PermissionFlagsBits.ManageGuild) && !message.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return message.reply("❌ You need **Manage Server** or **Administrator** permissions to use this command!").catch(() => null);
         }
 
-        const action = args && args[0] ? args[0].toLowerCase() : null;
-        const guildId = message.guild.id;
-
-        if (action === 'disable') {
-            await database.findOneAndUpdate(
-                { guildId: guildId },
-                { $set: { auditChannelId: null } },
-                { upsert: true }
-            ).catch(() => null);
-            return message.reply('🛑 Audit logs have been disabled for this server.').catch(() => null);
+        const action = argsArray && argsArray[0] ? argsArray[0].toLowerCase().trim() : null;
+        if (action !== 'enable' && action !== 'disable') {
+            return message.reply('❌ Usage: `|setup-audit enable #channel` or `|setup-audit disable`.').catch(() => null);
         }
 
-        const targetChannel = message.mentions.channels.first() || (action ? message.guild.channels.cache.get(action) : null);
-        if (!targetChannel || targetChannel.type !== ChannelType.GuildText) {
-            return message.reply('❌ Please specify a text channel! Example: `|setup-audit #channel` or `|setup-audit disable`.').catch(() => null);
-        }
+        const targetChannel = message.mentions.channels.first() || (argsArray && argsArray[1] ? message.guild.channels.cache.get(argsArray[1]) : null);
 
-        await database.findOneAndUpdate(
-            { guildId: guildId },
-            { $set: { auditChannelId: targetChannel.id } },
-            { upsert: true }
-        ).catch(() => null);
-        return message.reply(`✅ Audit logs have been successfully enabled in ${targetChannel}!`).catch(() => null);
+        // Build a mock interaction options setup mirroring the core slash subcommands
+        const mockInteraction = {
+            guild: message.guild,
+            guildId: message.guild.id,
+            member: message.member,
+            user: message.author,
+            options: {
+                getString: (name) => action,
+                getChannel: (name) => targetChannel
+            },
+            reply: async (options) => message.reply(options)
+        };
+
+        await this.execute(mockInteraction).catch(err => console.error('Error handling inline setup-audit prefix wrapper:', err));
     }
 };

@@ -26,6 +26,24 @@ intents: [
 client.commands = new Collection();
 client.prefix = process.env.PREFIX || '|';
 
+// 🌟 FIX 1: Attach absolute WebSocket and Gateway crash safety hooks
+client.on('error', (error) => {
+    console.error('⚠️ [DISCORD GATEWAY ERROR]:', error.message);
+});
+
+client.on('warn', (info) => {
+    console.warn('⚠️ [DISCORD GATEWAY WARNING]:', info);
+});
+
+// 🌟 FIX 2: Attach absolute top-level process exception catches to block Render crashes
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('🛑 [CRASH PREVENTED - UNHANDLED REJECTION AT]:', promise, 'REASON:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+    console.error('🛑 [CRASH PREVENTED - UNCAUGHT EXCEPTION DETECTED]:', error.stack || error);
+});
+
 // ==========================================
 // 2. LOAD COMMANDS DYNAMICALLY (SLASH & PREFIX)
 // ==========================================
@@ -101,7 +119,12 @@ res.status(200).send('ServerMiser Dashboard API backend is active and fully func
 
 app.get('/api/stats', async (req, res) => {
 try {
-  const db = mongoose.connection.db;
+  // Safe Fallback Resolution Layer checking database status natively
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({ status: "offline", error: "Database offline" });
+  }
+
+  const databaseModel = require('./utils/database'); // Imports your schema model directly
   const totalServers = client?.guilds?.cache?.size ?? 0;
   const totalUsers = client?.guilds?.cache?.reduce((acc, g) => acc + g.memberCount, 0) ?? 0;
   const botPing = client?.ws?.ping !== -1 ? Math.round(client?.ws?.ping ?? 0) : 0;
@@ -111,24 +134,24 @@ try {
   const seconds = Math.floor(totalSeconds % 60);
   const uptimeString = client?.readyAt ? `${hours}h ${minutes}m ${seconds}s` : "0h 0m 0s";
 
-  let totalXp = 0; let leveledUsers = 0;
+  let totalXp = 0; let leveledUsers = 0; let totalTickets = 0;
+  
   try {
-    const levelDocs = await db.collection('levels').find().toArray();
-    for (const doc of levelDocs) {
-      if (doc.value && typeof doc.value === 'object') {
-        for (const guildData of Object.values(doc.value)) {
-          if (typeof guildData === 'object') {
-            for (const userData of Object.values(guildData)) {
-              totalXp += userData.xp || 0; leveledUsers++;
-            }
-          }
+    // 🌟 FIX: Query your live unified MongoDB config collection documents instead of dead files
+    const allGuildDocs = await databaseModel.find({}).catch(() => []);
+    
+    for (const doc of allGuildDocs) {
+      if (doc.levelsData) {
+        for (const userData of Object.values(doc.levelsData)) {
+          totalXp += userData.xp || 0; 
+          leveledUsers++;
         }
+      }
+      if (doc.reactionRolePanels) {
+        totalTickets += doc.reactionRolePanels.length; // Uses panel arrays to track metrics smoothly
       }
     }
   } catch (_) {}
-
-  let totalTickets = 0;
-  try { totalTickets = await db.collection('tickets').countDocuments(); } catch (_) {}
 
   res.json({
     status: client?.readyAt ? "online" : "offline",
@@ -140,23 +163,23 @@ try {
 
 app.get('/api/leaderboard', async (req, res) => {
 try {
-  const db = mongoose.connection.db;
-  const levelDocs = await db.collection('levels').find().toArray();
+  if (mongoose.connection.readyState !== 1) return res.status(503).json([]);
+  
+  const databaseModel = require('./utils/database');
+  const allGuildDocs = await databaseModel.find({}).catch(() => []);
   const serverTotals = [];
-  for (const doc of levelDocs) {
-    if (doc.value && typeof doc.value === 'object') {
-      for (const [guildId, guildData] of Object.entries(doc.value)) {
-        if (typeof guildData === 'object') {
-          let xp = 0;
-          for (const userData of Object.values(guildData)) {
-            xp += (userData.xp || 0) + (userData.level || 1) * 100;
-          }
-          const guild = client?.guilds?.cache?.get(guildId) || await client?.guilds?.fetch(guildId).catch(() => null);
-          serverTotals.push({ name: guild?.name || 'Unknown Server', totalXp: xp });
-        }
+
+  for (const doc of allGuildDocs) {
+    if (doc.levelsData && doc.guildId) {
+      let xp = 0;
+      for (const userData of Object.values(doc.levelsData)) {
+        xp += (userData.xp || 0) + (userData.level || 0) * 100;
       }
+      const guild = client?.guilds?.cache?.get(doc.guildId) || await client?.guilds?.fetch(doc.guildId).catch(() => null);
+      serverTotals.push({ name: guild?.name || `Server (${doc.guildId})`, totalXp: xp });
     }
   }
+  
   serverTotals.sort((a, b) => b.totalXp - a.totalXp);
   res.json(serverTotals.slice(0, 10));
 } catch (err) { res.status(500).json({ error: err.message }); }

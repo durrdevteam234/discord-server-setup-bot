@@ -1,7 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { logAction = () => {} } = require('../utils/auditLog');
-const database = require('../utils/database'); // Updated to point directly to your MongoDB client model
-const { formatCute } = require('../utils/textFormatter.js');
+const db = require('../utils/database'); // Restored your internal adapter mapping
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -13,57 +12,53 @@ module.exports = {
   name: 'kick',
 
   async execute(interaction, client) {
-    // Structural compatibility verification layer for hybrid interaction tracking 
     const isInteraction = interaction.isCommand ? interaction.isCommand() : false;
+    
+    // 🌟 ENFORCED PATTERN: Instantly extend the timeout lifetime to 15 minutes
+    if (isInteraction) {
+      await interaction.deferReply().catch(() => null);
+    } else {
+      await interaction.reply('⏳ Processing kick command...').catch(() => null);
+    }
+
     const guild = interaction.guild;
-    const author = isInteraction ? interaction.user : interaction.user; // interaction emulator maps message author to user field
+    const author = interaction.user; 
     const memberExecutor = interaction.member;
     const guildId = interaction.guildId;
 
     if (!memberExecutor.permissions.has(PermissionFlagsBits.KickMembers)) {
       const msg = '❌ You need Kick Members permission!';
-      return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
+      return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
     }
 
     try {
-      let user;
-      let reason;
-
-      if (isInteraction) {
-        user = interaction.options.getUser('user');
-        reason = interaction.options.getString('reason') || 'No reason provided';
-      } else {
-        // Read string entries directly via the robust options system built inside your messageCreate emulator
-        user = interaction.options.getUser('user');
-        reason = interaction.options.getString('reason') || 'No reason provided';
-      }
+      const user = interaction.options.getUser('user');
+      const reason = interaction.options.getString('reason') || 'No reason provided';
 
       if (!user) {
         const msg = '❌ Please mention a valid user or provide a valid user ID.';
-        return interaction.reply({ content: msg, ephemeral: true }).catch(() => null);
+        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
       }
 
-      // 🛑 ANTI-GHOST CHECK (Bypass Cache to verify presence)
       const member = await guild.members.fetch({ user: user.id, force: true }).catch(() => null);
       if (!member) {
         const msg = '❌ This user is not in the server! You cannot kick someone who has already left.';
-        return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
+        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
       }
 
       if (!member.kickable) {
         const msg = '❌ I cannot kick this user! Their roles are higher than mine or yours.';
-        return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
+        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
       }
 
       await member.kick(reason);
 
-      // ========================================================
-      // MONGO-DB UNIFIED MOD LOGS SYSTEM RESOLUTION
-      // ========================================================
-      const guildConfig = await database.findOne({ guildId: guildId }).catch(() => null) || {};
+      // 🌟 ADAPTER RESOLUTION: Reverted back to your functional collection mapping structures
+      const settings = (await db.readData('settings.json')) || {};
+      const currentGuildSettings = settings[guildId] || {};
       
-      if (guildConfig.modLogsEnabled && guildConfig.unifiedLogChannelId) {
-        const modLogsChannel = guild.channels.cache.get(guildConfig.unifiedLogChannelId) || await guild.channels.fetch(guildConfig.unifiedLogChannelId).catch(() => null);
+      if (currentGuildSettings.modLogsEnabled && currentGuildSettings.unifiedLogChannelId) {
+        const modLogsChannel = guild.channels.cache.get(currentGuildSettings.unifiedLogChannelId) || await guild.channels.fetch(currentGuildSettings.unifiedLogChannelId).catch(() => null);
         
         if (modLogsChannel) {
           const embedLog = new EmbedBuilder()
@@ -86,11 +81,11 @@ module.exports = {
         .setTitle('✅ User Kicked')
         .setDescription(`${user.username} has been kicked.\nReason: ${reason}`);
 
-      return interaction.reply({ embeds: [embed] });
+      return isInteraction ? interaction.editReply({ embeds: [embed] }) : interaction.reply({ embeds: [embed] });
     } catch (error) {
       console.error('Kick error:', error);
       const msg = `❌ Error kicking user: ${error.message}`;
-      return interaction.reply({ content: msg, ephemeral: true }).catch(() => null);
+      return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
     }
   },
 };

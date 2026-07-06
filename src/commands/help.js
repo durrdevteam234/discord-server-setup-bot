@@ -7,6 +7,13 @@ module.exports = {
   name: 'help',
 
   async execute(interaction) {
+    const isInteraction = interaction.isCommand ? interaction.isCommand() : false;
+
+    // 🌟 FIX: Instantly tell Discord to wait so it never times out
+    if (isInteraction) {
+      await interaction.deferReply().catch(() => null);
+    }
+
     const prefixText = "💡 Prefer text shortcuts? You can also trigger these commands using the prefix: |";
 
     // =========================================================
@@ -41,24 +48,6 @@ module.exports = {
       "`/meme` - Spits out a random funny, relatable lifestyle meme.";
 
     // =========================================================
-    // EMBED LAYOUT BUILDER BLOCKS
-    // =========================================================
-    const embedPage1 = new EmbedBuilder()
-      .setColor('#00FF00')
-      .setTitle('📚 Help Menu — Page 1/4 (User Commands)')
-      .setDescription('Use the action row buttons below to browse instructions.')
-      .addFields({ name: '👤 Public User Utilities', value: userCommandsPart1 })
-      .setFooter({ text: prefixText })
-      .setTimestamp();
-
-    const embedPage2 = new EmbedBuilder()
-      .setColor('#FF69B4')
-      .setTitle('📚 Help Menu — Page 2/4 (User Commands Cont.)')
-      .setDescription('Use the action row buttons below to browse instructions.')
-      .addFields({ name: '🎭 Interactive & Whimsical Modules', value: userCommandsPart2 })
-      .setFooter({ text: prefixText })
-      .setTimestamp();
-    // =========================================================
     // PAGE 3: STAFF COMMANDS (UTILITIES & UTILITY SWITCHES)
     // =========================================================
     const staffCommandsPart1 =
@@ -92,6 +81,22 @@ module.exports = {
       "`/unban <username> [reason]` - Revoke a server ban using their unique username.\n" +
       "`/reactionroles <subcommand>` - Deploy, edit, or test custom button/dropdown role panels.";
 
+    const embedPage1 = new EmbedBuilder()
+      .setColor('#00FF00')
+      .setTitle('📚 Help Menu — Page 1/4 (User Commands)')
+      .setDescription('Use the action row buttons below to browse instructions.')
+      .addFields({ name: '👤 Public User Utilities', value: userCommandsPart1 })
+      .setFooter({ text: prefixText })
+      .setTimestamp();
+
+    const embedPage2 = new EmbedBuilder()
+      .setColor('#FF69B4')
+      .setTitle('📚 Help Menu — Page 2/4 (User Commands Cont.)')
+      .setDescription('Use the action row buttons below to browse instructions.')
+      .addFields({ name: '🎭 Interactive & Whimsical Modules', value: userCommandsPart2 })
+      .setFooter({ text: prefixText })
+      .setTimestamp();
+
     const embedPage3 = new EmbedBuilder()
       .setColor('#5865F2')
       .setTitle('🛡️ Help Menu — Page 3/4 (Staff Commands)')
@@ -115,7 +120,10 @@ module.exports = {
       new ButtonBuilder().setCustomId('help_page4').setLabel('Page 4 (Staff)').setStyle(ButtonStyle.Secondary)
     );
 
-    const response = await interaction.reply({ embeds: [embedPage1], components: [buttons], fetchReply: true });
+    // 🌟 FIX: Use editReply for slash commands
+    const response = isInteraction 
+      ? await interaction.editReply({ embeds: [embedPage1], components: [buttons] })
+      : await interaction.reply({ embeds: [embedPage1], components: [buttons], fetchReply: true });
 
     const collector = response.createMessageComponentCollector({
       componentType: ComponentType.Button,
@@ -123,7 +131,7 @@ module.exports = {
     });
 
     collector.on('collect', async (btnInteraction) => {
-      const authorId = interaction.user ? interaction.user.id : interaction.author.id;
+      const authorId = isInteraction ? interaction.user.id : interaction.author.id;
       if (btnInteraction.user.id !== authorId) {
         return btnInteraction.reply({ content: '❌ Run the command yourself to flip pages!', ephemeral: true });
       }
@@ -147,7 +155,7 @@ module.exports = {
 
     collector.on('end', () => {
       buttons.components.forEach(btn => btn.setDisabled(true));
-      interaction.editReply({ components: [buttons] }).catch(() => null);
+      if (isInteraction) interaction.editReply({ components: [buttons] }).catch(() => null);
     });
   },
 
