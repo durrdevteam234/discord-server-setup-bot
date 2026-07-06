@@ -36,18 +36,25 @@ if (!TOKEN || !CLIENT_ID) {
 const commands = [];
 const commandsPath = path.join(__dirname, 'commands');
 
-// Read all JavaScript files inside the commands folder
-const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+if (fs.existsSync(commandsPath)) {
+    // Read all JavaScript files inside the commands folder
+    const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 
-for (const file of commandFiles) {
-	const filePath = path.join(commandsPath, file);
-	const command = require(filePath);
-	if ('data' in command && 'execute' in command) {
-		commands.push(command.data.toJSON());
-		console.log(`Loaded command: /${command.data.name}`);
-	} else {
-		console.log(`[WARNING] The command at ${filePath} is missing a required "data" or "execute" property.`);
-	}
+    for (const file of commandFiles) {
+        const filePath = path.join(commandsPath, file);
+        const command = require(filePath);
+        
+        // Safe optional chaining optimization to bypass prototype array export issues
+        if (command?.data?.toJSON && typeof command?.execute === 'function') {
+            commands.push(command.data.toJSON());
+            console.log(`Loaded command: /${command.data.name}`);
+        } else {
+            console.log(`[WARNING] The command at ${file} was skipped. (Ensure it has a valid SlashCommandBuilder setup)`);
+        }
+    }
+} else {
+    console.error(`❌ ERROR: The commands directory does not exist at path: ${commandsPath}`);
+    process.exit(1);
 }
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
@@ -56,7 +63,7 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
 	try {
 		console.log(`⏳ Started refreshing ${commands.length} global application (/) commands.`);
 
-		// 🌐 FIX: Registers commands GLOBALLY so they work in all servers
+		// 🌐 Registers commands GLOBALLY so they work across all servers
 		const data = await rest.put(
 			Routes.applicationCommands(CLIENT_ID),
 			{ body: commands },
