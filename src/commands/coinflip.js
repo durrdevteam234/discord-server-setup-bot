@@ -3,8 +3,8 @@ const db = require('../utils/database.js');
 
 // Permanent, working coin flip animations optimized for native chat layout embeds
 const COIN_GIFS = [
-  "https://tenor.com",
-  "https://tenor.com"
+  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExeGtyenI4dGN6MGFkNjFxcGthcW00czJqM21lbTNlMWhob2QzZjEyZiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/6jqfXikz9yzhS/giphy.gif",
+  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExeGtyenI4dGN6MGFkNjFxcGthcW00czJqM21lbTNlMWhob2QzZjEyZiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/6jqfXikz9yzhS/giphy.gif"
 ];
 
 module.exports = {

@@ -15,7 +15,7 @@ const MEMES = [
   { title: "Me looking at my total bank account balance after saying 'treat yourself' just one minor time", url: "https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3MzVudnU3ZzJyejZ4ZHF0aTJ1NHA0NGNqNHlzMWFnbTdnbWthNjJiZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/heTOo1Etgs2SohZrBg/giphy.gif" },
   { title: "The exact facial expression you make when the waiter is bringing your food over to the table", url: "https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3MzVudnU3ZzJyejZ4ZHF0aTJ1NHA0NGNqNHlzMWFnbTdnbWthNjJiZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/5quG1HRA7wjpPByjyq/giphy.gif" },
   { title: "When you hear your own voice on an audio recording and wonder how anyone stands talking to you", url: "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMzFtN25hMjYyZHVteW8yczN2dGVrdjk5emIyYW84czM4ZHd0aGQ1cSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/aM4FFzsndEiXpgiFKD/giphy.gif" },
-  { title: "Me laughing at a random joke three hours later when I finally understand what it meant", url: "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExeHQxYnhibDRxcTNmZ2FxNWJ2dXV5dWJkOTA3MWs4bHB5dXQ4NWNpcCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/QURHbD0U3CjXBZfjR1/giphy.gif" },
+  { title: "Me laughing at a random joke three hours later when I finally understand what it meant", url: "https://giphy.com" },
   { title: "When you finish an exam and have absolutely zero idea if you got a 100% score or a 0% score", url: "https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExaGE3MGJ0bjQ1cG53dWFoMGVnenc1Mzh6MWVlNWIzcnFnbnhtc3ZtcSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/cWuCpYskQfi34aGiJQ/giphy.gif" }
 ];
 
@@ -45,10 +45,11 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setColor(isCuteActive ? '#FF69B4' : '#95A5A6')
       .setTitle(isCuteActive ? `✨ 😂 ${selected.title.toUpperCase()} ✨` : `😂 ${selected.title}`)
+      .setImage(selected.url) // Added back to lock image natively inside card
       .setFooter({ text: 'Everyday Life Relatable Content' });
       
+    // Removed direct text content string parameter from reply payload layout
     await interaction.reply({ 
-      content: selected.url,
       embeds: [embed] 
     }).catch(() => null);
   },
@@ -70,10 +71,11 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setColor(isCuteActive ? '#FF69B4' : '#95A5A6')
       .setTitle(isCuteActive ? `✨ 😂 ${selected.title.toUpperCase()} ✨` : `😂 ${selected.title}`)
+      .setImage(selected.url) // Added back here as well
       .setFooter({ text: 'Everyday Life Relatable Content' });
       
+    // Removed direct text content string parameter from prefix response layout
     return message.reply({ 
-      content: selected.url,
       embeds: [embed] 
     }).catch(() => null);
   }
