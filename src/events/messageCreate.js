@@ -103,7 +103,7 @@ module.exports = {
               const createdChannel = await guild.channels.create({ name: channelData.name, type: channelData.type, parent: channelData.parent });
               if (key === 'general') createdGeneralChannelId = createdChannel.id;
             }
-            currentGuildSettings.template = templateArg;
+                        currentGuildSettings.template = templateArg;
             currentGuildSettings.channels = Object.keys(channels);
             currentGuildSettings.welcomeChannelId = createdGeneralChannelId;
             currentGuildSettings.roles = [adminRole.id, modRole.id, memberRole.id];
@@ -179,7 +179,7 @@ module.exports = {
                   getUser: (name) => resolvedTargetUser,
                   getMember: (name) => resolvedTargetMember,
                   getInteger: (name) => {
-                    const processedInt = parseInt(argsArray);
+                    const processedInt = parseInt(argsArray[0]);
                     return isNaN(processedInt) ? null : processedInt;
                   },
                   getAttachment: (name) => {
@@ -191,7 +191,7 @@ module.exports = {
                     return null;
                   },
                   get: (name) => {
-                    if (name === 'image' || name === 'file' || name === 'attachment') {
+                    if (name === 'image' || name === 'file' || name === 'attachment' || name === 'url' || name === 'link') {
                       const nativeAttachment = message.attachments.first();
                       if (nativeAttachment) return { attachment: nativeAttachment, value: nativeAttachment.id };
                       if (rawArgsString.startsWith('http://') || rawArgsString.startsWith('https://')) {
@@ -237,6 +237,9 @@ module.exports = {
       // ==========================================
       const guildId = message.guild?.id;
       if (!guildId) return;
+
+      const mainSettings = db.readData('settings.json') || {};
+      const currentGuildSettings = mainSettings[guildId] || {};
 
       const levelingSettings = db.readData('leveling_settings.json') || {};
       const levelConfig = levelingSettings[guildId] || {};
