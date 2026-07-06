@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
-const { readData, writeData } = require('../utils/database');
+const database = require('../utils/database'); // Updated to use your live MongoDB layout connection
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -20,72 +20,74 @@ module.exports = {
         .setDescription('The channel where level up messages will be sent (Optional if disabling)')
         .setRequired(false)
     ),
+  name: 'leveling',
 
-  async execute(context, args = []) {
-    const isInteraction = !!context.isChatInputCommand;
-    const guildId = context.guildId;
-    const memberExecutor = context.member;
+  async execute(interaction, client) {
+    const isInteraction = interaction.isCommand ? interaction.isCommand() : false;
+    const guildId = interaction.guildId;
+    const memberExecutor = interaction.member;
 
     if (!memberExecutor.permissions.has(PermissionFlagsBits.ManageGuild)) {
       const msg = '❌ You need Manage Server permissions!';
-      return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
+      return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
     }
 
     try {
       let status;
       let channelId = null;
 
-      // 1. Safe argument extraction
       if (isInteraction) {
-        status = context.options.getString('status').toLowerCase();
-        const channelOpt = context.options.getChannel('channel');
+        status = interaction.options.getString('status').toLowerCase();
+        const channelOpt = interaction.options.getChannel('channel');
         if (channelOpt) {
           channelId = channelOpt.id;
         }
       } else {
-        status = Array.isArray(args) ? args[0]?.toLowerCase() : (typeof args === 'string' ? args.toLowerCase() : null);
-        const channelMention = Array.isArray(args) ? args[1] : null;
-        if (channelMention) {
-          channelId = channelMention.replace(/[<#>&]/g, '');
+        // Read string entries directly via the options system inside your messageCreate emulator
+        status = interaction.options.getString('status')?.toLowerCase();
+        const channelOpt = interaction.options.getChannel('channel');
+        if (channelOpt) {
+          channelId = channelOpt.id;
         }
       }
 
-      // 2. Status Validation
       if (status !== 'enable' && status !== 'disable') {
         const msg = '❌ Invalid Syntax! Use: `|leveling <enable/disable> [#channel]`';
-        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
+        return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
       }
 
       const isActive = status === 'enable';
 
-      // 3. Enforce channel selection ONLY on enabling
       if (isActive && !channelId) {
         const msg = '❌ Please provide a valid channel to enable leveling! Use: `/leveling status:Enable channel:#channel`';
-        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
+        return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
       }
 
-      const mainSettings = (await readData('settings.json')) || {};
-      const levelingSettings = (await readData('leveling_settings.json')) || {};
-
-      if (!mainSettings[guildId]) mainSettings[guildId] = {};
-      if (!levelingSettings[guildId]) levelingSettings[guildId] = {};
-
-      mainSettings[guildId].leveling = isActive ? 'on' : 'off';
-      levelingSettings[guildId].status = isActive ? 'on' : 'off';
-      levelingSettings[guildId].enabled = isActive;
+      // ========================================================
+      // NEW: MONGO-DB DYNAMIC CONFIGURATION LOGIC UPDATE
+      // ========================================================
+      const levelStringStatus = isActive ? 'on' : 'off';
       
+      const updatePayload = {
+        leveling: levelStringStatus,
+        'levelConfig.status': levelStringStatus,
+        'levelConfig.enabled': isActive
+      };
+
       if (channelId) {
-        levelingSettings[guildId].channelId = channelId;
+        updatePayload['levelConfig.channelId'] = channelId;
       }
 
-      await writeData('settings.json', mainSettings);
-      await writeData('leveling_settings.json', levelingSettings);
+      // Atomically locate, modify, or upsert the configuration entry on MongoDB
+      const updatedConfig = await database.findOneAndUpdate(
+        { guildId: guildId },
+        { $set: updatePayload },
+        { upsert: true, new: true }
+      ).catch(() => null) || {};
 
-      // 4. Fixed description builder (Never reads properties of null)
+      const displayChannel = channelId || updatedConfig.levelConfig?.channelId;
       let descriptionText = `Leveling features have been **${status.toUpperCase()}D**.`;
       
-      // Pull saved channel safely if no new channelId was provided in this message call
-      const displayChannel = channelId || levelingSettings[guildId]?.channelId;
       if (displayChannel) {
         descriptionText += `\n**Announcement Channel:** <#${displayChannel}>`;
       }
@@ -95,16 +97,11 @@ module.exports = {
         .setTitle('⚙️ Leveling Matrix Updated')
         .setDescription(descriptionText);
 
-      if (isInteraction) {
-        await context.reply({ embeds: [embed], ephemeral: true });
-      } else {
-        await context.reply({ embeds: [embed] });
-      }
+      return interaction.reply({ embeds: [embed] });
     } catch (error) {
-      console.error(error);
+      console.error('Leveling config update error:', error);
       const msg = `❌ Error: ${error.message}`;
-      if (isInteraction) await context.reply({ content: msg, ephemeral: true });
-      else await context.reply(msg);
+      return interaction.reply({ content: msg, ephemeral: true }).catch(() => null);
     }
   }
 };

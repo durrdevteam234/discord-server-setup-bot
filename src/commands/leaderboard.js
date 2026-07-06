@@ -1,23 +1,38 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { readData } = require('../utils/database');
+const database = require('../utils/database'); // Updated to use your live MongoDB layout connection
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('leaderboard')
     .setDescription('View the server leaderboard'),
-  async execute(context) {
-    const isInteraction = !!context.isChatInputCommand;
-    const guildId = context.guildId;
-    const guild = context.guild;
-    const client = context.client;
+  name: 'leaderboard',
+
+  async execute(interaction, client) {
+    // Structural compatibility verification layer for hybrid interaction tracking 
+    const isInteraction = interaction.isCommand ? interaction.isCommand() : false;
+    const guildId = interaction.guildId;
+    const guild = interaction.guild;
+    
+    // Fallback assignment protecting the client context on text pathways
+    const activeClient = client || interaction.client;
     if (!guild) return;
+
     try {
       // 1. Force fetch all current active members in the server to bypass caching issues
       const activeMembersMap = await guild.members.fetch({ force: true }).catch(() => null);
       
-      const levels = (await readData('levels.json')) || {};
-      const guildLevels = levels[guildId] || {};
+      // ========================================================
+      // NEW: MONGO-DB LEVELS REGISTRY PARSING LOOKUP
+      // ========================================================
+      // Fetch level mapping objects saved dynamically inside the guild config document
+      const guildConfig = await database.findOne({ guildId: guildId }).catch(() => null) || {};
+      
+      // Assumes your levels data is nested under user profiles map keys or a dedicated levels object array
+      // Re-aligning lookup tracking matching your levelsData dictionary schemas:
+      const levelsData = guildConfig.levelsData || guildConfig.levels || {};
+      
       // 2. Map, FILTER out users who are no longer in the server, sort, and slice the top 10
-      const sorted = Object.entries(guildLevels)
+      const sorted = Object.entries(levelsData)
         .map(([userId, data]) => ({ userId, ...data }))
         .filter(entry => {
           // If activeMembersMap couldn't be fetched, fallback to checking local cache safely
@@ -26,17 +41,20 @@ module.exports = {
         })
         .sort((a, b) => b.level - a.level || b.xp - a.xp)
         .slice(0, 10);
+
       if (sorted.length === 0) {
         const msg = '📊 No active users have leveled up yet!';
-        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
+        return interaction.reply({ content: msg, ephemeral: true }).catch(() => null);
       }
+
       const embed = new EmbedBuilder()
         .setColor('#FFD700')
         .setTitle('🏆 Server Leaderboard')
         .setDescription('Top 10 users by level');
+
       for (let i = 0; i < sorted.length; i++) {
-        // Safely fetch user fallback 
-        const user = await client.users.fetch(sorted[i].userId).catch(() => null);
+        // Safely fetch user fallback via the protected client context
+        const user = await activeClient.users.fetch(sorted[i].userId).catch(() => null);
         const username = user ? user.username : `Unknown User (${sorted[i].userId})`;
         
         embed.addFields({
@@ -44,19 +62,25 @@ module.exports = {
           value: `Level: ${sorted[i].level} | XP: ${sorted[i].xp}`,
         });
       }
-      if (isInteraction) {
-        await context.reply({ embeds: [embed] });
-      } else {
-        await context.reply({ embeds: [embed] });
-      }
+
+      return interaction.reply({ embeds: [embed] });
     } catch (error) {
       console.error('Leaderboard error:', error);
       const msg = `❌ Error fetching leaderboard: ${error.message}`;
-      if (isInteraction) {
-        await context.reply({ content: msg, ephemeral: true });
-      } else {
-        await context.reply(msg);
-      }
+      return interaction.reply({ content: msg, ephemeral: true }).catch(() => null);
     }
   },
+
+  // ADDED: Complete prefix execution loop to handle |leaderboard text triggers natively
+  async executePrefix(message, argsArray, client) {
+    const mockInteraction = {
+      guild: message.guild,
+      guildId: message.guild.id,
+      member: message.member,
+      user: message.author,
+      reply: async (options) => message.reply(options)
+    };
+
+    await this.execute(mockInteraction, client).catch(err => console.error('Error handling leaderboard prefix wrapper:', err));
+  }
 };

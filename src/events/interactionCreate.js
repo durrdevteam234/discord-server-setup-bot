@@ -1,11 +1,21 @@
 const { MessageFlags } = require('discord.js');
-const db = require('../utils/database');
+const database = require('../utils/database'); // Updated to point directly to your MongoDB client model
 
 module.exports = {
     name: 'interactionCreate',
     async execute(interaction, client) {
-        // 1. Safety Gate: Completely ignore message components (Buttons, Select Menus)
-        if (interaction.isMessageComponent()) return;
+        const activeClient = client || interaction.client;
+
+        // ========================================================
+        // ⚡ NEW: REACTION ROLES COMPONENT ROUTING LAYER
+        // ========================================================
+        if (interaction.isButton() || interaction.isStringSelectMenu()) {
+            const reactionRolesCommand = activeClient.commands.get('reactionroles');
+            if (reactionRolesCommand && typeof reactionRolesCommand.handleInteraction === 'function') {
+                return await reactionRolesCommand.handleInteraction(interaction);
+            }
+            return; // Exit out safely so role clicks don't trip standard slash commands
+        }
 
         // 2. Safety Gate: Completely ignore Autocomplete / Modals / Context Menus
         if (!interaction.isChatInputCommand()) return;
@@ -14,29 +24,29 @@ module.exports = {
         const commandName = interaction.commandName;
         if (!commandName) return;
 
-        const activeClient = client || interaction.client;
         const command = activeClient.commands.get(commandName);
         if (!command) {
             console.warn(`[WARNING] Received slash interaction for /${commandName}, but it is not registered in client.commands.`);
             return;
         }
 
-        // ==========================================
-        // GLOBAL FUN MODULE PERMISSION SWITCH CHECK
-        // ==========================================
-        const mainSettings = db.readData('settings.json') || {};
-        const currentGuildSettings = mainSettings[interaction.guildId] || {};
-        const coreUtilityCommands = ['setup', 'cute', 'fun-module'];
+        // ========================================================
+        // NEW: MONGO-DB GLOBAL SWITCH PERMISSION CHECK
+        // ========================================================
+        const guildId = interaction.guildId;
+        const coreUtilityCommands = ['setup', 'cute', 'fun-module', 'help', 'setup-audit', 'mod-logs-toggle', 'reactionroles'];
 
         if (!coreUtilityCommands.includes(commandName.toLowerCase())) {
-            if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false) {
+            // Query MongoDB directly for the guild's modules document schema configuration maps
+            const guildConfig = await database.findOne({ guildId: guildId }).catch(() => null) || {};
+            
+            if (guildConfig.funModule === 'disabled' || guildConfig.funModule === false || guildConfig.funModule === 'off') {
                 return interaction.reply({ 
                     content: '❌ The complete **Fun Command Suite** has been globally disabled by a server administrator.', 
                     flags: [MessageFlags.Ephemeral] 
                 }).catch(() => null);
             }
         }
-
         try {
             // Ensure client instance is safely passed down to the active command
             await command.execute(interaction, activeClient);

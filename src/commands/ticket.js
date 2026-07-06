@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ChannelType } = require('discord.js');
 const { logAction } = require('../utils/auditLog');
-const { readData } = require('../utils/database');
+const database = require('../utils/database'); // Updated to use your live MongoDB layout connection
 const { formatCute } = require('../utils/textFormatter.js');
 
 module.exports = {
@@ -17,24 +17,25 @@ module.exports = {
         .setName('close')
         .setDescription('🔒 Staff Only: Close and delete this ticket channel')
     ),
+  name: 'ticket',
 
-  async execute(context, args = []) {
+  async execute(interaction, client) {
     // 1. Detect if this is a Slash Command (Interaction) or Prefix Command (Message)
-    const isInteraction = !!context.isChatInputCommand;
-    const guild = context.guild;
-    const guildId = context.guildId;
-    const author = isInteraction ? context.user : context.author;
-    const memberExecutor = context.member;
-    const channel = context.channel;
+    const isInteraction = interaction.isCommand ? interaction.isCommand() : false;
+    const guild = interaction.guild;
+    const guildId = interaction.guildId;
+    const author = interaction.user; // interaction emulator maps message author to user field
+    const memberExecutor = interaction.member;
+    const channel = interaction.channel;
 
-    // Determine the active subcommand choice dynamically
-    let subcommand;
+    // Determine the active subcommand choice dynamically via options emulator mapping
+    let subcommand = null;
     if (isInteraction) {
-      subcommand = context.options.getSubcommand();
+      subcommand = interaction.options.getSubcommand();
     } else {
-      subcommand = args[0] ? args[0].toLowerCase() : null;
+      subcommand = interaction.options.getString('subcommand')?.toLowerCase();
       if (!subcommand || (subcommand !== 'create' && subcommand !== 'close')) {
-        return context.reply('❌ Usage: `|ticket create` or `|ticket close`').catch(() => null);
+        return interaction.reply('❌ Usage: `|ticket create` or `|ticket close`').catch(() => null);
       }
     }
 
@@ -43,16 +44,22 @@ module.exports = {
     // ==========================================
     if (subcommand === 'create') {
       if (isInteraction) {
-        await context.deferReply({ ephemeral: true });
+        await interaction.deferReply({ ephemeral: true });
       } else {
-        await context.reply('⏳ Creating your ticket...').catch(() => null);
+        await interaction.reply('⏳ Creating your ticket...').catch(() => null);
       }
 
       try {
-        const cuteData = readData('cute.json');
-        const cuteStyle = cuteData[guildId] || 'off';
+        // ========================================================
+        // NEW: FETCH HISTORICAL RECORD LAYOUT FROM MONGO-DB
+        // ========================================================
+        const guildConfig = await database.findOne({ guildId: guildId }).catch(() => null) || {};
+        let cuteStyle = 'off';
+        try {
+          cuteStyle = guildConfig.cuteStyle || 'off'; // Reads font selection mapping straight from schema doc
+        } catch (_) {}
 
-        // Use a persistent slice of the User ID instead of a counter variable that resets on Railway restarts
+        // Use a persistent slice of the User ID instead of a counter variable that resets on container restarts
         const uniqueId = author.id.slice(-4);
         const rawName = `ticket-${uniqueId}`;
         const ticketChannelName = cuteStyle !== 'off' ? formatCute(rawName, cuteStyle, '🎟️') : rawName;
@@ -84,7 +91,7 @@ module.exports = {
         
         const successMsg = `✅ Ticket channel created successfully: ${ticketChannel}`;
         if (isInteraction) {
-          await context.editReply({ content: successMsg });
+          await interaction.editReply({ content: successMsg });
         } else {
           await channel.send(successMsg);
         }
@@ -93,7 +100,7 @@ module.exports = {
         console.error('Ticket creation error:', error);
         const errMsg = `❌ Failed to create ticket: ${error.message}`;
         if (isInteraction) {
-          await context.editReply({ content: errMsg }).catch(() => null);
+          await interaction.editReply({ content: errMsg }).catch(() => null);
         } else {
           await channel.send(errMsg).catch(() => null);
         }
@@ -108,24 +115,23 @@ module.exports = {
       if (!memberExecutor.permissions.has(PermissionFlagsBits.Administrator) && 
           !memberExecutor.permissions.has(PermissionFlagsBits.ManageGuild)) {
         const msg = '❌ You need **Manage Server** or **Admin** permissions to close tickets!';
-        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
+        return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
       }
 
       // ADVANCED SCANNERS: Converts channel names to lower-case and evaluates font styles
-      // This regex matches "ticket" across bubbles, smallcaps, wide fonts, and emoji patterns flawlessly.
       const transformedName = channel.name.toLowerCase();
       const isTicketChannel = /ticket|ⓣⓘⓒⓚⓔⓣ|ᴛɪᴄᴋᴇᴛ|ｔｉｃｋｅｔ/.test(transformedName) || channel.topic?.toLowerCase().includes('ticket');
 
       if (!isTicketChannel) {
         const msg = '❌ This command can only be used inside a ticket channel!';
-        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
+        return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
       }
 
       const closeMsg = '🔒 Closing and purging this channel in 5 seconds...';
       if (isInteraction) {
-        await context.reply({ content: closeMsg });
+        await interaction.reply({ content: closeMsg });
       } else {
-        await context.reply(closeMsg).catch(() => null);
+        await interaction.reply(closeMsg).catch(() => null);
       }
 
       try { await logAction(guild, 'Ticket Closed', author, `Channel: ${channel.name}`); } catch(e){}

@@ -1,7 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { logAction } = require('../utils/auditLog');
-const { readData, writeData } = require('../utils/database');
-const { formatCute } = require('../utils/textFormatter.js');
+const database = require('../utils/database'); // Updated to point directly to your MongoDB client model
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -9,83 +8,88 @@ module.exports = {
     .setDescription('Unmute a user')
     .addUserOption(option => option.setName('user').setDescription('User to unmute').setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+  name: 'unmute',
 
-  async execute(context, args = []) {
-    const isInteraction = !!context.isChatInputCommand;
-    const guild = context.guild;
-    const author = isInteraction ? context.user : context.author;
-    const memberExecutor = context.member;
-    const guildId = context.guildId;
+  async execute(interaction, client) {
+    const isInteraction = interaction.isCommand ? interaction.isCommand() : false;
+    const guild = interaction.guild;
+    const author = interaction.user; 
+    const memberExecutor = interaction.member;
+    const guildId = interaction.guildId;
 
     if (!memberExecutor.permissions.has(PermissionFlagsBits.ModerateMembers)) {
       const msg = '❌ You need Moderate Members permission!';
-      return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
+      return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
     }
 
     try {
       let user;
 
       if (isInteraction) {
-        user = context.options.getUser('user');
+        user = interaction.options.getUser('user');
       } else {
-        user = context.mentions.users.first() || (args[0] ? await context.client.users.fetch(args[0]).catch(() => null) : null);
+        user = interaction.options.getUser('user');
       }
 
       if (!user) {
         const msg = '❌ Please mention a valid user or provide a valid user ID.';
-        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
+        return interaction.reply({ content: msg, ephemeral: true }).catch(() => null);
       }
 
       const member = await guild.members.fetch(user.id).catch(() => null);
       if (!member) {
         const msg = '❌ This user is not in the server.';
-        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
+        return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
       }
 
+      // Remove the native Discord timeout
       await member.timeout(null);
 
-      const mutes = readData('mutes.json');
-      if (mutes[guildId] && mutes[guildId][user.id]) {
-        delete mutes[guildId][user.id];
-        writeData('mutes.json', mutes);
+      // ========================================================
+      // NEW: MONGO-DB ACTIVE TIMEOUT RECORD CLEANUP
+      // ========================================================
+      await database.findOneAndUpdate(
+        { guildId: guildId },
+        { 
+          $unset: { 
+            [`activeMutes.${user.id}`]: "" 
+          } 
+        }
+      ).catch(() => null);
+
+      // ========================================================
+      // MONGO-DB UNIFIED MOD LOGS SYSTEM RESOLUTION
+      // ========================================================
+      const guildConfig = await database.findOne({ guildId: guildId }).catch(() => null) || {};
+      
+      if (guildConfig.modLogsEnabled && guildConfig.unifiedLogChannelId) {
+        const modLogsChannel = guild.channels.cache.get(guildConfig.unifiedLogChannelId) || await guild.channels.fetch(guildConfig.unifiedLogChannelId).catch(() => null);
+        
+        if (modLogsChannel) {
+          const embedLog = new EmbedBuilder()
+            .setColor('#00FF00')
+            .setTitle('🛡️ Unified Moderation: User Unmuted')
+            .addFields(
+              { name: 'Target User', value: `${user.username} (${user.id})`, inline: true },
+              { name: 'Responsible Staff', value: `${author.username}`, inline: true }
+            )
+            .setTimestamp();
+          await modLogsChannel.send({ embeds: [embedLog] }).catch(() => null);
+        }
       }
 
-      const cuteData = readData('cute.json');
-      const cuteStyle = cuteData[guildId] || 'off';
-      const cuteChannelName = cuteStyle !== 'off' ? formatCute('mod-logs', cuteStyle, '🛡️') : 'mod-logs';
-
-      const modLogsChannel = guild.channels.cache.find(ch => ch.name === 'mod-logs' || ch.name === cuteChannelName);
-      if (modLogsChannel) {
-        const embed = new EmbedBuilder()
-          .setColor('#00FF00')
-          .setTitle('User Unmuted')
-          .addFields(
-            { name: 'User', value: `${user.tag} (${user.id})` },
-            { name: 'Moderator', value: `${author.tag}` }
-          );
-        await modLogsChannel.send({ embeds: [embed] });
-      }
-
-      await logAction(guild, 'User Unmuted', author, `User: ${user.tag}`);
+      await logAction(guild, 'User Unmuted', author, `User: ${user.username}`);
 
       const embed = new EmbedBuilder()
         .setColor('#00FF00')
         .setTitle('✅ User Unmuted')
-        .setDescription(`${user.tag} has been unmuted.`);
+        .setDescription(`${user.username} has been unmuted.`);
 
-      if (isInteraction) {
-        await context.reply({ embeds: [embed], ephemeral: true });
-      } else {
-        await context.reply({ embeds: [embed] });
-      }
+      return interaction.reply({ embeds: [embed] });
     } catch (error) {
       console.error('Unmute error:', error);
       const msg = `❌ Error unmuting user: ${error.message}`;
-      if (isInteraction) {
-        await context.reply({ content: msg, ephemeral: true });
-      } else {
-        await context.reply(msg);
-      }
+      return interaction.reply({ content: msg, ephemeral: true }).catch(() => null);
     }
   },
 };

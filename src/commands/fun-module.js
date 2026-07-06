@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
-const db = require('../utils/database');
+const database = require('../utils/database'); // Updated to use your live MongoDB layout connection
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -12,7 +12,8 @@ module.exports = {
         .addChoices(
           { name: 'enable', value: 'on' },
           { name: 'disable', value: 'off' }
-        )),
+        ))
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
   name: 'fun-module',
 
   async execute(interaction) {
@@ -29,26 +30,31 @@ module.exports = {
       }).catch(() => null);
     }
 
-    // 2. Fetch Option Value safely
-    const rawChoice = interaction.options.getString('status');
+    // 2. Fetch Option Value safely (Handles both Slash and custom Mock formats)
+    const rawChoice = typeof interaction.options.getString === 'function' 
+      ? interaction.options.getString('status') 
+      : interaction.options.getString;
+      
     if (!rawChoice) return;
 
     // Normalize option matching format to match the internal configuration string
     const choice = (rawChoice === 'enable' || rawChoice === 'on') ? 'on' : 'off';
+    const isEnabled = (choice === 'on');
     
-    // 3. Database Write operations
-    const settings = db.readData('settings.json') || {};
-    if (!settings[guildId]) settings[guildId] = {};
-    
-    // Saves state as a predictable boolean value matching messageCreate framework filters
-    settings[guildId].funModule = (choice === 'on'); 
-    db.writeData('settings.json', settings);
+    // ========================================================
+    // NEW: ATOMIC MONGO-DB DOCUMENT UPDATING
+    // ========================================================
+    await database.findOneAndUpdate(
+      { guildId: guildId },
+      { $set: { funModule: isEnabled } },
+      { upsert: true }
+    ).catch(() => null);
 
     // 4. Create UI response Embed
     const embed = new EmbedBuilder()
-      .setColor(choice === 'on' ? '#00FF00' : '#FF0000')
+      .setColor(isEnabled ? '#00FF00' : '#FF0000')
       .setTitle('🎛️ Module Configuration Saved')
-      .setDescription(`The **Fun Module** features have been flipped **${choice === 'on' ? 'ENABLED' : 'DISABLED'}** server-wide.`);
+      .setDescription(`The **Fun Module** features have been flipped **${isEnabled ? 'ENABLED' : 'DISABLED'}** server-wide.`);
 
     await interaction.reply({ embeds: [embed] }).catch(() => null);
   },
@@ -72,14 +78,14 @@ module.exports = {
     }
 
     // 3. Match format syntax directly with Slash layout structures
-    const slashValueCompatible = (inputArg === 'enable' || inputArg === 'on') ? 'enable' : 'disable';
+    const slashValueCompatible = (inputArg === 'enable' || inputArg === 'on') ? 'on' : 'off';
 
-    // 4. Emulate balanced context block properties including the required guild ID field mapping
+    // 4. Emulate balanced context block properties including the required option fallback lookups
     const mockInteraction = {
       guild: message.guild,
       guildId: message.guild.id,
       member: message.member,
-      options: { getString: (name) => slashValueCompatible },
+      options: { getString: slashValueCompatible }, // Normalized property string mapping 
       reply: async (options) => message.reply(options)
     };
 

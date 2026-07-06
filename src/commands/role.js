@@ -96,7 +96,6 @@ const data = new SlashCommandBuilder()
     .addRoleOption(opt => opt.setName("role").setDescription("The role to toggle mention status").setRequired(true))
   );
 
-// SHARED UTILITIES
 function embed(color = "#5865F2") {
   return new EmbedBuilder().setColor(color).setTimestamp();
 }
@@ -124,15 +123,16 @@ function resolveRole(guild, input) {
   return guild.roles.cache.get(id) || guild.roles.cache.find((r) => r.name.toLowerCase() === input.toLowerCase()) || null;
 }
 
-function resolveMember(guild, input) {
+async function resolveMember(guild, input) {
   if (!input) return null;
   const id = input.replace(/[<@!>]/g, "");
-  return guild.members.cache.get(id) || null;
+  return guild.members.cache.get(id) || await guild.members.fetch(id).catch(() => null);
 }
 
 function usage(msg, sub, syntax) {
   return msg.reply({ embeds: [embed("#FEE75C").setTitle(`Usage — ${PREFIX}role ${sub}`).setDescription(`\`\`\`${syntax}\`\`\``)] });
 }
+
 // 2. SLASH COMMAND EXECUTION ROUTER
 async function execute(interaction) {
   if (!interaction.guild) return;
@@ -142,7 +142,11 @@ async function execute(interaction) {
     return interaction.reply({ content: `❌ ${permCheck.error}`, ephemeral: true });
   }
 
+  const { logAction } = require('../utils/auditLog');
+  const database = require('../utils/database');
+
   const sub = interaction.options.getSubcommand();
+  const callerUser = interaction.user;
 
   if (sub === "user") {
     const member = interaction.options.getMember("member");
@@ -153,6 +157,7 @@ async function execute(interaction) {
     if (member.roles.cache.has(role.id)) return interaction.reply({ content: "Member already has role.", ephemeral: true });
 
     await member.roles.add(role);
+    try { await logAction(interaction.guild, 'Role Given', callerUser, `Added ${role.name} to ${member.user.username}`); } catch(e){}
     return interaction.reply({ embeds: [embed("#57F287").setTitle("Role Added").setDescription(`Added ${role} to ${member}.`)] });
   }
 
@@ -165,6 +170,7 @@ async function execute(interaction) {
     if (!member.roles.cache.has(role.id)) return interaction.reply({ content: "Member doesn't have role.", ephemeral: true });
 
     await member.roles.remove(role);
+    try { await logAction(interaction.guild, 'Role Removed', callerUser, `Removed ${role.name} from ${member.user.username}`); } catch(e){}
     return interaction.reply({ embeds: [embed("#57F287").setTitle("Role Removed").setDescription(`Removed ${role} from ${member}.`)] });
   }
 
@@ -176,6 +182,7 @@ async function execute(interaction) {
 
     try {
       const role = await interaction.guild.roles.create({ name, color, hoist, mentionable });
+      try { await logAction(interaction.guild, 'Role Created', callerUser, `Created role: ${name} (Color: ${color || 'Default'})`); } catch(e){}
       return interaction.reply({ embeds: [embed("#57F287").setTitle("Role Created").setDescription(`Created role ${role}.`)] });
     } catch {
       return interaction.reply({ content: "Failed to create. Check hex structure.", ephemeral: true });
@@ -187,10 +194,11 @@ async function execute(interaction) {
     if (!canManageRole(interaction.guild, role)) return interaction.reply({ content: "Role hierarchy issue.", ephemeral: true });
     if (role.managed) return interaction.reply({ content: "Managed integration role.", ephemeral: true });
 
+    const roleName = role.name;
     await role.delete();
+    try { await logAction(interaction.guild, 'Role Deleted', callerUser, `Deleted role: ${roleName}`); } catch(e){}
     return interaction.reply({ embeds: [embed("#57F287").setTitle("Role Deleted")] });
   }
-
   if (sub === "everyone") {
     const role = interaction.options.getRole("role");
     if (!canManageRole(interaction.guild, role)) return interaction.reply({ content: "Role hierarchy issue.", ephemeral: true });
@@ -201,6 +209,8 @@ async function execute(interaction) {
 
     let success = 0;
     for (const [, m] of targets) { try { await m.roles.add(role); success++; } catch {} }
+    try { await logAction(interaction.guild, 'Mass Role Added', callerUser, `Added ${role.name} to ${success} members`); } catch(e){}
+
     return interaction.editReply({ embeds: [embed("#57F287").setTitle("Mass Role Added").setDescription(`Added to ${success} members.`)] });
   }
 
@@ -214,6 +224,8 @@ async function execute(interaction) {
 
     let success = 0;
     for (const [, m] of targets) { try { await m.roles.add(role); success++; } catch {} }
+    try { await logAction(interaction.guild, 'Mass Role Added (Bots)', callerUser, `Added ${role.name} to ${success} bot accounts`); } catch(e){}
+
     return interaction.editReply({ embeds: [embed("#57F287").setTitle("Bots Role Completed").setDescription(`Added to ${success} bot accounts.`)] });
   }
 
@@ -227,13 +239,13 @@ async function execute(interaction) {
 
     let success = 0;
     for (const [, m] of targets) { try { await m.roles.add(role); success++; } catch {} }
+    try { await logAction(interaction.guild, 'Mass Role Added (Humans)', callerUser, `Added ${role.name} to ${success} human accounts`); } catch(e){}
+
     return interaction.editReply({ embeds: [embed("#57F287").setTitle("Humans Role Completed").setDescription(`Added to ${success} human accounts.`)] });
   }
 
   if (sub === "info") {
     const role = interaction.options.getRole("role");
-    
-    // FIX: Forcefully fetch members into local bot memory cache so size isn't 0
     await interaction.guild.members.fetch();
 
     const infoEmbed = embed(role.hexColor)
@@ -265,6 +277,7 @@ async function execute(interaction) {
 
     try {
       await role.setColor(hex);
+      try { await logAction(interaction.guild, 'Role Updated (Color)', callerUser, `Changed color of ${role.name} to ${hex}`); } catch(e){}
       return interaction.reply({ embeds: [embed(hex).setTitle("Color Updated")] });
     } catch {
       return interaction.reply({ content: "Invalid hex value structure.", ephemeral: true });
@@ -276,7 +289,9 @@ async function execute(interaction) {
     const newName = interaction.options.getString("new_name");
     if (!canManageRole(interaction.guild, role)) return interaction.reply({ content: "Role hierarchy issue.", ephemeral: true });
 
+    const oldName = role.name;
     await role.setName(newName);
+    try { await logAction(interaction.guild, 'Role Updated (Rename)', callerUser, `Renamed role from ${oldName} to ${newName}`); } catch(e){}
     return interaction.reply({ embeds: [embed("#57F287").setTitle("Role Renamed")] });
   }
 
@@ -285,6 +300,7 @@ async function execute(interaction) {
     if (!canManageRole(interaction.guild, role)) return interaction.reply({ content: "Role hierarchy issue.", ephemeral: true });
 
     await role.setHoist(!role.hoist);
+    try { await logAction(interaction.guild, 'Role Updated (Hoist)', callerUser, `Toggled hoist status for ${role.name} to ${!role.hoist}`); } catch(e){}
     return interaction.reply({ embeds: [embed("#57F287").setTitle("📌 Hoist Toggled").setDescription(`${role} is now ${role.hoist ? "hoisted (visible separately in sidebar)" : "unhoisted"}.`)] });
   }
 
@@ -293,18 +309,20 @@ async function execute(interaction) {
     if (!canManageRole(interaction.guild, role)) return interaction.reply({ content: "Role hierarchy issue.", ephemeral: true });
 
     await role.setMentionable(!role.mentionable);
+    try { await logAction(interaction.guild, 'Role Updated (Mentionable)', callerUser, `Toggled mentionable status for ${role.name} to ${!role.mentionable}`); } catch(e){}
     return interaction.reply({ embeds: [embed("#57F287").setTitle("💬 Mentionable Toggled").setDescription(`${role} is now ${role.mentionable ? "mentionable" : "not mentionable"}.`)] });
   }
 }
 // 3. PREFIX COMMAND EXECUTION GATEWAY
-async function runPrefix(msg, args) {
+async function runPrefix(msg, args, client) {
   if (!msg.guild) return;
 
-  // FIX: Safely extracts the action whether your main file passes args as an array or string
+  const { logAction } = require('../utils/auditLog');
+  const callerUser = msg.author;
+
   const subArg = Array.isArray(args) ? args[0] : args;
   const sub = (subArg || "").toLowerCase().trim();
 
-  // If they just type |role with no choices, or an invalid subcommand, print the help directory
   if (!sub || !SUBCOMMANDS[sub]) {
     const list = Object.entries(SUBCOMMANDS).map(([k, v]) => `\`${PREFIX}role ${k}\` — ${v}`).join("\n");
     return msg.reply({ 
@@ -319,7 +337,7 @@ async function runPrefix(msg, args) {
 
   if (sub === "user") {
     if (!Array.isArray(args) || args.length < 3) return usage(msg, "user", `${PREFIX}role user <@member> <@role>`);
-    const member = resolveMember(msg.guild, args[1]);
+    const member = await resolveMember(msg.guild, args[1]);
     const role   = resolveRole(msg.guild, args[2]);
 
     if (!member || !role) return msg.reply("❌ Could not find that member or role.");
@@ -327,12 +345,13 @@ async function runPrefix(msg, args) {
     if (member.roles.cache.has(role.id)) return msg.reply("❌ That member already has that role.");
     
     await member.roles.add(role);
+    try { await logAction(msg.guild, 'Role Given', callerUser, `Added ${role.name} to ${member.user.username}`); } catch(e){}
     return msg.reply({ embeds: [embed("#57F287").setTitle("Role Added").setDescription(`Added ${role} to ${member}.`)] });
   }
 
   if (sub === "remove") {
     if (!Array.isArray(args) || args.length < 3) return usage(msg, "remove", `${PREFIX}role remove <@member> <@role>`);
-    const member = resolveMember(msg.guild, args[1]);
+    const member = await resolveMember(msg.guild, args[1]);
     const role   = resolveRole(msg.guild, args[2]);
 
     if (!member || !role) return msg.reply("❌ Could not find that member or role.");
@@ -340,6 +359,7 @@ async function runPrefix(msg, args) {
     if (!member.roles.cache.has(role.id)) return msg.reply("❌ That member does not have that role.");
     
     await member.roles.remove(role);
+    try { await logAction(msg.guild, 'Role Removed', callerUser, `Removed ${role.name} from ${member.user.username}`); } catch(e){}
     return msg.reply({ embeds: [embed("#57F287").setTitle("Role Removed").setDescription(`Removed ${role} from ${member}.`)] });
   }
 
@@ -349,6 +369,7 @@ async function runPrefix(msg, args) {
     const color = args[2] || null;
     try {
       const role = await msg.guild.roles.create({ name, color });
+      try { await logAction(msg.guild, 'Role Created', callerUser, `Created role: ${name} (Color: ${color || 'Default'})`); } catch(e){}
       return msg.reply({ embeds: [embed("#57F287").setTitle("Role Created").setDescription(`Successfully created role ${role}.`)] });
     } catch { return msg.reply("❌ Failed to create role. Ensure color layout matches hex coding parameters."); }
   }
@@ -362,12 +383,11 @@ async function runPrefix(msg, args) {
     
     const oldName = role.name;
     await role.delete();
+    try { await logAction(msg.guild, 'Role Deleted', callerUser, `Deleted role: ${oldName}`); } catch(e){}
     return msg.reply({ embeds: [embed("#57F287").setTitle("Role Deleted").setDescription(`The role **${oldName}** has been deleted.`)] });
-  }
-
-  if (sub === "everyone") {
+  }  if (sub === "everyone") {
     if (!Array.isArray(args) || args.length < 2) return usage(msg, "everyone", `${PREFIX}role everyone <@role>`);
-    const role = resolveRole(msg.guild, args[1]);
+    const role = resolveRole(msg.guild, args);
     if (!role) return msg.reply("❌ Could not find that role.");
     if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
     
@@ -377,11 +397,13 @@ async function runPrefix(msg, args) {
     
     let ok = 0;
     for (const [, m] of targets) { try { await m.roles.add(role); ok++; } catch {} }
+    try { await logAction(msg.guild, 'Mass Role Added', callerUser, `Added ${role.name} to ${ok} members via prefix`); } catch(e){}
     return loading.edit({ content: null, embeds: [embed("#57F287").setTitle("Mass Role Added").setDescription(`Successfully added ${role} to **${ok}** members.`)] });
   }
+
   if (sub === "bots") {
     if (!Array.isArray(args) || args.length < 2) return usage(msg, "bots", `${PREFIX}role bots <@role>`);
-    const role = resolveRole(msg.guild, args[1]);
+    const role = resolveRole(msg.guild, args);
     if (!role) return msg.reply("❌ Could not find that role.");
     if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
     
@@ -391,12 +413,13 @@ async function runPrefix(msg, args) {
     
     let ok = 0;
     for (const [, m] of targets) { try { await m.roles.add(role); ok++; } catch {} }
+    try { await logAction(msg.guild, 'Mass Role Added (Bots)', callerUser, `Added ${role.name} to ${ok} bots via prefix`); } catch(e){}
     return loading.edit({ content: null, embeds: [embed("#57F287").setTitle("Bots Assignment Complete").setDescription(`Successfully added ${role} to **${ok}** bots.`)] });
   }
 
   if (sub === "humans") {
     if (!Array.isArray(args) || args.length < 2) return usage(msg, "humans", `${PREFIX}role humans <@role>`);
-    const role = resolveRole(msg.guild, args[1]);
+    const role = resolveRole(msg.guild, args);
     if (!role) return msg.reply("❌ Could not find that role.");
     if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
     
@@ -406,15 +429,15 @@ async function runPrefix(msg, args) {
     
     let ok = 0;
     for (const [, m] of targets) { try { await m.roles.add(role); ok++; } catch {} }
+    try { await logAction(msg.guild, 'Mass Role Added (Humans)', callerUser, `Added ${role.name} to ${ok} humans via prefix`); } catch(e){}
     return loading.edit({ content: null, embeds: [embed("#57F287").setTitle("Humans Assignment Complete").setDescription(`Successfully added ${role} to **${ok}** human members.`)] });
   }
 
   if (sub === "info") {
     if (!Array.isArray(args) || args.length < 2) return usage(msg, "info", `${PREFIX}role info <@role>`);
-    const role = resolveRole(msg.guild, args[1]);
+    const role = resolveRole(msg.guild, args);
     if (!role) return msg.reply("❌ Could not find that role.");
     
-    // Sync local directory structure memory
     await msg.guild.members.fetch();
 
     const infoEmbed = embed(role.hexColor)
@@ -442,20 +465,21 @@ async function runPrefix(msg, args) {
 
   if (sub === "color") {
     if (!Array.isArray(args) || args.length < 3) return usage(msg, "color", `${PREFIX}role color <@role> <hex code>`);
-    const role = resolveRole(msg.guild, args[1]);
-    const hex = args[2];
+    const role = resolveRole(msg.guild, args);
+    const hex = args;
     
     if (!role) return msg.reply("❌ Could not find that role.");
     if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
     try { 
       await role.setColor(hex); 
+      try { await logAction(msg.guild, 'Role Updated (Color)', callerUser, `Changed color of ${role.name} to ${hex} via prefix`); } catch(e){}
       return msg.reply({ embeds: [embed(hex).setTitle("🎨 Color Updated").setDescription(`Changed color of ${role} to \`${hex}\`.`)] }); 
     } catch { return msg.reply("❌ Invalid hex color code. Use formatting values like `#FF0000`."); }
   }
 
   if (sub === "rename") {
     if (!Array.isArray(args) || args.length < 3) return usage(msg, "rename", `${PREFIX}role rename <@role> <new name>`);
-    const role = resolveRole(msg.guild, args[1]);
+    const role = resolveRole(msg.guild, args);
     const newName = args.slice(2).join(" ");
     
     if (!role) return msg.reply("❌ Could not find that role.");
@@ -464,28 +488,31 @@ async function runPrefix(msg, args) {
     
     const oldName = role.name;
     await role.setName(newName);
+    try { await logAction(msg.guild, 'Role Updated (Rename)', callerUser, `Renamed role from ${oldName} to ${newName} via prefix`); } catch(e){}
     return msg.reply({ embeds: [embed("#57F287").setTitle("✏️ Role Renamed").setDescription(`Renamed **${oldName}** to **${newName}**`)] });
   }
 
   if (sub === "hoist") {
     if (!Array.isArray(args) || args.length < 2) return usage(msg, "hoist", `${PREFIX}role hoist <@role>`);
-    const role = resolveRole(msg.guild, args[1]);
+    const role = resolveRole(msg.guild, args);
     
     if (!role) return msg.reply("❌ Could not find that role.");
     if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
     
     await role.setHoist(!role.hoist);
+    try { await logAction(msg.guild, 'Role Updated (Hoist)', callerUser, `Toggled hoist status for ${role.name} to ${!role.hoist} via prefix`); } catch(e){}
     return msg.reply({ embeds: [embed("#57F287").setTitle("📌 Hoist Toggled").setDescription(`${role} is now ${role.hoist ? "hoisted (visible separately in sidebar)" : "unhoisted"}.`)] });
   }
 
   if (sub === "mentionable") {
     if (!Array.isArray(args) || args.length < 2) return usage(msg, "mentionable", `${PREFIX}role mentionable <@role>`);
-    const role = resolveRole(msg.guild, args[1]);
+    const role = resolveRole(msg.guild, args);
     
     if (!role) return msg.reply("❌ Could not find that role.");
     if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
     
     await role.setMentionable(!role.mentionable);
+    try { await logAction(msg.guild, 'Role Updated (Mentionable)', callerUser, `Toggled mentionable status for ${role.name} to ${!role.mentionable} via prefix`); } catch(e){}
     return msg.reply({ embeds: [embed("#57F287").setTitle("💬 Mentionable Toggled").setDescription(`${role} is now ${role.mentionable ? "mentionable" : "not mentionable"}.`)] });
   }
 }

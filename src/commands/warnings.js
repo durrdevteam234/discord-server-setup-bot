@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
-const { readData } = require('../utils/database');
-const { formatCute } = require('../utils/textFormatter.js');
+const database = require('../utils/database'); // Updated to point directly to your MongoDB client model
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -8,69 +7,70 @@ module.exports = {
     .setDescription('View warnings for a user')
     .addUserOption(option => option.setName('user').setDescription('User to check').setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+  name: 'warnings',
 
-  async execute(context, args = []) {
-    const isInteraction = !!context.isChatInputCommand;
-    const guild = context.guild;
-    const memberExecutor = context.member;
-    const guildId = context.guildId;
+  async execute(interaction, client) {
+    const isInteraction = interaction.isCommand ? interaction.isCommand() : false;
+    const guild = interaction.guild;
+    const memberExecutor = interaction.member;
+    const guildId = interaction.guildId;
 
     if (!memberExecutor.permissions.has(PermissionFlagsBits.ModerateMembers)) {
       const msg = '❌ You need Moderate Members permission!';
-      return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
+      return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
     }
 
     try {
       let user;
 
       if (isInteraction) {
-        user = context.options.getUser('user');
+        user = interaction.options.getUser('user');
       } else {
-        user = context.mentions.users.first() || (args[0] ? await context.client.users.fetch(args[0]).catch(() => null) : null);
+        user = interaction.options.getUser('user');
       }
 
       if (!user) {
         const msg = '❌ Please mention a valid user or provide a valid user ID.';
-        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
+        return interaction.reply({ content: msg, ephemeral: true }).catch(() => null);
       }
 
-      const warnings = readData('warnings.json');
-      const userWarnings = warnings[guildId]?.[user.id] || [];
+      // ========================================================
+      // NEW: FETCH HISTORICAL INFRASTRUCTURE LOGS FROM MONGO-DB
+      // ========================================================
+      const guildConfig = await database.findOne({ guildId: guildId }).catch(() => null) || {};
+      const userWarnings = guildConfig.warnings?.[user.id] || [];
 
       if (userWarnings.length === 0) {
-        const msg = `✅ ${user.tag} has no warnings!`;
-        return isInteraction ? context.reply({ content: msg, ephemeral: true }) : context.reply(msg);
+        const msg = `✅ **${user.username}** has no active warnings on this server!`;
+        return interaction.reply({ content: msg }).catch(() => null);
       }
 
-      const cuteData = readData('cute.json');
-      const cuteStyle = cuteData[guildId] || 'off';
-      const embedTitle = cuteStyle !== 'off' ? formatCute(`Warnings for ${user.username}`, cuteStyle, '📜') : `📜 Warnings for ${user.tag}`;
-
+      let cuteStyle = 'off';
+      try {
+        cuteStyle = guildConfig.cuteStyle || 'off'; // Reads cute configuration mapping straight from doc schema
+      } catch (_) {}
+      
       const embed = new EmbedBuilder()
         .setColor('#FF6600')
-        .setTitle(embedTitle)
-        .setDescription(`Total Warnings: ${userWarnings.length}`);
+        .setTitle(`📜 Warnings History: ${user.username}`)
+        .setDescription(`Total Tracked Server Infractions: **${userWarnings.length}**`);
 
-      userWarnings.forEach((warning, index) => {
+      // Limit fields to 25 to prevent hitting hard Discord embed limits on messy targets
+      userWarnings.slice(0, 25).forEach((warning, index) => {
+        const timestampMs = warning.timestamp ? Math.floor(new Date(warning.timestamp).getTime() / 1000) : null;
+        const timeDisplay = timestampMs ? `<t:${timestampMs}:R>` : '`Unknown Date`';
+
         embed.addFields({
-          name: `Warning #${index + 1}`,
-          value: `**Reason:** ${warning.reason}\n**Moderator:** ${warning.moderator}\n**Date:** ${new Date(warning.date).toLocaleString()}`,
+          name: `⚠️ Infraction Entry #${index + 1}`,
+          value: `**Reason:** ${warning.reason}\n**Staff ID:** <@${warning.moderatorId}>\n**Issued:** ${timeDisplay}`,
         });
       });
 
-      if (isInteraction) {
-        await context.reply({ embeds: [embed], ephemeral: true });
-      } else {
-        await context.reply({ embeds: [embed] });
-      }
+      return interaction.reply({ embeds: [embed] });
     } catch (error) {
       console.error('Warnings error:', error);
       const msg = `❌ Error fetching warnings: ${error.message}`;
-      if (isInteraction) {
-        await context.reply({ content: msg, ephemeral: true });
-      } else {
-        await context.reply(msg);
-      }
+      return interaction.reply({ content: msg, ephemeral: true }).catch(() => null);
     }
   },
 };

@@ -41,38 +41,6 @@ module.exports = {
       "`/meme` - Spits out a random funny, relatable lifestyle meme.";
 
     // =========================================================
-    // PAGE 3: STAFF COMMANDS (UTILITIES & UTILITY SWITCHES)
-    // =========================================================
-    const staffCommandsPart1 =
-      "`/cute <style>` - Change font layout display display options.\n" +
-      "`/setup <template> [clear]` - Run server template builder layouts.\n" +
-      "`/setup-audit` - Configure the server log recording channels.\n" +
-      "`/mod-logs-toggle` - Enable or disable background moderation logs.\n" +
-      "`/leveling <on/off>` - Enable or disable the XP tracking loops.\n" +
-      "`/fun-module <on/off>` - Turn the server fun suite globally on or off.\n" +
-      "`/ticket close` - Permanently lock and archive an active support ticket.\n" +
-      "`/flavour` - View or manage custom bot response speech variations.\n" +
-      "`/clear-channels` - Mass delete and purge chat layers quickly.";
-
-    // =========================================================
-    // PAGE 4: STAFF COMMANDS (ROLES & ACTION MODERATION)
-    // =========================================================
-    const staffCommandsPart2 =
-      "`/role user <member> <role>` — Add a specific role assignment.\n" +
-      "`/role remove <member> <role>` — Remove a role from a member.\n" +
-      "`/role create <name> [color]` — Build a new custom server role.\n" +
-      "`/role delete <role>` — Discard an old role folder from the list.\n" +
-      "`/role everyone/bots/humans` — Mass-assign roles directly to targets.\n" +
-      "`/role info/list [role]` — View server role directory hierarchies.\n" +
-      "`/role color/rename/hoist/mentionable` — Modify individual properties.\n" +
-      "`/warn <user> <reason>` - Formally warn a problematic member.\n" +
-      "`/warnings [user]` - View the moderation infraction warning logs.\n" +
-      "`/mute <user> [reason]` - Mute a user from channels and text rooms.\n" +
-      "`/unmute <user>` - Restore standard text and voice privileges.\n" +
-      "`/kick <user> [reason]` - Kick a problematic member from the guild.\n" +
-      "`/ban <user> [reason]` - Hard ban a malicious member from the server.";
-
-    // =========================================================
     // EMBED LAYOUT BUILDER BLOCKS
     // =========================================================
     const embedPage1 = new EmbedBuilder()
@@ -90,6 +58,39 @@ module.exports = {
       .addFields({ name: '🎭 Interactive & Whimsical Modules', value: userCommandsPart2 })
       .setFooter({ text: prefixText })
       .setTimestamp();
+    // =========================================================
+    // PAGE 3: STAFF COMMANDS (UTILITIES & UTILITY SWITCHES)
+    // =========================================================
+    const staffCommandsPart1 =
+      "`/cute <style>` - Change font layout display display options.\n" +
+      "`/setup <template> [clear]` - Run server template builder layouts.\n" +
+      "`/setup-audit` - Configure the server log recording channels.\n" +
+      "`/mod-logs-toggle` - Enable or disable background moderation logs.\n" +
+      "`/leveling <on/off>` - Enable or disable the XP tracking loops.\n" +
+      "`/fun-module <on/off>` - Turn the server fun suite globally on or off.\n" +
+      "`/ticket close` - Permanently lock and archive an active support ticket.\n" +
+      "`/flavour` - View or manage custom bot response speech variations.\n" +
+      "`/clear-channels` - Mass delete and purge chat layers quickly.";
+
+    // =========================================================
+    // PAGE 4: STAFF COMMANDS (ROLES, MODERATION & REACTION ROLES)
+    // =========================================================
+    const staffCommandsPart2 =
+      "`/role user <member> <role>` — Add a specific role assignment.\n" +
+      "`/role remove <member> <role>` — Remove a role from a member.\n" +
+      "`/role create <name> [color]` — Build a new custom server role.\n" +
+      "`/role delete <role>` — Discard an old role folder from the list.\n" +
+      "`/role everyone/bots/humans` — Mass-assign roles directly to targets.\n" +
+      "`/role info/list [role]` — View server role directory hierarchies.\n" +
+      "`/role color/rename/hoist/mentionable` — Modify individual properties.\n" +
+      "`/warn <user> <reason>` - Formally warn a problematic member.\n" +
+      "`/warnings [user]` - View the moderation infraction warning logs.\n" +
+      "`/mute <user> [reason]` - Mute a user from channels and text rooms.\n" +
+      "`/unmute <user>` - Restore standard text and voice privileges.\n" +
+      "`/kick <user> [reason]` - Kick a problematic member from the guild.\n" +
+      "`/ban <user> [reason]` - Hard ban a malicious member from the server.\n" +
+      "`/unban <username> [reason]` - Revoke a server ban using their unique username.\n" +
+      "`/reactionroles <subcommand>` - Deploy, edit, or test custom button/dropdown role panels.";
 
     const embedPage3 = new EmbedBuilder()
       .setColor('#5865F2')
@@ -102,7 +103,7 @@ module.exports = {
     const embedPage4 = new EmbedBuilder()
       .setColor('#E74C3C')
       .setTitle('🛡️ Help Menu — Page 4/4 (Staff Commands Cont.)')
-      .setDescription('Advanced utility structures to manage roles and users quickly.')
+      .setDescription('Advanced utility structures to manage roles, users, and panels quickly.')
       .addFields({ name: '🔒 Server Security & Role Administration', value: staffCommandsPart2 })
       .setFooter({ text: prefixText })
       .setTimestamp();
