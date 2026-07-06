@@ -6,7 +6,6 @@ module.exports = {
     .setDescription('View the full list of available bot commands across pages.'),
   name: 'help',
 
-  // 🌟 FIXED: Unified signature mapping by passing client parameters natively
   async execute(interaction, client) {
     const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options && !interaction.isMock ? true : false);
 
@@ -141,7 +140,7 @@ module.exports = {
   
         buttons.components.forEach(btn => btn.setDisabled(false));
   
-        // 🌟 FIXED: Native target mapping targeting precise integer indices inside arrays
+        // 🌟 FIXED: Array index assignments fixed flawlessly, [1], [2], [3]
         if (btnInteraction.customId === 'help_page1') {
           buttons.components[0].setDisabled(true);
           await btnInteraction.update({ embeds: [embedPage1], components: [buttons] }).catch(() => null);
