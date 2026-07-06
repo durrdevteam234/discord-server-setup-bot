@@ -111,10 +111,18 @@ mongoose.connect(process.env.MONGODB_URI)
 // ==========================================
 const app = express();
 const port = process.env.PORT || 10000;
+
+// Enable CORS for external access. Allows your new frontend repo to pull data securely.
 app.use(cors());
 
+// Lightweight root route that acts as a confirmation screen and an external ping destination
 app.get('/', (req, res) => {
 res.status(200).send('ServerMiser Dashboard API backend is active and fully functional.');
+});
+
+// A lightweight keep-alive / ping endpoint to prevent Render from going to sleep
+app.get('/ping', (req, res) => {
+res.status(200).send('Bot backend is awake!');
 });
 
 app.get('/api/stats', async (req, res) => {
