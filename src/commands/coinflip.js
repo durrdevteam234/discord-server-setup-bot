@@ -35,11 +35,11 @@ module.exports = {
         const embed = new EmbedBuilder()
             .setTitle(isCuteActive ? '✨ 🪙 ANIMATED COIN FLIP ✨' : '🪙 Coin Flip')
             .setDescription(`The coin spins high through the air and lands flat...\n\n🎯 It's **${result}**!`)
-            .setColor(isCuteActive ? '#FF69B4' : '#3498DB');
+            .setColor(isCuteActive ? '#FF69B4' : '#3498DB')
+            .setImage(randomCoinGif); // 🌟 Lock the GIF inside the card!
 
-        // Sending the loop as a text wrapper forces Discord to build its native player interface
+        // Removed the external text content link parameter layout completely
         await interaction.reply({ 
-            content: randomCoinGif,
             embeds: [embed] 
         }).catch(() => null);
     },
@@ -62,10 +62,11 @@ module.exports = {
         const embed = new EmbedBuilder()
             .setTitle(isCuteActive ? '✨ 🪙 ANIMATED COIN FLIP ✨' : '🪙 Coin Flip')
             .setDescription(`The coin spins high through the air and lands flat...\n\n🎯 It's **${result}**!`)
-            .setColor(isCuteActive ? '#FF69B4' : '#3498DB');
+            .setColor(isCuteActive ? '#FF69B4' : '#3498DB')
+            .setImage(randomCoinGif); // 🌟 Lock the GIF inside the card here too!
 
+        // Removed the external text content link parameter layout here too
         return message.reply({ 
-            content: randomCoinGif,
             embeds: [embed] 
         }).catch(() => null);
     }

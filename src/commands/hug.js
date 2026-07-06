@@ -21,9 +21,11 @@ const HUG_ACTIONS = [
 
 // Permanent Tenor links optimized for native chat layout embeds
 const HUG_GIFS = [
-  "https://tenor.com",
-  "https://tenor.com",
-  "https://tenor.com"
+  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdTU5aWRlMXMyOTV5YzU3dnJqZjVld254ZGI0ZTB5Z2F0OWU4Zm1ncyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/gl8ymnpv4Sqha/giphy.gif",
+  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdTU5aWRlMXMyOTV5YzU3dnJqZjVld254ZGI0ZTB5Z2F0OWU4Zm1ncyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/5OqXb948EBkyUcnwHt/giphy.gif",
+  "https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3ZzdxYzgydGhtNm9maHU0d3RseGMzZG9nNmd2enhpdndyZ3JzajlncCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/lrr9rHuoJOE0w/giphy.gif",
+  "https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3cmRlYml1eDQ2bzduajJ5aTFxNTBuZTNycW85Z3ZpN3I1eW9lcjhlZSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/d9eL06htb5Vks/giphy.gif",
+  "https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3N243aHdmeng5NDdvY2FvNGhmcDV5NnN2YzU4bnJncGtrOHduZjZoZSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/Gf54zTxt2QKru/giphy.gif"
 ];
 
 module.exports = {

@@ -16,9 +16,16 @@ const CAT_FACTS = [
 
 // Permanent, high-quality Tenor cat animations optimized for text layout embedding
 const CAT_GIFS = [
-  "https://tenor.com",
-  "https://tenor.com",
-  "https://tenor.com"
+  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOTQ4a2RwMjA2NThwZnJmZGlzNXIycWg2eXZwcngyZ2ZkanZ5cXo4aSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3oriO0OEd9QIDdllqo/giphy.gif",
+  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOTQ4a2RwMjA2NThwZnJmZGlzNXIycWg2eXZwcngyZ2ZkanZ5cXo4aSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/uyfgCPQeCjYMVxt2m3/giphy.gif",
+  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOTQ4a2RwMjA2NThwZnJmZGlzNXIycWg2eXZwcngyZ2ZkanZ5cXo4aSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/yedDQGWwq0heU/giphy.gif",
+  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOTQ4a2RwMjA2NThwZnJmZGlzNXIycWg2eXZwcngyZ2ZkanZ5cXo4aSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/oz0iZ8vYdgeTVMtFAe/giphy.gif",
+  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOTQ4a2RwMjA2NThwZnJmZGlzNXIycWg2eXZwcngyZ2ZkanZ5cXo4aSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/dRcMsUUrnR8He/giphy.gif",
+  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOTQ4a2RwMjA2NThwZnJmZGlzNXIycWg2eXZwcngyZ2ZkanZ5cXo4aSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/haCYYKWRVeilcEL65X/giphy.gif",
+  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOTQ4a2RwMjA2NThwZnJmZGlzNXIycWg2eXZwcngyZ2ZkanZ5cXo4aSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/bdIHP4CqxvdUe2MJH8/giphy.gif",
+  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOTQ4a2RwMjA2NThwZnJmZGlzNXIycWg2eXZwcngyZ2ZkanZ5cXo4aSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/1YLltfFKpiti8ePRT4/giphy.gif",
+  "https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3OWQzZXk1cGQzemt0enRzeGt3c2Y4dzE3Ymk5NjduN3MxZWZ5c3QwaiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/PfPgPP9VX3m5O05sba/giphy.gif",
+  "https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3OWQzZXk1cGQzemt0enRzeGt3c2Y4dzE3Ymk5NjduN3MxZWZ5c3QwaiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/0oIkdy76oYE8uPsPjy/giphy.gif"
 ];
 
 module.exports = {
@@ -48,10 +55,11 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setColor(isCuteActive ? '#FF69B4' : '#E67E22')
       .setTitle(isCuteActive ? '✨ 🐱 ANIMATED CAT VALUE ✨' : '🐱 Random Cat Fact')
-      .setDescription(`💡 **Did you know?** ${randomFact}`);
+      .setDescription(`💡 **Did you know?** ${randomFact}`)
+      .setImage(randomGif); // 🌟 Lock the GIF inside the card layout!
       
+    // Removed direct text content string parameter from response payload layout
     await interaction.reply({ 
-      content: randomGif,
       embeds: [embed] 
     }).catch(() => null);
   },
@@ -74,10 +82,11 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setColor(isCuteActive ? '#FF69B4' : '#E67E22')
       .setTitle(isCuteActive ? '✨ 🐱 ANIMATED CAT VALUE ✨' : '🐱 Random Cat Fact')
-      .setDescription(`💡 **Did you know?** ${randomFact}`);
+      .setDescription(`💡 **Did you know?** ${randomFact}`)
+      .setImage(randomGif); // 🌟 Lock the GIF inside the card here too!
       
+    // Removed direct text content string parameter from prefix response layout
     return message.reply({ 
-      content: randomGif,
       embeds: [embed] 
     }).catch(() => null);
   }
