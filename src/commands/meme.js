@@ -15,7 +15,7 @@ const MEMES = [
   { title: "Me looking at my total bank account balance after saying 'treat yourself' just one minor time", url: "https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3MzVudnU3ZzJyejZ4ZHF0aTJ1NHA0NGNqNHlzMWFnbTdnbWthNjJiZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/heTOo1Etgs2SohZrBg/giphy.gif" },
   { title: "The exact facial expression you make when the waiter is bringing your food over to the table", url: "https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3MzVudnU3ZzJyejZ4ZHF0aTJ1NHA0NGNqNHlzMWFnbTdnbWthNjJiZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/5quG1HRA7wjpPByjyq/giphy.gif" },
   { title: "When you hear your own voice on an audio recording and wonder how anyone stands talking to you", url: "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMzFtN25hMjYyZHVteW8yczN2dGVrdjk5emIyYW84czM4ZHd0aGQ1cSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/aM4FFzsndEiXpgiFKD/giphy.gif" },
-  { title: "Me laughing at a random joke three hours later when I finally understand what it meant", url: "https://giphy.com" },
+  { title: "Me laughing at a random joke three hours later when I finally understand what it meant", url: "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZGlmZnRoZm5ldGk3YW9tcWh2bXIxNXU3cnR1bGc0dTllZW1lNmNhMiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/k7Ip1BaxWwmLQZJ7Gk/giphy.gif" },
   { title: "When you finish an exam and have absolutely zero idea if you got a 100% score or a 0% score", url: "https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExaGE3MGJ0bjQ1cG53dWFoMGVnenc1Mzh6MWVlNWIzcnFnbnhtc3ZtcSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/cWuCpYskQfi34aGiJQ/giphy.gif" }
 ];
 
