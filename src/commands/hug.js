@@ -19,12 +19,11 @@ const HUG_ACTIONS = [
   "sends a million digital micro-hugs flying straight into {target}'s active chat stream! 💻"
 ];
 
-// Permanent Discord hosted asset nodes that bypass client block screens completely
+// Permanent Tenor links optimized for native chat layout embeds
 const HUG_GIFS = [
-  "https://discordapp.com",
-  "https://discordapp.com",
-  "https://discordapp.com",
-  "https://discordapp.com"
+  "https://tenor.com",
+  "https://tenor.com",
+  "https://tenor.com"
 ];
 
 module.exports = {
@@ -65,8 +64,9 @@ module.exports = {
       .setTitle(isCuteActive ? '✨ 🤗 WHOLESOME EMBRACE ✨' : '🤗 Virtual Hug!')
       .setDescription(`**${caller.username}** ${randomAction}`);
       
+    // Send the GIF URL as text content above the card so Discord renders it cleanly
     await interaction.reply({ 
-      content: `🎬 **Animated Action Preview:** ${randomGif}`,
+      content: randomGif,
       embeds: [embed] 
     }).catch(() => null);
   },
@@ -78,6 +78,37 @@ module.exports = {
     if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false) {
       return message.reply('❌ The complete **Fun Command Suite** has been globally disabled by a server administrator.').catch(() => null);
     }
-    return; // messageCreate.js handles prefix injection routing automatically
+
+    // Resolve targeted user via mention or raw trailing ID strings
+    let target = message.mentions.users.first();
+    if (!target && args && args.length > 0) {
+      const pureId = args[0].replace(/[^0-9]/g, '');
+      if (pureId.length >= 17 && pureId.length <= 20) {
+        target = await client.users.fetch(pureId).catch(() => null);
+      }
+    }
+
+    if (!target) return message.reply('❌ Please mention a valid user to hug! Usage: `|hug @user`').catch(() => null);
+    if (target.id === message.author.id) {
+      return message.reply('🤗 You wrap your arms around yourself. Self-love is important! ❤️').catch(() => null);
+    }
+
+    const randomAction = HUG_ACTIONS[Math.floor(Math.random() * HUG_ACTIONS.length)].replace('{target}', `**${target.username}**`);
+    const randomGif = HUG_GIFS[Math.floor(Math.random() * HUG_GIFS.length)];
+    
+    let cuteStyle = 'off';
+    try { const cuteData = db.readData('cute.json') || {}; cuteStyle = cuteData[message.guild?.id] || 'off'; } catch (e) {}
+    const isCuteActive = cuteStyle !== 'off';
+
+    const embedPrefix = new EmbedBuilder()
+      .setColor(isCuteActive ? '#FF69B4' : '#FFC0CB')
+      .setTitle(isCuteActive ? '✨ 🤗 WHOLESOME EMBRACE ✨' : '🤗 Virtual Hug!')
+      .setDescription(`**${message.author.username}** ${randomAction}`);
+
+    // Send the GIF URL as text content above the card here too
+    return message.reply({ 
+      content: randomGif,
+      embeds: [embedPrefix] 
+    }).catch(() => null);
   }
 };

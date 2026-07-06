@@ -14,16 +14,11 @@ const CAT_FACTS = [
   "Cats rub their faces against humans to mark them with hidden scent glands located near their cheeks."
 ];
 
-// Expanded pool of verified permanent Discord CDN direct links that will animate fully
+// Permanent, high-quality Tenor cat animations optimized for text layout embedding
 const CAT_GIFS = [
-  "https://discordapp.com",
-  "https://discordapp.com",
-  "https://discordapp.com",
-  "https://discordapp.com",
-  "https://discordapp.com",
-  "https://discordapp.com",
-  "https://discordapp.com",
-  "https://discordapp.com"
+  "https://tenor.com",
+  "https://tenor.com",
+  "https://tenor.com"
 ];
 
 module.exports = {
@@ -56,7 +51,7 @@ module.exports = {
       .setDescription(`💡 **Did you know?** ${randomFact}`);
       
     await interaction.reply({ 
-      content: `${randomGif}`,
+      content: randomGif,
       embeds: [embed] 
     }).catch(() => null);
   },
@@ -81,8 +76,8 @@ module.exports = {
       .setTitle(isCuteActive ? '✨ 🐱 ANIMATED CAT VALUE ✨' : '🐱 Random Cat Fact')
       .setDescription(`💡 **Did you know?** ${randomFact}`);
       
-    await message.reply({ 
-      content: `${randomGif}`,
+    return message.reply({ 
+      content: randomGif,
       embeds: [embed] 
     }).catch(() => null);
   }

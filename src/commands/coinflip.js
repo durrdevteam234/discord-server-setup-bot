@@ -1,12 +1,10 @@
 const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const db = require('../utils/database.js');
 
-// Expanded pool of distinct animated flipping sequences to give the coin genuine visual variety
+// Permanent, working coin flip animations optimized for native chat layout embeds
 const COIN_GIFS = [
-  "https://discordapp.com",
-  "https://discordapp.com",
-  "https://discordapp.com",
-  "https://discordapp.com"
+  "https://tenor.com",
+  "https://tenor.com"
 ];
 
 module.exports = {
@@ -39,8 +37,9 @@ module.exports = {
             .setDescription(`The coin spins high through the air and lands flat...\n\n🎯 It's **${result}**!`)
             .setColor(isCuteActive ? '#FF69B4' : '#3498DB');
 
+        // Sending the loop as a text wrapper forces Discord to build its native player interface
         await interaction.reply({ 
-            content: `${randomCoinGif}`,
+            content: randomCoinGif,
             embeds: [embed] 
         }).catch(() => null);
     },
@@ -65,8 +64,8 @@ module.exports = {
             .setDescription(`The coin spins high through the air and lands flat...\n\n🎯 It's **${result}**!`)
             .setColor(isCuteActive ? '#FF69B4' : '#3498DB');
 
-        await message.reply({ 
-            content: `${randomCoinGif}`,
+        return message.reply({ 
+            content: randomCoinGif,
             embeds: [embed] 
         }).catch(() => null);
     }
