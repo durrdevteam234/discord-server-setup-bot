@@ -27,7 +27,7 @@ module.exports = {
         // Check Global Server Configuration Switch For Fun Modules
         const mainSettings = db.readData('settings.json') || {};
         const currentGuildSettings = mainSettings[message.guild?.id] || {};
-        const coreUtilityCommands = ['setup', 'cute', 'fun-module']; 
+        const coreUtilityCommands = ['setup', 'cute', 'fun-module', 'fun-menu']; 
         
         if (!coreUtilityCommands.includes(commandName)) {
           if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false) {
@@ -103,7 +103,6 @@ module.exports = {
               const createdChannel = await guild.channels.create({ name: channelData.name, type: channelData.type, parent: channelData.parent });
               if (key === 'general') createdGeneralChannelId = createdChannel.id;
             }
-            
             currentGuildSettings.template = templateArg;
             currentGuildSettings.channels = Object.keys(channels);
             currentGuildSettings.welcomeChannelId = createdGeneralChannelId;
@@ -124,7 +123,7 @@ module.exports = {
             return message.reply('❌ Permissions required!').catch(() => null);
           }
           
-          const choice = argsArray[0] ? argsArray[0].toLowerCase() : null;
+          const choice = argsArray ? argsArray.toLowerCase() : null;
           const validStyles = ['off', 'wide', 'smallcaps', 'bubbles'];
           if (!choice || !validStyles.includes(choice)) {
             const embed = new discord.EmbedBuilder().setColor('#FF69B4').setTitle('✨ Font Menu ✨').setDescription('Usage: `|cute <choice>`\n• `off` ➡️ Normal\n• `wide` ➡️ ᴡɪᴅᴇ\n• `smallcaps` ➡️ sᴍᴀʟʟᴄᴀᴘs\n• `bubbles` ➡️ ⓑⓤⓑⓑⓛⓔⓢ');
@@ -180,10 +179,27 @@ module.exports = {
                   getUser: (name) => resolvedTargetUser,
                   getMember: (name) => resolvedTargetMember,
                   getInteger: (name) => {
-                    const processedInt = parseInt(argsArray[0]);
+                    const processedInt = parseInt(argsArray);
                     return isNaN(processedInt) ? null : processedInt;
                   },
-                  get: (name) => ({ value: rawArgsString || null })
+                  getAttachment: (name) => {
+                    const nativeAttachment = message.attachments.first();
+                    if (nativeAttachment) return nativeAttachment;
+                    if (rawArgsString.startsWith('http://') || rawArgsString.startsWith('https://')) {
+                      return { url: rawArgsString, proxyURL: rawArgsString };
+                    }
+                    return null;
+                  },
+                  get: (name) => {
+                    if (name === 'image' || name === 'file' || name === 'attachment') {
+                      const nativeAttachment = message.attachments.first();
+                      if (nativeAttachment) return { attachment: nativeAttachment, value: nativeAttachment.id };
+                      if (rawArgsString.startsWith('http://') || rawArgsString.startsWith('https://')) {
+                        return { value: rawArgsString, attachment: { url: rawArgsString, proxyURL: rawArgsString } };
+                      }
+                    }
+                    return { value: rawArgsString || null };
+                  }
                 },
                 reply: async (options) => {
                   if (mockInteraction.replied || mockInteraction.deferred) {
