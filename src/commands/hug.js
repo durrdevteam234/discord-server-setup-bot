@@ -19,7 +19,7 @@ const HUG_ACTIONS = [
   "sends a million digital micro-hugs flying straight into {target}'s active chat stream! 💻"
 ];
 
-// Permanent Tenor links optimized for native chat layout embeds
+// Permanent Giphy direct links optimized for embeds
 const HUG_GIFS = [
   "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdTU5aWRlMXMyOTV5YzU3dnJqZjVld254ZGI0ZTB5Z2F0OWU4Zm1ncyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/gl8ymnpv4Sqha/giphy.gif",
   "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdTU5aWRlMXMyOTV5YzU3dnJqZjVld254ZGI0ZTB5Z2F0OWU4Zm1ncyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/5OqXb948EBkyUcnwHt/giphy.gif",
@@ -64,11 +64,10 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setColor(isCuteActive ? '#FF69B4' : '#FFC0CB')
       .setTitle(isCuteActive ? '✨ 🤗 WHOLESOME EMBRACE ✨' : '🤗 Virtual Hug!')
-      .setDescription(`**${caller.username}** ${randomAction}`);
+      .setDescription(`**${caller.username}** ${randomAction}`)
+      .setImage(randomGif); // 🌟 Lock the GIF inside the embed frame
       
-    // Send the GIF URL as text content above the card so Discord renders it cleanly
     await interaction.reply({ 
-      content: randomGif,
       embeds: [embed] 
     }).catch(() => null);
   },
@@ -105,11 +104,10 @@ module.exports = {
     const embedPrefix = new EmbedBuilder()
       .setColor(isCuteActive ? '#FF69B4' : '#FFC0CB')
       .setTitle(isCuteActive ? '✨ 🤗 WHOLESOME EMBRACE ✨' : '🤗 Virtual Hug!')
-      .setDescription(`**${message.author.username}** ${randomAction}`);
+      .setDescription(`**${message.author.username}** ${randomAction}`)
+      .setImage(randomGif); // 🌟 Lock the GIF inside the embed frame here too
 
-    // Send the GIF URL as text content above the card here too
     return message.reply({ 
-      content: randomGif,
       embeds: [embedPrefix] 
     }).catch(() => null);
   }
