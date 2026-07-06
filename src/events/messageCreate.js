@@ -10,14 +10,15 @@ module.exports = {
   once: false,
   async execute(message, client) {
     try {
-      // 1. Safety Gate: Completely ignore bots, webhooks, and empty messages
+      // 1. Safety Gate: Completely ignore bots, webhooks, and completely empty contents
       if (!message || !message.author || message.author.bot || message.webhookId) return;
+      if (!message.content) return; // Prevent silent dropping of empty attachment-only checks
       
       const prefix = client?.prefix || '|';
       // ==========================================
       // PART A: COMMAND PARSING & EXECUTION
       // ==========================================
-      if (message.content && message.content.startsWith(prefix)) {
+      if (message.content.startsWith(prefix)) {
         const argsArray = message.content.slice(prefix.length).trim().split(/ +/);
         if (argsArray.length === 0) return;
         
@@ -103,7 +104,7 @@ module.exports = {
               const createdChannel = await guild.channels.create({ name: channelData.name, type: channelData.type, parent: channelData.parent });
               if (key === 'general') createdGeneralChannelId = createdChannel.id;
             }
-                        currentGuildSettings.template = templateArg;
+            currentGuildSettings.template = templateArg;
             currentGuildSettings.channels = Object.keys(channels);
             currentGuildSettings.welcomeChannelId = createdGeneralChannelId;
             currentGuildSettings.roles = [adminRole.id, modRole.id, memberRole.id];
@@ -123,7 +124,7 @@ module.exports = {
             return message.reply('❌ Permissions required!').catch(() => null);
           }
           
-          const choice = argsArray ? argsArray.toLowerCase() : null;
+          const choice = argsArray[0] ? argsArray[0].toLowerCase() : null;
           const validStyles = ['off', 'wide', 'smallcaps', 'bubbles'];
           if (!choice || !validStyles.includes(choice)) {
             const embed = new discord.EmbedBuilder().setColor('#FF69B4').setTitle('✨ Font Menu ✨').setDescription('Usage: `|cute <choice>`\n• `off` ➡️ Normal\n• `wide` ➡️ ᴡɪᴅᴇ\n• `smallcaps` ➡️ sᴍᴀʟʟᴄᴀᴘs\n• `bubbles` ➡️ ⓑⓤⓑⓑⓛⓔⓢ');
@@ -238,14 +239,14 @@ module.exports = {
       const guildId = message.guild?.id;
       if (!guildId) return;
 
-      const mainSettings = db.readData('settings.json') || {};
-      const currentGuildSettings = mainSettings[guildId] || {};
+      const mainSettingsLocal = db.readData('settings.json') || {};
+      const guildSettingsLocal = mainSettingsLocal[guildId] || {};
 
       const levelingSettings = db.readData('leveling_settings.json') || {};
       const levelConfig = levelingSettings[guildId] || {};
 
       const targetStatus = levelConfig.status || levelConfig._doc?.status || levelConfig.enabled || levelConfig._doc?.enabled;
-      const mainLevelingStatus = currentGuildSettings.leveling || currentGuildSettings._doc?.leveling;
+      const mainLevelingStatus = guildSettingsLocal.leveling || guildSettingsLocal._doc?.leveling;
 
       const isLevelingActive = 
         (mainLevelingStatus === 'on' || mainLevelingStatus === true) ||
@@ -290,8 +291,8 @@ module.exports = {
         let targetChannelId = levelConfig.channelId || 
                               levelConfig._doc?.channelId || 
                               levelConfig.settings?.channelId || 
-                              currentGuildSettings.channelId ||
-                              currentGuildSettings._doc?.channelId;
+                              guildSettingsLocal.channelId ||
+                              guildSettingsLocal._doc?.channelId;
 
         let targetChannel = message.channel;
         if (targetChannelId && typeof targetChannelId === 'string') {
