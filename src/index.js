@@ -13,9 +13,6 @@ const express = require('express');
 const cors = require('cors'); 
 require('dotenv').config();
 
-// 💥 THE MAGIC LINK: Import your high-octane analytics pinger!
-const { pingBotList } = require('./utils/botListPinger');
-
 // ==========================================
 // 1. DISCORD BOT CLIENT INITIALIZATION 🤖
 // ==========================================
@@ -50,36 +47,7 @@ process.on('uncaughtException', (error) => {
 });
 
 // ==========================================
-// 🔥 AUTOMATION ENGINE: RSDASH LIVE STATS TRACKER
-// ==========================================
-client.once('ready', () => {
-    console.log(`\n==================================================`);
-    console.log(`🎉 SUCCESS! ServerMiser is online as ${client.user.tag}!`);
-    console.log(`==================================================\n`);
-    console.log('📡 Igniting automated API telemetry engine for rsdash.net...');
-
-    const sendStatsUpdate = () => {
-        const serverCount = client.guilds.cache.size;
-        
-        // Sums total members across all servers dynamically!
-        const userCount = client.guilds.cache.reduce((acc, guild) => acc + (guild.memberCount || 0), 0);
-        
-        // Auto-checks for Shard Managers, defaults to 1 if single process!
-        const shardCount = client.shard ? client.shard.count : 1; 
-
-        console.log(`📊 Collecting local matrix data... (Servers: ${serverCount} | Users: ${userCount} | Shards: ${shardCount})`);
-        pingBotList(serverCount, userCount, shardCount);
-    };
-
-    // ⚡ Strike 1: Push stats to the universe the exact millisecond the bot boots!
-    sendStatsUpdate();
-
-    // ⏰ Routine Sync: Keep your charts flawless with a fresh ping every 30 minutes!
-    setInterval(sendStatsUpdate, 30 * 60 * 1000); 
-});
-
-// ==========================================
-// 2. LOAD COMMANDS DYNAMICALLY (SLASH & PREFIX) 📁
+// 2. LOAD COMMANDS DYNAMICALLY (SLASH & PREFIX) 📂
 // ==========================================
 const commandsPath = path.join(__dirname, 'commands');
 if (fs.existsSync(commandsPath)) {
@@ -150,10 +118,7 @@ mongoose.connect(process.env.MONGODB_URI)
 const app = express();
 const port = process.env.PORT || 10000;
 
-// Universal cross-origin bridge for your incredible custom frontends!
 app.use(cors());
-
-// Serve assets like images, logos, and layouts directly to the browser
 app.use(express.static(path.join(__dirname, 'assets')));
 
 // Dashboard confirmation screen
@@ -161,7 +126,7 @@ app.get('/', (req, res) => {
 res.status(200).send('⚡ ServerMiser Dashboard API backend is active, hyper-optimized, and streaming live metrics! 🚀');
 });
 
-// Dynamic keep-awake route to completely bypass Render\'s free-tier sleep cycles!
+// Keep-awake route to completely bypass Render\'s free-tier sleep cycles!
 app.get('/ping', (req, res) => {
 res.status(200).send('⚡ Core operating framework status: FULLY AWAKE!');
 });

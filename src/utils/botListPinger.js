@@ -1,5 +1,7 @@
+const https = require('https');
+
 /**
- * Pings the rsdash.net API using native Node fetch with browser-emulated request headers.
+ * Pings the rsdash.net API using Node's core HTTPS module.
  * @param {number} serverCount - Total number of guilds.
  * @param {number} userCount - Total number of users across all guilds.
  * @param {number} shardCount - Total number of shards your bot is running.
@@ -13,37 +15,46 @@ async function pingBotList(serverCount, userCount, shardCount) {
         return;
     }
 
-    const url = `https://rsdash.net{botId}/stats`; 
+    // Format the payload structure clean
+    const payload = JSON.stringify({
+        server_count: Number(serverCount),
+        user_count: Number(userCount),
+        shard_count: Number(shardCount)
+    });
 
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${apiKey}`, 
-                'Content-Type': 'application/json',
-                // 🌟 FIX: Inject User-Agent to stop Node fetch from failing low-level handshakes
-                'User-Agent': 'ServerMiserDiscordBot/1.0.0 (NodeJS Fetch)'
-            },
-            body: JSON.stringify({
-                server_count: Number(serverCount),
-                user_count: Number(userCount),
-                shard_count: Number(shardCount)
-            })
-        });
-
-        // Log the structural response status directly
-        if (response.ok) {
-            console.log(`🚀 [BotList] Stats pushed successfully! Servers: ${serverCount} | Users: ${userCount} | Shards: ${shardCount}`);
-        } else {
-            const errorText = await response.text();
-            console.error(`⚠️ [BotList] API rejected payload with status ${response.status}:`, errorText);
+    // Configure core HTTPS options to bypass experimental fetch drops
+    const options = {
+        hostname: 'www.rsdash.net',
+        port: 443,
+        path: `/api/v1/bots/${botId}/stats`, // Fixed string interpolation and added correct route paths
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(payload),
+            'User-Agent': 'ServerMiserDiscordBot/1.0.0 (NodeJS HTTPS-Core)'
         }
-    } catch (error) {
-        // Deep error logging to find the exact network breakdown
-        console.error('🚨 [BotList] Handshake Exception Encountered:');
-        console.error(`   - Message: ${error.message}`);
-        console.error(`   - Code: ${error.code || 'No specific system error code provided'}`);
-    }
+    };
+
+    // Execute core network call
+    const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+            if (res.statusCode === 200 || res.statusCode === 204) {
+                console.log(`🚀 [BotList] Stats pushed via core HTTPS! Servers: ${serverCount} | Users: ${userCount}`);
+            } else {
+                console.error(`⚠️ [BotList] API rejected payload with status ${res.statusCode}:`, data);
+            }
+        });
+    });
+
+    req.on('error', (error) => {
+        console.error('🚨 [BotList] Native connection error:', error.message);
+    });
+
+    req.write(payload);
+    req.end();
 }
 
 module.exports = { pingBotList };
