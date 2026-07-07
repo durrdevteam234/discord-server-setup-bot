@@ -13,11 +13,22 @@ module.exports = {
       await interaction.deferReply().catch(() => null);
     }
 
+    // Call the shared helper function
+    await this.sendFullHelpMenu(interaction, isInteraction);
+  },
+
+  async executePrefix(message, args, client) {
+    // Call the exact same shared helper function
+    await this.sendFullHelpMenu(message, false);
+  },
+
+  // =========================================================
+  // SHARED MENU BUILDER (USED BY BOTH SLASH & PREFIX)
+  // =========================================================
+  async sendFullHelpMenu(context, isInteraction) {
     const prefixText = "💡 Prefer text shortcuts? You can also trigger these commands using the prefix: |";
 
-    // =========================================================
     // PAGE 1: USER COMMANDS (CORE + FUN SUMMARY)
-    // =========================================================
     const userCommandsPart1 = 
       "`/help` - View this interactive multi-page help directory menu.\n" +
       "`/purpose` - Learn about the bot and view its official profile picture.\n" +
@@ -31,9 +42,7 @@ module.exports = {
       "`/cat` / `/dog` - Fetch an optimized random animated animal picture.\n" +
       "`/trivia` - Spits out a random brain-teaser trivia question.";
 
-    // =========================================================
     // PAGE 2: USER COMMANDS (FUN INTERACTIONS CONT.)
-    // =========================================================
     const userCommandsPart2 =
       "`/wouldyourather` - Presents an impossible split decision puzzle.\n" +
       "`/capital-quiz` - Tests your geographic knowledge of world capitals.\n" +
@@ -46,9 +55,7 @@ module.exports = {
       "`/rate <item>` - Let the bot assess any object from 1 to 10.\n" +
       "`/meme` - Spits out a random funny, relatable lifestyle meme.";
 
-    // =========================================================
     // PAGE 3: STAFF COMMANDS (UTILITIES & UTILITY SWITCHES)
-    // =========================================================
     const staffCommandsPart1 =
       "`/cute <style>` - Change font layout display display options.\n" +
       "`/setup <template> [clear]` - Run server template builder layouts.\n" +
@@ -60,9 +67,7 @@ module.exports = {
       "`/flavour` - View or manage custom bot response speech variations.\n" +
       "`/clear-channels` - Mass delete and purge chat layers quickly.";
 
-    // =========================================================
     // PAGE 4: STAFF COMMANDS (ROLES, MODERATION & REACTION ROLES)
-    // =========================================================
     const staffCommandsPart2 =
       "`/role user <member> <role>` — Add a specific role assignment.\n" +
       "`/role remove <member> <role>` — Remove a role from a member.\n" +
@@ -80,9 +85,6 @@ module.exports = {
       "`/unban <username> [reason]` - Revoke a server ban using their unique username.\n" +
       "`/reactionroles <subcommand>` - Deploy, edit, or test custom button/dropdown role panels.";
 
-    // =========================================================
-    // EMBED LAYOUT BUILDER BLOCKS
-    // =========================================================
     const embedPage1 = new EmbedBuilder()
       .setColor('#00FF00')
       .setTitle('📚 Help Menu — Page 1/4 (User Commands)')
@@ -123,8 +125,8 @@ module.exports = {
     );
 
     const response = isInteraction 
-      ? await interaction.editReply({ embeds: [embedPage1], components: [buttons] }).catch(() => null)
-      : await interaction.reply({ embeds: [embedPage1], components: [buttons], fetchReply: true }).catch(() => null);
+      ? await context.editReply({ embeds: [embedPage1], components: [buttons] }).catch(() => null)
+      : await context.reply({ embeds: [embedPage1], components: [buttons], fetchReply: true }).catch(() => null);
 
     if (!response) return;
 
@@ -134,14 +136,13 @@ module.exports = {
     });
 
     collector.on('collect', async (btnInteraction) => {
-      const authorId = isInteraction ? interaction.user.id : interaction.author.id;
+      const authorId = isInteraction ? context.user.id : context.author.id;
       if (btnInteraction.user.id !== authorId) {
         return btnInteraction.reply({ content: '❌ Run the command yourself to flip pages!', ephemeral: true }).catch(() => null);
       }
 
       buttons.components.forEach(btn => btn.setDisabled(false));
 
-      // 🌟 FIXED: Array index assignments fixed flawlessly, [1], [2], [3]
       if (btnInteraction.customId === 'help_page1') {
         buttons.components[0].setDisabled(true);
         await btnInteraction.update({ embeds: [embedPage1], components: [buttons] }).catch(() => null);
@@ -160,27 +161,10 @@ module.exports = {
     collector.on('end', () => {
       buttons.components.forEach(btn => btn.setDisabled(true));
       if (isInteraction) {
-        interaction.editReply({ components: [buttons] }).catch(() => null);
+        context.editReply({ components: [buttons] }).catch(() => null);
       } else {
         response.edit({ components: [buttons] }).catch(() => null);
       }
     });
-  },
-
-  async executePrefix(message, args, client) {
-    // Prefix version: send plain text help without interactive buttons
-    const helpEmbed = new EmbedBuilder()
-      .setColor('#00FF00')
-      .setTitle('📚 Help Menu — Quick Reference')
-      .setDescription('Use `/help` for the full interactive menu with all 4 pages.')
-      .addFields(
-        { name: '👤 User Commands', value: '`/rank` • `/leaderboard` • `/ticket create` • `/fun-menu` • `/joke` • `/fortune` • `/trivia` • `/hug` • `/slap` • `/dice-duel` • And more!' },
-        { name: '🛡️ Staff Commands', value: '`/setup` • `/leveling` • `/fun-module` • `/role` • `/warn` • `/mute` • `/kick` • `/ban` • `/reactionroles` • And more!' },
-        { name: '💬 Prefix Commands', value: `All commands above can also be used with the prefix: \`|\`` }
-      )
-      .setFooter({ text: 'Run /help for the full interactive menu' })
-      .setTimestamp();
-    
-    await message.reply({ embeds: [helpEmbed] }).catch(() => null);
   }
 };
