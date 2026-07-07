@@ -116,7 +116,7 @@ const port = process.env.PORT || 10000;
 app.use(cors());
 
 // Serve static files from assets folder (images, logos, etc)
-app.use(express.static('assets'));
+app.use(express.static(path.join(__dirname, 'assets')));
 
 // Lightweight root route that acts as a confirmation screen and an external ping destination
 app.get('/', (req, res) => {
