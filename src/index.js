@@ -2,6 +2,7 @@ if (typeof globalThis.ReadableStream === 'undefined') {
   try {
       const { ReadableStream } = require('node:stream/web');
       globalThis.ReadableStream = ReadableStream;
+      console.log('🚀 [POLYFILL] Successfully injected ReadableStream for seamless Node environment compatibility!');
   } catch (e) {}
 }
 const fs = require('fs');
@@ -12,43 +13,77 @@ const express = require('express');
 const cors = require('cors'); 
 require('dotenv').config();
 
+// 💥 THE MAGIC LINK: Import your high-octane analytics pinger!
+const { pingBotList } = require('./utils/botListPinger');
+
 // ==========================================
-// 1. DISCORD BOT CLIENT INITIALIZATION
+// 1. DISCORD BOT CLIENT INITIALIZATION 🤖
 // ==========================================
+console.log('⚡ Initializing Discord Client with full cached intent layers...');
 const client = new Client({
 intents: [
   GatewayIntentBits.Guilds,
   GatewayIntentBits.GuildMessages,
   GatewayIntentBits.MessageContent, 
-  GatewayIntentBits.GuildMembers
+  GatewayIntentBits.GuildMembers // Crucial for blazing-fast, precise user calculations!
 ]
 });
 client.commands = new Collection();
 client.prefix = process.env.PREFIX || '|';
 
-// 🌟 FIX 1: Attach absolute WebSocket and Gateway crash safety hooks
+// 🔥 CRASH-PROOF RADAR: Catching WebSocket slips before they touch the engine!
 client.on('error', (error) => {
-    console.error('⚠️ [DISCORD GATEWAY ERROR]:', error.message);
+    console.error('⚠️ [DISCORD GATEWAY ERROR ALERT]:', error.message);
 });
 
 client.on('warn', (info) => {
     console.warn('⚠️ [DISCORD GATEWAY WARNING]:', info);
 });
 
-// 🌟 FIX 2: Attach absolute top-level process exception catches to block Render crashes
+// 🛡️ UNBREAKABLE SHIELD: Absolute top-level process catches to lock down Render 24/7!
 process.on('unhandledRejection', (reason, promise) => {
-    console.error('🛑 [CRASH PREVENTED - UNHANDLED REJECTION AT]:', promise, 'REASON:', reason);
+    console.error('🛑 [CRASH PREVENTED] Unhandled Rejection intercepted safely at:', promise, 'Reason:', reason);
 });
 
 process.on('uncaughtException', (error) => {
-    console.error('🛑 [CRASH PREVENTED - UNCAUGHT EXCEPTION DETECTED]:', error.stack || error);
+    console.error('🛑 [CRASH PREVENTED] Critical Uncaught Exception neutralized! Stack:', error.stack || error);
 });
 
 // ==========================================
-// 2. LOAD COMMANDS DYNAMICALLY (SLASH & PREFIX)
+// 🔥 AUTOMATION ENGINE: RSDASH LIVE STATS TRACKER
+// ==========================================
+client.once('ready', () => {
+    console.log(`\n==================================================`);
+    console.log(`🎉 SUCCESS! ServerMiser is online as ${client.user.tag}!`);
+    console.log(`==================================================\n`);
+    console.log('📡 Igniting automated API telemetry engine for rsdash.net...');
+
+    const sendStatsUpdate = () => {
+        const serverCount = client.guilds.cache.size;
+        
+        // Sums total members across all servers dynamically!
+        const userCount = client.guilds.cache.reduce((acc, guild) => acc + (guild.memberCount || 0), 0);
+        
+        // Auto-checks for Shard Managers, defaults to 1 if single process!
+        const shardCount = client.shard ? client.shard.count : 1; 
+
+        console.log(`📊 Collecting local matrix data... (Servers: ${serverCount} | Users: ${userCount} | Shards: ${shardCount})`);
+        pingBotList(serverCount, userCount, shardCount);
+    };
+
+    // ⚡ Strike 1: Push stats to the universe the exact millisecond the bot boots!
+    sendStatsUpdate();
+
+    // ⏰ Routine Sync: Keep your charts flawless with a fresh ping every 30 minutes!
+    setInterval(sendStatsUpdate, 30 * 60 * 1000); 
+});
+
+// ==========================================
+// 2. LOAD COMMANDS DYNAMICALLY (SLASH & PREFIX) 📁
 // ==========================================
 const commandsPath = path.join(__dirname, 'commands');
 if (fs.existsSync(commandsPath)) {
+console.log('📂 Scanning local modules for active bot commands...');
 const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 for (const file of commandFiles) {
   try {
@@ -66,19 +101,20 @@ for (const file of commandFiles) {
     
     if (commandKey) {
       client.commands.set(commandKey, command);
-      console.log(`[STARTUP] Registered command key matching: "${commandKey}"`);
+      console.log(`✅ [COMMAND REGISTERED]: "${commandKey}"`);
     }
   } catch (cmdErr) {
-    console.error('[STARTUP ERROR] Failed to load command file ' + file + ':', cmdErr.message);
+    console.error('❌ [STARTUP ERROR] Failed to load command file ' + file + ':', cmdErr.message);
   }
 }
 }
 
 // ==========================================
-// 3. LOAD EVENT HANDLERS DYNAMICALLY
+// 3. LOAD EVENT HANDLERS DYNAMICALLY 📡
 // ==========================================
 const eventsPath = path.join(__dirname, 'events');
 if (fs.existsSync(eventsPath)) {
+console.log('📂 Scanning system events pipeline...');
 const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
 for (const file of eventFiles) {
   const filePath = path.join(eventsPath, file);
@@ -89,6 +125,7 @@ for (const file of eventFiles) {
     } else {
       client.on(event.name, (...args) => event.execute(...args, client));
     }
+    console.log(`⚡ [EVENT ATTACHED]: "${event.name}"`);
   } catch (eventErr) {
     console.error('❌ [STARTUP ERROR] CRITICAL ERROR IN FILE "' + file + '":', eventErr.stack);
   }
@@ -96,46 +133,46 @@ for (const file of eventFiles) {
 }
 
 // ==========================================
-// 4. MONGODB ATLAS CONNECTION
+// 4. MONGODB ATLAS CONNECTION 💾
 // ==========================================
 if (!process.env.MONGODB_URI) {
-console.error('[CRITICAL] MONGODB_URI environment variable is missing!');
+console.error('🚨 [CRITICAL ERROR] MONGODB_URI environment variable is missing from your deployment setup!');
 } else {
+console.log('💾 Initializing database pipeline...');
 mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('[DATABASE] Connected to MongoDB Atlas successfully!'))
-  .catch(err => console.error('[DATABASE ERROR] MongoDB connection error:', err));
+  .then(() => console.log('✅ [DATABASE CONNECTED] Bound to MongoDB Atlas instance flawlessly!'))
+  .catch(err => console.error('❌ [DATABASE ERROR] Connection handshake failed:', err));
 }
 
 // ==========================================
-// 5. EXPRESS API SERVER
+// 5. EXPRESS API SERVER 🌐
 // ==========================================
 const app = express();
 const port = process.env.PORT || 10000;
 
-// Enable CORS for external access. Allows your new frontend repo to pull data securely.
+// Universal cross-origin bridge for your incredible custom frontends!
 app.use(cors());
 
-// Serve static files from assets folder (images, logos, etc)
+// Serve assets like images, logos, and layouts directly to the browser
 app.use(express.static(path.join(__dirname, 'assets')));
 
-// Lightweight root route that acts as a confirmation screen and an external ping destination
+// Dashboard confirmation screen
 app.get('/', (req, res) => {
-res.status(200).send('ServerMiser Dashboard API backend is active and fully functional.');
+res.status(200).send('⚡ ServerMiser Dashboard API backend is active, hyper-optimized, and streaming live metrics! 🚀');
 });
 
-// A lightweight keep-alive / ping endpoint to prevent Render from going to sleep
+// Dynamic keep-awake route to completely bypass Render\'s free-tier sleep cycles!
 app.get('/ping', (req, res) => {
-res.status(200).send('Bot backend is awake!');
+res.status(200).send('⚡ Core operating framework status: FULLY AWAKE!');
 });
 
 app.get('/api/stats', async (req, res) => {
 try {
-  // Safe Fallback Resolution Layer checking database status natively
   if (mongoose.connection.readyState !== 1) {
     return res.status(503).json({ status: "offline", error: "Database offline" });
   }
 
-  const databaseModel = require('./utils/database'); // Imports your schema model directly
+  const databaseModel = require('./utils/database'); 
   const totalServers = client?.guilds?.cache?.size ?? 0;
   const totalUsers = client?.guilds?.cache?.reduce((acc, g) => acc + g.memberCount, 0) ?? 0;
   const botPing = client?.ws?.ping !== -1 ? Math.round(client?.ws?.ping ?? 0) : 0;
@@ -148,7 +185,6 @@ try {
   let totalXp = 0; let leveledUsers = 0; let totalTickets = 0;
   
   try {
-    // 🌟 FIX: Query your live unified MongoDB config collection documents instead of dead files
     const allGuildDocs = await databaseModel.find({}).catch(() => []);
     
     for (const doc of allGuildDocs) {
@@ -159,7 +195,7 @@ try {
         }
       }
       if (doc.reactionRolePanels) {
-        totalTickets += doc.reactionRolePanels.length; // Uses panel arrays to track metrics smoothly
+        totalTickets += doc.reactionRolePanels.length; 
       }
     }
   } catch (_) {}
@@ -206,8 +242,12 @@ try {
 } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ==========================================
+// 6. ENGINE IGNITION 🔥
+// ==========================================
 app.listen(port, () => {
-console.log(`[SERVER] Live telemetry API server streaming on port ${port}`);
+console.log(`🌐 [EXPRESS LIVE] Performance metrics broadcast channel humming on port ${port}!`);
 });
 
+console.log('🔑 Authenticating client keys via Discord Gateway network...');
 client.login(process.env.DISCORD_TOKEN);
