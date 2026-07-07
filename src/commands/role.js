@@ -118,13 +118,13 @@ function canManageRole(guild, role) {
 }
 
 function resolveRole(guild, input) {
-  if (!input) return null;
+  if (!input || typeof input !== "string") return null;
   const id = input.replace(/[<@&>]/g, "");
   return guild.roles.cache.get(id) || guild.roles.cache.find((r) => r.name.toLowerCase() === input.toLowerCase()) || null;
 }
 
 async function resolveMember(guild, input) {
-  if (!input) return null;
+  if (!input || typeof input !== "string") return null;
   const id = input.replace(/[<@!>]/g, "");
   return guild.members.cache.get(id) || await guild.members.fetch(id).catch(() => null);
 }
@@ -132,7 +132,6 @@ async function resolveMember(guild, input) {
 function usage(msg, sub, syntax) {
   return msg.reply({ embeds: [embed("#FEE75C").setTitle(`Usage — ${PREFIX}role ${sub}`).setDescription(`\`\`\`${syntax}\`\`\``)] });
 }
-
 // 2. SLASH COMMAND EXECUTION ROUTER
 async function execute(interaction) {
   if (!interaction.guild) return;
@@ -143,7 +142,6 @@ async function execute(interaction) {
   }
 
   const { logAction } = require('../utils/auditLog');
-  const database = require('../utils/database');
 
   const sub = interaction.options.getSubcommand();
   const callerUser = interaction.user;
@@ -199,6 +197,7 @@ async function execute(interaction) {
     try { await logAction(interaction.guild, 'Role Deleted', callerUser, `Deleted role: ${roleName}`); } catch(e){}
     return interaction.reply({ embeds: [embed("#57F287").setTitle("Role Deleted")] });
   }
+
   if (sub === "everyone") {
     const role = interaction.options.getRole("role");
     if (!canManageRole(interaction.guild, role)) return interaction.reply({ content: "Role hierarchy issue.", ephemeral: true });
@@ -362,7 +361,6 @@ async function runPrefix(msg, args, client) {
     try { await logAction(msg.guild, 'Role Removed', callerUser, `Removed ${role.name} from ${member.user.username}`); } catch(e){}
     return msg.reply({ embeds: [embed("#57F287").setTitle("Role Removed").setDescription(`Removed ${role} from ${member}.`)] });
   }
-
   if (sub === "create") {
     if (!Array.isArray(args) || args.length < 2) return usage(msg, "create", `${PREFIX}role create <name> [hex color]`);
     const name = args.slice(1).join(" ");
@@ -385,12 +383,14 @@ async function runPrefix(msg, args, client) {
     await role.delete();
     try { await logAction(msg.guild, 'Role Deleted', callerUser, `Deleted role: ${oldName}`); } catch(e){}
     return msg.reply({ embeds: [embed("#57F287").setTitle("Role Deleted").setDescription(`The role **${oldName}** has been deleted.`)] });
-  }  if (sub === "everyone") {
+  }
+
+  if (sub === "everyone") {
     if (!Array.isArray(args) || args.length < 2) return usage(msg, "everyone", `${PREFIX}role everyone <@role>`);
-    const role = resolveRole(msg.guild, args);
+    const role = resolveRole(msg.guild, args[1]);
     if (!role) return msg.reply("❌ Could not find that role.");
     if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
-    
+
     const loading = await msg.reply("🔄 Looping through server members... this may take a while.");
     await msg.guild.members.fetch();
     const targets = msg.guild.members.cache.filter(m => !m.roles.cache.has(role.id));
@@ -403,7 +403,7 @@ async function runPrefix(msg, args, client) {
 
   if (sub === "bots") {
     if (!Array.isArray(args) || args.length < 2) return usage(msg, "bots", `${PREFIX}role bots <@role>`);
-    const role = resolveRole(msg.guild, args);
+    const role = resolveRole(msg.guild, args[1]);
     if (!role) return msg.reply("❌ Could not find that role.");
     if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
     
@@ -419,7 +419,7 @@ async function runPrefix(msg, args, client) {
 
   if (sub === "humans") {
     if (!Array.isArray(args) || args.length < 2) return usage(msg, "humans", `${PREFIX}role humans <@role>`);
-    const role = resolveRole(msg.guild, args);
+    const role = resolveRole(msg.guild, args[1]);
     if (!role) return msg.reply("❌ Could not find that role.");
     if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
     
@@ -435,7 +435,7 @@ async function runPrefix(msg, args, client) {
 
   if (sub === "info") {
     if (!Array.isArray(args) || args.length < 2) return usage(msg, "info", `${PREFIX}role info <@role>`);
-    const role = resolveRole(msg.guild, args);
+    const role = resolveRole(msg.guild, args[1]);
     if (!role) return msg.reply("❌ Could not find that role.");
     
     await msg.guild.members.fetch();
@@ -465,8 +465,8 @@ async function runPrefix(msg, args, client) {
 
   if (sub === "color") {
     if (!Array.isArray(args) || args.length < 3) return usage(msg, "color", `${PREFIX}role color <@role> <hex code>`);
-    const role = resolveRole(msg.guild, args);
-    const hex = args;
+    const role = resolveRole(msg.guild, args[1]);
+    const hex = args[2];
     
     if (!role) return msg.reply("❌ Could not find that role.");
     if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
@@ -479,7 +479,7 @@ async function runPrefix(msg, args, client) {
 
   if (sub === "rename") {
     if (!Array.isArray(args) || args.length < 3) return usage(msg, "rename", `${PREFIX}role rename <@role> <new name>`);
-    const role = resolveRole(msg.guild, args);
+    const role = resolveRole(msg.guild, args[1]);
     const newName = args.slice(2).join(" ");
     
     if (!role) return msg.reply("❌ Could not find that role.");
@@ -494,7 +494,7 @@ async function runPrefix(msg, args, client) {
 
   if (sub === "hoist") {
     if (!Array.isArray(args) || args.length < 2) return usage(msg, "hoist", `${PREFIX}role hoist <@role>`);
-    const role = resolveRole(msg.guild, args);
+    const role = resolveRole(msg.guild, args[1]);
     
     if (!role) return msg.reply("❌ Could not find that role.");
     if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");
@@ -506,7 +506,7 @@ async function runPrefix(msg, args, client) {
 
   if (sub === "mentionable") {
     if (!Array.isArray(args) || args.length < 2) return usage(msg, "mentionable", `${PREFIX}role mentionable <@role>`);
-    const role = resolveRole(msg.guild, args);
+    const role = resolveRole(msg.guild, args[1]);
     
     if (!role) return msg.reply("❌ Could not find that role.");
     if (!canManageRole(msg.guild, role)) return msg.reply("❌ That role is at or above my highest role.");

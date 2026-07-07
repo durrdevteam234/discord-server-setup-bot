@@ -7,8 +7,8 @@ module.exports = {
   name: 'help',
 
   async execute(interaction, client) {
-    // Dynamic system check: evaluates if command is text prefix message or slash context
-    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : false;
+    // CRITICAL FIX: Ensure isInteraction strictly returns false for text messages
+    const isInteraction = typeof interaction.isChatInputCommand === 'function' ? interaction.isChatInputCommand() : false;
 
     if (isInteraction) {
       await interaction.deferReply().catch(() => null);
