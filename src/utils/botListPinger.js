@@ -1,5 +1,5 @@
 /**
- * Pings the rsdash.net API using native Node fetch to update your bot's live analytics.
+ * Pings the rsdash.net API using native Node fetch with browser-emulated request headers.
  * @param {number} serverCount - Total number of guilds.
  * @param {number} userCount - Total number of users across all guilds.
  * @param {number} shardCount - Total number of shards your bot is running.
@@ -16,28 +16,33 @@ async function pingBotList(serverCount, userCount, shardCount) {
     const url = `https://rsdash.net{botId}/stats`; 
 
     try {
-        // Using native global fetch since it's already enabled in your Render environment!
         const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${apiKey}`, 
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                // 🌟 FIX: Inject User-Agent to stop Node fetch from failing low-level handshakes
+                'User-Agent': 'ServerMiserDiscordBot/1.0.0 (NodeJS Fetch)'
             },
             body: JSON.stringify({
-                server_count: serverCount,
-                user_count: userCount,
-                shard_count: shardCount
+                server_count: Number(serverCount),
+                user_count: Number(userCount),
+                shard_count: Number(shardCount)
             })
         });
 
+        // Log the structural response status directly
         if (response.ok) {
             console.log(`🚀 [BotList] Stats pushed successfully! Servers: ${serverCount} | Users: ${userCount} | Shards: ${shardCount}`);
         } else {
             const errorText = await response.text();
-            console.error(`⚠️ [BotList] API responded with status ${response.status}:`, errorText);
+            console.error(`⚠️ [BotList] API rejected payload with status ${response.status}:`, errorText);
         }
     } catch (error) {
-        console.error('🚨 [BotList] Network error pushing live stats:', error.message);
+        // Deep error logging to find the exact network breakdown
+        console.error('🚨 [BotList] Handshake Exception Encountered:');
+        console.error(`   - Message: ${error.message}`);
+        console.error(`   - Code: ${error.code || 'No specific system error code provided'}`);
     }
 }
 
