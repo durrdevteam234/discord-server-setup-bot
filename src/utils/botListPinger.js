@@ -1,7 +1,7 @@
 const https = require('https');
 
 /**
- * Pings the rsdash.net API using Node's core HTTPS module.
+ * Pings the rsdash.net API using Node's core HTTPS module with cross-platform targets.
  * @param {number} serverCount - Total number of guilds.
  * @param {number} userCount - Total number of users across all guilds.
  * @param {number} shardCount - Total number of shards your bot is running.
@@ -11,22 +11,22 @@ async function pingBotList(serverCount, userCount, shardCount) {
     const apiKey = process.env.BOT_LIST_API_KEY;
 
     if (!apiKey) {
-        console.error('🚨 [BotList] Missing BOT_LIST_API_KEY environment variable in Render.');
+        console.error('🚨 [BotList] Missing BOT_LIST_API_KEY environment variable.');
         return;
     }
 
-    // Format the payload structure clean
+    // 🌟 FIX: Injecting the required 'platform' field to clear the 400 validation error
     const payload = JSON.stringify({
+        platform: 'discord',
         server_count: Number(serverCount),
         user_count: Number(userCount),
         shard_count: Number(shardCount)
     });
 
-    // Configure core HTTPS options to bypass experimental fetch drops
     const options = {
         hostname: 'www.rsdash.net',
         port: 443,
-        path: `/api/v1/bots/${botId}/stats`, // Fixed string interpolation and added correct route paths
+        path: `/api/v1/bots/${botId}/stats`,
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${apiKey}`,
@@ -36,7 +36,6 @@ async function pingBotList(serverCount, userCount, shardCount) {
         }
     };
 
-    // Execute core network call
     const req = https.request(options, (res) => {
         let data = '';
         res.on('data', (chunk) => { data += chunk; });
