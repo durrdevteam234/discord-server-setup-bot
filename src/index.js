@@ -115,6 +115,9 @@ const port = process.env.PORT || 10000;
 // Enable CORS for external access. Allows your new frontend repo to pull data securely.
 app.use(cors());
 
+// Serve static files from assets folder (images, logos, etc)
+app.use(express.static('assets'));
+
 // Lightweight root route that acts as a confirmation screen and an external ping destination
 app.get('/', (req, res) => {
 res.status(200).send('ServerMiser Dashboard API backend is active and fully functional.');
