@@ -12,13 +12,15 @@ async function pingBotList(serverCount, userCount, shardCount) {
         return;
     }
 
-    // 🎯 MATCHING THE OWNER'S EXACT PAYLOAD! 
-    const payload = JSON.stringify({
-        platform: 'discord',
-        server_count: Number(serverCount),
-        user_count: Number(userCount) // Sending total members so it never says 0!
-    });
-
+        // 🎯 MATCHING MULTIPLE USER KEYS SO IT TRIPS THEIR INTERNAL SAVING LAYER!
+        const payload = JSON.stringify({
+            platform: 'discord',
+            server_count: Number(serverCount),
+            user_count: Number(userCount),  // Keep this fallback
+            users: Number(userCount),       // 🌟 FIX A: Try standard 'users' format
+            total_users: Number(userCount)  // 🌟 FIX B: Try explicit 'total_users' format
+        });
+    
     const options = {
         hostname: 'www.rsdash.net',
         port: 443,
