@@ -7,7 +7,6 @@ module.exports = {
   name: 'help',
 
   async execute(interaction, client) {
-    // Detect if this is a slash interaction or a traditional text/prefix message
     const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options && !interaction.isMock ? true : false);
 
     if (isInteraction) {
@@ -62,24 +61,24 @@ module.exports = {
       "`/clear-channels` - Mass delete and purge chat layers quickly.";
 
     // =========================================================
-    // PAGE 4: STAFF COMMANDS (ROLES, MODERATION & REACTION ROLES)
+    // PAGE 4: STAFF COMMANDS (ROLES & MODERATION) - CONDENSED TO STAY UNDER 1024 CHARACTERS
     // =========================================================
     const staffCommandsPart2 =
-      "`/role user <member> <role>` — Add a specific role assignment.\n" +
+      "`/role user <member> <role>` — Add a role assignment.\n" +
       "`/role remove <member> <role>` — Remove a role from a member.\n" +
       "`/role create <name> [color]` — Build a new custom server role.\n" +
-      "`/role delete <role>` — Discard an old role folder from the list.\n" +
-      "`/role everyone/bots/humans` — Mass-assign roles directly to targets.\n" +
+      "`/role delete <role>` — Discard an old role folder.\n" +
+      "`/role everyone/bots/humans` — Mass-assign roles directly.\n" +
       "`/role info/list [role]` — View server role directory hierarchies.\n" +
-      "`/role color/rename/hoist/mentionable` — Modify individual properties.\n" +
+      "`/role color/rename/hoist/mentionable` — Modify properties.\n" +
       "`/warn <user> <reason>` - Formally warn a problematic member.\n" +
-      "`/warnings [user]` - View the moderation infraction warning logs.\n" +
-      "`/mute <user> [reason]` - Mute a user from channels and text rooms.\n" +
-      "`/unmute <user>` - Restore standard text and voice privileges.\n" +
-      "`/kick <user> [reason]` - Kick a problematic member from the guild.\n" +
-      "`/ban <user> [reason]` - Hard ban a malicious member from the server.\n" +
-      "`/unban <username> [reason]` - Revoke a server ban using their unique username.\n" +
-      "`/reactionroles <subcommand>` - Deploy, edit, or test custom button/dropdown role panels.";
+      "`/warnings [user]` - View the moderation warning logs.\n" +
+      "`/mute <user> [reason]` - Mute a user from channels.\n" +
+      "`/unmute <user>` - Restore standard text/voice privileges.\n" +
+      "`/kick <user> [reason]` - Kick a member from the guild.\n" +
+      "`/ban <user> [reason]` - Hard ban a member from the server.\n" +
+      "`/unban <username> [reason]` - Revoke a ban using their username.\n" +
+      "`/reactionroles <subcommand>` - Deploy or test interactive role panels.";
 
     // =========================================================
     // EMBED LAYOUT BUILDER BLOCKS
@@ -123,7 +122,6 @@ module.exports = {
       new ButtonBuilder().setCustomId('help_page4').setLabel('Page 4 (Staff)').setStyle(ButtonStyle.Secondary)
     );
 
-    // Send using the right method depending on if it's an interaction or a message
     const response = isInteraction 
       ? await interaction.editReply({ embeds: [embedPage1], components: [buttons] }).catch(() => null)
       : await interaction.reply({ embeds: [embedPage1], components: [buttons], fetchReply: true }).catch(() => null);
@@ -136,7 +134,6 @@ module.exports = {
     });
 
     collector.on('collect', async (btnInteraction) => {
-      // Correctly get author ID based on command type
       const authorId = isInteraction ? interaction.user.id : interaction.author.id;
       if (btnInteraction.user.id !== authorId) {
         return btnInteraction.reply({ content: '❌ Run the command yourself to flip pages!', ephemeral: true }).catch(() => null);
