@@ -1,26 +1,22 @@
 const https = require('https');
 
 /**
- * Pings the rsdash.net API using Node's core HTTPS module with cross-platform targets.
- * @param {number} serverCount - Total number of guilds.
- * @param {number} userCount - Total number of users across all guilds.
- * @param {number} shardCount - Total number of shards your bot is running.
+ * Pings the BotNexus (rsdash) API with the owner's exact specifications!
  */
 async function pingBotList(serverCount, userCount, shardCount) {
     const botId = '5130a2c5-63f8-4cdc-9c77-797ba44c39f7'; 
     const apiKey = process.env.BOT_LIST_API_KEY;
 
     if (!apiKey) {
-        console.error('🚨 [BotList] Missing BOT_LIST_API_KEY environment variable.');
+        console.error('🚨 [BotNexus] Missing BOT_LIST_API_KEY environment variable.');
         return;
     }
 
-    // 🌟 FIX: Injecting the required 'platform' field to clear the 400 validation error
+    // 🎯 MATCHING THE OWNER'S EXACT PAYLOAD! 
     const payload = JSON.stringify({
         platform: 'discord',
         server_count: Number(serverCount),
-        user_count: Number(userCount),
-        shard_count: Number(shardCount)
+        user_count: Number(userCount) // Sending total members so it never says 0!
     });
 
     const options = {
@@ -40,16 +36,27 @@ async function pingBotList(serverCount, userCount, shardCount) {
         let data = '';
         res.on('data', (chunk) => { data += chunk; });
         res.on('end', () => {
-            if (res.statusCode === 200 || res.statusCode === 204) {
-                console.log(`🚀 [BotList] Stats pushed via core HTTPS! Servers: ${serverCount} | Users: ${userCount}`);
-            } else {
-                console.error(`⚠️ [BotList] API rejected payload with status ${res.statusCode}:`, data);
+            try {
+                // 🔍 PARSING THE RESPONSE BODY FROM THE OWNER!
+                const responseData = JSON.parse(data);
+                
+                if (res.statusCode === 200 || res.statusCode === 204 || responseData.ok) {
+                    console.log(`\n🚀 [BotNexus Sync Success!]`);
+                    console.log(`   - Saved Server Count: ${responseData.server_count}`);
+                    console.log(`   - Is Clamped?: ${responseData.clamped ? 'YES 🛡️ (Discord gatekeeper is holding your true count back)' : 'NO ✅'}`);
+                    console.log(`   - Raw Return: ${data}\n`);
+                } else {
+                    console.error(`⚠️ [BotNexus] Rejected with status ${res.statusCode}:`, data);
+                }
+            } catch (parseErr) {
+                // If the response isn't JSON, print the raw text
+                console.log(`🚀 [BotNexus] Stats pushed! Status: ${res.statusCode}. Body: ${data}`);
             }
         });
     });
 
     req.on('error', (error) => {
-        console.error('🚨 [BotList] Native connection error:', error.message);
+        console.error('🚨 [BotNexus] Connection error:', error.message);
     });
 
     req.write(payload);
