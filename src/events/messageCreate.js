@@ -10,9 +10,9 @@ module.exports = {
   once: false,
   async execute(message, client) {
     try {
-      // 1. Safety Gate: Completely ignore bots, webhooks, and completely empty contents
+      // 1. Safety Gate: Completely ignore bots, webhooks, and empty contents
       if (!message || !message.author || message.author.bot || message.webhookId) return;
-      if (!message.content) return; // Prevent silent dropping of empty attachment-only checks
+      if (!message.content) return; 
       
       const prefix = client?.prefix || '|';
       // ==========================================
@@ -162,6 +162,9 @@ module.exports = {
                   if (resolvedTargetMember) resolvedTargetUser = resolvedTargetMember.user;
                 } catch (_) {}
               }
+
+              let activeBotResponse = null;
+
               const mockInteraction = {
                 isCommand: () => true,
                 isChatInputCommand: () => true,
@@ -176,9 +179,11 @@ module.exports = {
                 member: message.member,
                 client: client,
                 options: {
+                  getSubcommand: () => argsArray[0] || null,
                   getString: (name) => rawArgsString.length > 0 ? rawArgsString : null,
                   getUser: (name) => resolvedTargetUser,
                   getMember: (name) => resolvedTargetMember,
+                  getRole: (name) => message.guild ? (message.mentions.roles.first() || message.guild.roles.cache.get(argsArray[0]) || message.guild.roles.cache.find(r => r.name.toLowerCase() === argsArray.slice(1).join(' ').toLowerCase())) : null,
                   getInteger: (name) => {
                     const processedInt = parseInt(argsArray[0]);
                     return isNaN(processedInt) ? null : processedInt;
@@ -204,12 +209,32 @@ module.exports = {
                 },
                 reply: async (options) => {
                   if (mockInteraction.replied || mockInteraction.deferred) {
-                    return mockInteraction.followUp(options);
+                    return mockInteraction.editReply(options);
                   }
                   mockInteraction.replied = true;
-                  if (typeof options === 'string') return message.reply({ content: options });
-                  if (options && options.flags) delete options.flags; 
-                  return message.reply(options);
+                  if (typeof options === 'string') {
+                    activeBotResponse = await message.reply({ content: options }).catch(() => null);
+                  } else {
+                    if (options && options.flags) delete options.flags; 
+                    activeBotResponse = await message.reply(options).catch(() => null);
+                  }
+                  return activeBotResponse;
+                },
+                editReply: async (options) => {
+                  mockInteraction.replied = true;
+                  if (activeBotResponse) {
+                    if (typeof options === 'string') return await activeBotResponse.edit({ content: options }).catch(() => null);
+                    if (options && options.flags) delete options.flags;
+                    return await activeBotResponse.edit(options).catch(() => null);
+                  } else {
+                    if (typeof options === 'string') {
+                      activeBotResponse = await message.channel.send({ content: options }).catch(() => null);
+                    } else {
+                      if (options && options.flags) delete options.flags;
+                      activeBotResponse = await message.channel.send(options).catch(() => null);
+                    }
+                    return activeBotResponse;
+                  }
                 },
                 followUp: async (options) => {
                   if (typeof options === 'string') return message.channel.send({ content: options });
@@ -218,6 +243,12 @@ module.exports = {
                 },
                 deferReply: async (options) => {
                   mockInteraction.deferred = true;
+                  return null;
+                },
+                deleteReply: async () => {
+                  if (activeBotResponse && typeof activeBotResponse.delete === 'function') {
+                    await activeBotResponse.delete().catch(() => null);
+                  }
                   return null;
                 }
               };
