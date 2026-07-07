@@ -7,7 +7,8 @@ module.exports = {
   name: 'help',
 
   async execute(interaction, client) {
-    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options && !interaction.isMock ? true : false);
+    // Dynamic system check: evaluates if command is text prefix message or slash context
+    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : false;
 
     if (isInteraction) {
       await interaction.deferReply().catch(() => null);
@@ -61,7 +62,7 @@ module.exports = {
       "`/clear-channels` - Mass delete and purge chat layers quickly.";
 
     // =========================================================
-    // PAGE 4: STAFF COMMANDS (ROLES & MODERATION) - CONDENSED TO STAY UNDER 1024 CHARACTERS
+    // PAGE 4: STAFF COMMANDS (ROLES & MODERATION)
     // =========================================================
     const staffCommandsPart2 =
       "`/role user <member> <role>` — Add a role assignment.\n" +
@@ -121,7 +122,7 @@ module.exports = {
       new ButtonBuilder().setCustomId('help_page3').setLabel('Page 3 (Staff)').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('help_page4').setLabel('Page 4 (Staff)').setStyle(ButtonStyle.Secondary)
     );
-
+    // Dynamic message delivery based on triggering execution frame
     const response = isInteraction 
       ? await interaction.editReply({ embeds: [embedPage1], components: [buttons] }).catch(() => null)
       : await interaction.reply({ embeds: [embedPage1], components: [buttons], fetchReply: true }).catch(() => null);
@@ -134,13 +135,16 @@ module.exports = {
     });
 
     collector.on('collect', async (btnInteraction) => {
+      // Safely capture target runner ID whether using text message or slash layout
       const authorId = isInteraction ? interaction.user.id : interaction.author.id;
       if (btnInteraction.user.id !== authorId) {
         return btnInteraction.reply({ content: '❌ Run the command yourself to flip pages!', ephemeral: true }).catch(() => null);
       }
 
+      // Re-enable all page switching option buttons
       buttons.components.forEach(btn => btn.setDisabled(false));
 
+      // Route custom page components securely using button interaction updates
       if (btnInteraction.customId === 'help_page1') {
         buttons.components[0].setDisabled(true);
         await btnInteraction.update({ embeds: [embedPage1], components: [buttons] }).catch(() => null);
