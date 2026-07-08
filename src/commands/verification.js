@@ -174,6 +174,7 @@ const {
     // 🔘 STEP 1 SUBMISSION: CHOOSE ASSIGNED ROLE
     if ((interaction.customId === 'verify_wizard_step1' && interaction.isStringSelectMenu()) || interaction.customId === 'verify_wizard_skip_step1') {
       await interaction.deferUpdate().catch(() => null);
+      // 🔥 FIX: Extracts the absolute string out of the array container natively
       if (interaction.isStringSelectMenu()) session.verifiedRoleId = interaction.values[0]; 
       session.step = 2;
 
@@ -224,6 +225,7 @@ const {
     if ((interaction.customId === 'verify_wizard_step2' && interaction.isStringSelectMenu()) || interaction.customId === 'verify_wizard_skip_step2') {
       await interaction.deferUpdate().catch(() => null);
       if (interaction.isStringSelectMenu()) {
+        // 🔥 FIX: Extracts the absolute string out of the array container natively
         const selectedValue = interaction.values[0];
         const parsedParts = selectedValue.split('_'); 
         session.securityLevel = parsedParts[0]; 
@@ -252,58 +254,59 @@ const {
 
       return interaction.editReply({ embeds: [step3Embed], components: comps });
     }
+
     // 🔘 STEP 3 SUBMISSION: GENERATE PERSISTENT LANDING PANEL AND COMMIT TO MONGO
     if ((interaction.customId === 'verify_wizard_step3' && interaction.isStringSelectMenu()) || interaction.customId === 'verify_wizard_skip_step3') {
-        await interaction.deferUpdate().catch(() => null);
-        if (interaction.isStringSelectMenu()) session.panelChannelId = interaction.values[0]; 
-  
-        doc.enabled = true;
-        doc.securityLevel = session.securityLevel;
-        doc.challengeMethod = session.challengeMethod;
-        doc.verifiedRoleId = session.verifiedRoleId;
-        doc.panelChannelId = session.panelChannelId || interaction.channelId;
-        await doc.save();
-  
-        const panelTargetChannel = guild.channels.cache.get(doc.panelChannelId) || await guild.channels.fetch(doc.panelChannelId).catch(() => null);
-        if (panelTargetChannel) {
-          const lvlColor = doc.securityLevel === 'low' ? '#2ECC71' : doc.securityLevel === 'medium' ? '#F1C40F' : '#E74C3C';
-          const lvlEmoji = doc.securityLevel === 'low' ? '🟢' : doc.securityLevel === 'medium' ? '🟡' : '🔴';
-  
-          const landingEmbed = new EmbedBuilder()
-            .setTitle('🔒 Gatekeeper Verification Center')
-            .setDescription(
-              `### Welcome to ${guild.name}!\n` +
-              `To safely unlock access lanes and drop initial server onboarding blind restrictions, you must complete entry check authorization workflows.\n\n` +
-              `👉 **Gate Strictness:** ${lvlEmoji} \`${doc.securityLevel.toUpperCase()} SECURITY\`\n` +
-              `👉 **Challenge Protocol:** \`${doc.challengeMethod.toUpperCase().replace('_', ' ')}\` loops.\n\n` +
-              `Click the green launch button underneath to verify your profile.`
-            )
-            .setColor(lvlColor);
-  
-          const launchRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setCustomId(`verify_gate_launch_${doc.securityLevel}_${doc.challengeMethod}`)
-              .setLabel('Start Entry Verification Check')
-              .setEmoji('🛡️')
-              .setStyle(ButtonStyle.Success)
-          );
-          await panelTargetChannel.send({ embeds: [landingEmbed], components: [launchRow] }).catch(() => null);
-        }
-  
-        activeSetupSessions.delete(wizardKey);
-  
-        const setupSuccess = new EmbedBuilder()
-          .setTitle(`✅ Gatekeeper Setup ${session.mode === 'edit' ? 'Updated' : 'Configured'}!`)
-          .setDescription(`• **Target Member Role:** <@&${session.verifiedRoleId}>\n• **Security Class:** \`${session.securityLevel.toUpperCase()}\`\n• **Method Layer:** \`${session.challengeMethod.toUpperCase()}\`\n• **Anchorage Room:** <#${doc.panelChannelId}>`)
-          .setColor('#2ECC71');
-  
-        return interaction.editReply({ embeds: [setupSuccess], components: [] });
+      await interaction.deferUpdate().catch(() => null);
+      // 🔥 FIX: Extracts the absolute string out of the array container natively
+      if (interaction.isStringSelectMenu()) session.panelChannelId = interaction.values[0]; 
+
+      doc.enabled = true;
+      doc.securityLevel = session.securityLevel;
+      doc.challengeMethod = session.challengeMethod;
+      doc.verifiedRoleId = session.verifiedRoleId;
+      doc.panelChannelId = session.panelChannelId || interaction.channelId;
+      await doc.save();
+
+      const panelTargetChannel = guild.channels.cache.get(doc.panelChannelId) || await guild.channels.fetch(doc.panelChannelId).catch(() => null);
+      if (panelTargetChannel) {
+        const lvlColor = doc.securityLevel === 'low' ? '#2ECC71' : doc.securityLevel === 'medium' ? '#F1C40F' : '#E74C3C';
+        const lvlEmoji = doc.securityLevel === 'low' ? '🟢' : doc.securityLevel === 'medium' ? '🟡' : '🔴';
+
+        const landingEmbed = new EmbedBuilder()
+          .setTitle('🔒 Gatekeeper Verification Center')
+          .setDescription(
+            `### Welcome to ${guild.name}!\n` +
+            `To safely unlock access lanes and drop initial server onboarding blind restrictions, you must complete entry check authorization workflows.\n\n` +
+            `👉 **Gate Strictness:** ${lvlEmoji} \`${doc.securityLevel.toUpperCase()} SECURITY\`\n` +
+            `👉 **Challenge Protocol:** \`${doc.challengeMethod.toUpperCase().replace('_', ' ')}\` loops.\n\n` +
+            `Click the green launch button underneath to verify your profile.`
+          )
+          .setColor(lvlColor);
+
+        const launchRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`verify_gate_launch_${doc.securityLevel}_${doc.challengeMethod}`)
+            .setLabel('Start Entry Verification Check')
+            .setEmoji('🛡️')
+            .setStyle(ButtonStyle.Success)
+        );
+        await panelTargetChannel.send({ embeds: [landingEmbed], components: [launchRow] }).catch(() => null);
       }
-  
-      // ========================================================
-      // USER INTERACTION GATE: DYNAMIC CHALLENGE ACTIONS LOOP
-      // ========================================================
-      if (interaction.customId && interaction.customId.startsWith('verify_gate_launch_')) {
+
+      activeSetupSessions.delete(wizardKey);
+
+      const setupSuccess = new EmbedBuilder()
+        .setTitle(`✅ Gatekeeper Setup ${session.mode === 'edit' ? 'Updated' : 'Configured'}!`)
+        .setDescription(`• **Target Member Role:** <@&${session.verifiedRoleId}>\n• **Security Class:** \`${session.securityLevel.toUpperCase()}\`\n• **Method Layer:** \`${session.challengeMethod.toUpperCase()}\`\n• **Anchorage Room:** <#${doc.panelChannelId}>`)
+        .setColor('#2ECC71');
+
+      return interaction.editReply({ embeds: [setupSuccess], components: [] });
+    }
+    // ========================================================
+    // USER INTERACTION GATE: DYNAMIC CHALLENGE ACTIONS LOOP
+    // ========================================================
+    if (interaction.customId && interaction.customId.startsWith('verify_gate_launch_')) {
         const parts = interaction.customId.split('_');
         const sLevel = parts[3]; 
         const cMethod = parts.slice(4).join('_'); 
@@ -316,7 +319,7 @@ const {
           return interaction.reply({ content: '✅ **Verification Check Cleared:** You already hold member roles.', ephemeral: true }).catch(() => null);
         }
   
-        // --- 👑 LOW SECURITY CHALLENGES ---
+        // --- 🟢 LOW SECURITY CHALLENGES ---
         if (sLevel === 'low' && cMethod === 'button') {
           await interaction.member.roles.add(configRecord.verifiedRoleId).catch(() => null);
           return interaction.reply({ content: '🎉 **Verification Passed!** Initial server blind layers unblinded. Welcome inside!', ephemeral: true }).catch(() => null);
@@ -332,118 +335,119 @@ const {
           );
           return interaction.reply({ embeds: [termsEmbed], components: [termsRow], ephemeral: true }).catch(() => null);
         }
-      // --- 🟡 MEDIUM SECURITY CHALLENGES ---
-      if (sLevel === 'medium' && cMethod === 'math') {
-        const fA = Math.floor(Math.random() * 8) + 4;
-        const fB = Math.floor(Math.random() * 7) + 2;
-        const answer = fA + fB;
-        const optionValues = Array.from(new Set([answer, answer + 2, answer - 1, fA * 2])).sort((a, b) => a - b);
-
-        const row = new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId(`verify_user_solve_medium_math_${answer}`)
-            .setPlaceholder('Select result calculation...')
-            .addOptions(optionValues.map(v => ({ label: `Result: ${v}`, value: v.toString() })))
-        );
-        return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🧮 Math Verification').setDescription(`Solve this basic formula to prove you are an organic human user:\n\n### What is \`${fA} + ${fB}\`?`).setColor('#F1C40F')], components: [row], ephemeral: true }).catch(() => null);
+  
+        // --- 🟡 MEDIUM SECURITY CHALLENGES ---
+        if (sLevel === 'medium' && cMethod === 'math') {
+          const fA = Math.floor(Math.random() * 8) + 4;
+          const fB = Math.floor(Math.random() * 7) + 2;
+          const answer = fA + fB;
+          const optionValues = Array.from(new Set([answer, answer + 2, answer - 1, fA * 2])).sort((a, b) => a - b);
+  
+          const row = new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+              .setCustomId(`verify_user_solve_medium_math_${answer}`)
+              .setPlaceholder('Select result calculation...')
+              .addOptions(optionValues.map(v => ({ label: `Result: ${v}`, value: v.toString() })))
+          );
+          return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🧮 Math Verification').setDescription(`Solve this basic formula to prove you are an organic human user:\n\n### What is \`${fA} + ${fB}\`?`).setColor('#F1C40F')], components: [row], ephemeral: true }).catch(() => null);
+        }
+  
+        if (sLevel === 'medium' && cMethod === 'colors') {
+          const colorsList = ['Red', 'Blue', 'Green', 'Yellow'];
+          const targetColor = colorsList[Math.floor(Math.random() * colorsList.length)];
+          const colorRow = new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+              .setCustomId(`verify_user_solve_medium_colors_${targetColor}`)
+              .setPlaceholder('Pick the requested text color name...')
+              .addOptions(colorsList.map(c => ({ label: `Color: ${c}`, value: c })))
+          );
+          return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🎨 Color Matrix Check').setDescription(`Click the dropdown selection mapping row that explicitly reads: **${targetColor.toUpperCase()}**`).setColor('#F1C40F')], components: [colorRow], ephemeral: true }).catch(() => null);
+        }
+  
+        if (sLevel === 'medium' && cMethod === 'odd_one') {
+          const items = ['🍎', '🍏', '🍐', '🍊'];
+          const targetIcon = '🍊'; 
+          const oddRow = new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+              .setCustomId(`verify_user_solve_medium_oddone_${targetIcon}`)
+              .setPlaceholder('Identify the odd icon item out...')
+              .addOptions(items.map(i => ({ label: `Icon Selection Item: ${i}`, value: i })))
+          );
+          return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🧩 Odd-One-Out Puzzle').setDescription('One item option inside the dropdown listing array has a completely different asset fruit type. Identify it: \n\n` 🍎  |  🍏  |  Automated  |  🍊 `').setColor('#F1C40F')], components: [oddRow], ephemeral: true }).catch(() => null);
+        }
+  
+        // --- 🔴 HIGH SECURITY CHALLENGES ---
+        if (sLevel === 'high' && cMethod === 'captcha') {
+          const codes = ['NX7B', 'K9WP', '4Z2Q', 'R6MY', 'L3HV'];
+          const code = codes[Math.floor(Math.random() * codes.length)];
+          const row = new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+              .setCustomId(`verify_user_solve_high_captcha_${code}`)
+              .setPlaceholder('Select exact alphanumeric code match...')
+              .addOptions(codes.map(c => ({ label: `Code Verification Match: ${c}`, value: c })))
+          );
+          return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🔠 CAPTCHA Challenge').setDescription(`Select the exact alpha-numeric value string match array: \n\n### Code: \` ${code} \``).setColor('#E74C3C')], components: [row], ephemeral: true }).catch(() => null);
+        }
+  
+        if (sLevel === 'high' && cMethod === 'reverse_text') {
+          const wordsList = ['SERVER', 'MISER', 'GUARD', 'SHIELD', 'FORGE'];
+          const selectedWord = wordsList[Math.floor(Math.random() * wordsList.length)];
+          const reversedAnswer = selectedWord.split('').reverse().join('');
+          
+          const reverseRow = new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+              .setCustomId(`verify_user_solve_high_reverse_${reversedAnswer}`)
+              .setPlaceholder('Spell the provided word reversed backwards...')
+              .addOptions(wordsList.map(w => ({ label: `Spelling Reverse: ${w.split('').reverse().join('')}`, value: w.split('').reverse().join('') })))
+          );
+          return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🔄 Reverse Spelling Challenge').setDescription(`Look closely at the token word text: **\`${selectedWord}\`**\nSelect the option row that spells it perfectly backwards.`).setColor('#E74C3C')], components: [reverseRow], ephemeral: true }).catch(() => null);
+        }
+  
+        if (sLevel === 'high' && cMethod === 'double_auth') {
+          const factorA = Math.floor(Math.random() * 4) + 5; 
+          const factorB = Math.floor(Math.random() * 3) + 2; 
+          const sum = factorA + factorB;
+          const securityTokens = ['9WXP', '2Q7Z', '4M1L'];
+          const token = securityTokens[Math.floor(Math.random() * securityTokens.length)];
+          const compoundKey = `${sum}-${token}`;
+  
+          const doubleRow = new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+              .setCustomId('verify_user_solve_high_double_choice')
+              .setPlaceholder('Select the matching unified formula result token...')
+              .addOptions([
+                { label: `Compound Token: ${sum} | Code: ${token}`, value: compoundKey },
+                { label: `Compound Token: ${sum + 1} | Code: ${token}`, value: `${sum + 1}-${token}` },
+                { label: `Compound Token: ${sum} | Code: 9WXP`, value: `${sum}-9WXP` }
+              ])
+          );
+          return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🔒 Combined Double Authentication Gate').setDescription(`Complete both analytical checkpoints simultaneously:\n\n1. What is \`${factorA} + ${factorB}\`?\n2. Match this Code: \`${token}\``).setColor('#E74C3C')], components: [doubleRow], ephemeral: true }).catch(() => null);
+        }
       }
-
-      if (sLevel === 'medium' && cMethod === 'colors') {
-        const colorsList = ['Red', 'Blue', 'Green', 'Yellow'];
-        const targetColor = colorsList[Math.floor(Math.random() * colorsList.length)];
-        const colorRow = new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId(`verify_user_solve_medium_colors_${targetColor}`)
-            .setPlaceholder('Pick the requested text color name...')
-            .addOptions(colorsList.map(c => ({ label: `Color: ${c}`, value: c })))
-        );
-        return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🎨 Color Matrix Check').setDescription(`Click the dropdown selection mapping row that explicitly reads: **${targetColor.toUpperCase()}**`).setColor('#F1C40F')], components: [colorRow], ephemeral: true }).catch(() => null);
-      }
-
-      if (sLevel === 'medium' && cMethod === 'odd_one') {
-        const items = ['🍎', '🍏', '🍐', '🍊'];
-        const targetIcon = '🍊'; 
-        const oddRow = new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId(`verify_user_solve_medium_oddone_${targetIcon}`)
-            .setPlaceholder('Identify the odd icon item out...')
-            .addOptions(items.map(i => ({ label: `Icon Selection Item: ${i}`, value: i })))
-        );
-        return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🧩 Odd-One-Out Puzzle').setDescription('One item option inside the dropdown listing array has a completely different asset fruit type. Identify it: \n\n` 🍎  |  🍏  |  Automated  |  🍊 `').setColor('#F1C40F')], components: [oddRow], ephemeral: true }).catch(() => null);
-      }
-
-      // --- 🔴 HIGH SECURITY CHALLENGES ---
-      if (sLevel === 'high' && cMethod === 'captcha') {
-        const codes = ['NX7B', 'K9WP', '4Z2Q', 'R6MY', 'L3HV'];
-        const code = codes[Math.floor(Math.random() * codes.length)];
-        const row = new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId(`verify_user_solve_high_captcha_${code}`)
-            .setPlaceholder('Select exact alphanumeric code match...')
-            .addOptions(codes.map(c => ({ label: `Code Verification Match: ${c}`, value: c })))
-        );
-        return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🔠 CAPTCHA Challenge').setDescription(`Select the exact alpha-numeric value string match array: \n\n### Code: \` ${code} \``).setColor('#E74C3C')], components: [row], ephemeral: true }).catch(() => null);
-      }
-
-      if (sLevel === 'high' && cMethod === 'reverse_text') {
-        const wordsList = ['SERVER', 'MISER', 'GUARD', 'SHIELD', 'FORGE'];
-        const selectedWord = wordsList[Math.floor(Math.random() * wordsList.length)];
-        const reversedAnswer = selectedWord.split('').reverse().join('');
-        
-        const reverseRow = new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId(`verify_user_solve_high_reverse_${reversedAnswer}`)
-            .setPlaceholder('Spell the provided word reversed backwards...')
-            .addOptions(wordsList.map(w => ({ label: `Spelling Reverse: ${w.split('').reverse().join('')}`, value: w.split('').reverse().join('') })))
-        );
-        return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🔄 Reverse Spelling Challenge').setDescription(`Look closely at the token word text: **\`${selectedWord}\`**\nSelect the option row that spells it perfectly backwards.`).setColor('#E74C3C')], components: [reverseRow], ephemeral: true }).catch(() => null);
-      }
-
-      if (sLevel === 'high' && cMethod === 'double_auth') {
-        const factorA = Math.floor(Math.random() * 4) + 5; 
-        const factorB = Math.floor(Math.random() * 3) + 2; 
-        const sum = factorA + factorB;
-        const securityTokens = ['9WXP', '2Q7Z', '4M1L'];
-        const token = securityTokens[Math.floor(Math.random() * securityTokens.length)];
-        const compoundKey = `${sum}-${token}`;
-
-        const doubleRow = new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId('verify_user_solve_high_double_choice')
-            .setPlaceholder('Select the matching unified formula result token...')
-            .addOptions([
-              { label: `Compound Token: ${sum} | Code: ${token}`, value: compoundKey },
-              { label: `Compound Token: ${sum + 1} | Code: ${token}`, value: `${sum + 1}-${token}` },
-              { label: `Compound Token: ${sum} | Code: 9WXP`, value: `${sum}-9WXP` }
-            ])
-        );
-        return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🔒 Combined Double Authentication Gate').setDescription(`Complete both analytical checkpoints simultaneously:\n\n1. What is \`${factorA} + ${factorB}\`?\n2. Match this Code: \`${token}\``).setColor('#E74C3C')], components: [doubleRow], ephemeral: true }).catch(() => null);
+  
+      // ==========================================
+      // 🔘 ANSWER SUBMISSION PROCESSING CIRCUITS
+      // ==========================================
+      if (interaction.customId && interaction.customId.startsWith('verify_user_solve_')) {
+         await interaction.deferUpdate().catch(() => null);
+         
+         const parsingTokens = interaction.customId.split('_');
+         const isLowTerms = parsingTokens[3] === 'low' && parsingTokens[4] === 'terms';
+         const isDoubleAuth = parsingTokens[3] === 'high' && parsingTokens[4] === 'double';
+         
+         // 🔥 FIX: Pull first index of values array cleanly to allow strict string validation
+         const userSelectionChoiceInput = isLowTerms ? 'accept' : String(interaction.values[0]); 
+         const targetValidationString = isLowTerms ? 'accept' : isDoubleAuth ? userSelectionChoiceInput : String(parsingTokens[parsingTokens.length - 1]);
+  
+         const configRecord = await VerificationModel.findOne({ guildId }).catch(() => null);
+         if (!configRecord) return;
+  
+         if (userSelectionChoiceInput === targetValidationString) {
+            await interaction.member.roles.add(configRecord.verifiedRoleId).catch(() => null);
+            return interaction.followUp({ content: '🎉 **Verification Passed!** Initial server blind restrictions dropped successfully. Welcome inside!', ephemeral: true }).catch(() => null);
+         } else {
+            return interaction.followUp({ content: '❌ **Verification Failed.** Your choice input does not match the target validation check rules. Please click the panel check button to try again.', ephemeral: true }).catch(() => null);
+         }
       }
     }
-    // ==========================================
-    // 🔘 ANSWER SUBMISSION PROCESSING CIRCUITS
-    // ==========================================
-    if (interaction.customId && interaction.customId.startsWith('verify_user_solve_')) {
-        await interaction.deferUpdate().catch(() => null);
-        
-        const parsingTokens = interaction.customId.split('_');
-        const isLowTerms = parsingTokens[3] === 'low' && parsingTokens[4] === 'terms';
-        const isDoubleAuth = parsingTokens[3] === 'high' && parsingTokens[4] === 'double';
-        
-        // 🛠️ FINAL RUNTIME REMAPPING: Forces plain text translation string conversions to match variables
-        const userSelectionChoiceInput = isLowTerms ? 'accept' : String(interaction.values[0]); 
-        const targetValidationString = isLowTerms ? 'accept' : isDoubleAuth ? userSelectionChoiceInput : String(parsingTokens[parsingTokens.length - 1]);
- 
-        const configRecord = await VerificationModel.findOne({ guildId }).catch(() => null);
-        if (!configRecord) return;
- 
-        if (userSelectionChoiceInput === targetValidationString) {
-           await interaction.member.roles.add(configRecord.verifiedRoleId).catch(() => null);
-           return interaction.followUp({ content: '🎉 **Verification Passed!** Initial server blind restrictions dropped successfully. Welcome inside!', ephemeral: true }).catch(() => null);
-        } else {
-           return interaction.followUp({ content: '❌ **Verification Failed.** Your choice input does not match the target validation check rules. Please click the panel check button to try again.', ephemeral: true }).catch(() => null);
-        }
-     }
-   }
- };
-     
+  };    
