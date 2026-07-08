@@ -6,17 +6,32 @@ module.exports = {
     async execute(interaction, client) {
         const activeClient = client || interaction.client;
 
-        // ==========================================
-        // 🔒 ONBOARDING VERIFICATION INTERCEPT ROUTER
-        // ==========================================
+        // ========================================================
+        // 🔒 1. ONBOARDING VERIFICATION ROUTER INTERCEPTOR
+        // ========================================================
+        // Instantly routes all verification panels, buttons, and select menus 
+        // to verification.js to prevent "Interaction Failed" errors.
         if (interaction.customId && interaction.customId.startsWith('verify_')) {
             const verifyCommand = activeClient.commands.get('verification');
             if (verifyCommand && typeof verifyCommand.handleInteraction === 'function') {
                 return await verifyCommand.handleInteraction(interaction);
             }
+            return;
         }
 
-        // 1. REACTION ROLES COMPONENT ROUTING LAYER
+        // ========================================================
+        // 🎫 2. TICKET & REACTION ROLES ROUTING LAYER
+        // ========================================================
+        // Routes interactive ticketing buttons/menus cleanly
+        if (interaction.customId && interaction.customId.startsWith('ticket_system_')) {
+            const ticketCommand = activeClient.commands.get('ticket');
+            if (ticketCommand && typeof ticketCommand.handleInteraction === 'function') {
+                return await ticketCommand.handleInteraction(interaction);
+            }
+            return;
+        }
+
+        // Legacy Reaction Roles Component Fallback Routing Layer
         if (interaction.isButton() || interaction.isStringSelectMenu()) {
             const reactionRolesCommand = activeClient.commands.get('reactionroles');
             if (reactionRolesCommand && typeof reactionRolesCommand.handleInteraction === 'function') {
@@ -25,7 +40,9 @@ module.exports = {
             return;
         }
 
-        // 2. Ignore non-slash items
+        // ========================================================
+        // 📡 3. SLASH COMMAND ENGINE GATEWAYS
+        // ========================================================
         if (!interaction.isChatInputCommand()) return;
         
         const commandName = interaction.commandName;
@@ -42,10 +59,12 @@ module.exports = {
         // ========================================================
         const mainSettings = (await db.readData('settings.json')) || {};
         const currentGuildSettings = mainSettings[interaction.guildId] || {};
+        
+        // Comprehensive whitelisted array preventing module blockouts on critical infrastructure commands
         const coreUtilityCommands = [
             'setup', 'cute', 'fun-module', 'help', 'setup-audit', 
             'mod-logs-toggle', 'reactionroles', 'autorole', 'automodrule', 
-            'ticket', 'verification'
+            'ticket', 'verification', 'leaderboard', 'rank'
         ];
 
         if (!coreUtilityCommands.includes(commandName.toLowerCase())) {
@@ -60,7 +79,7 @@ module.exports = {
 
         try {
             // ========================================================
-            // 📡 DYNAMIC SLASH ROUTER ADAPTER
+            // 📡 DYNAMIC SLASH ROUTER ADAPTER MAPS
             // ========================================================
             if (typeof command.executeSlash === 'function') {
                 await command.executeSlash(interaction, activeClient);

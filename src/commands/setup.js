@@ -63,9 +63,7 @@ module.exports = {
     try {
       const guildConfig = await database.findOne({ guildId: guild.id }).catch(() => null) || {};
       let cuteStyle = 'off';
-      try {
-        cuteStyle = guildConfig.cuteStyle || 'off'; 
-      } catch (_) {}
+      try { cuteStyle = guildConfig.cuteStyle || 'off'; } catch (_) {}
       
       const isCuteActive = cuteStyle !== 'off';
 
@@ -84,187 +82,229 @@ module.exports = {
           }
         }
       }
+      // Format structural category names using cute fonts if active
+      const importantCatName = formatCute('Important', cuteStyle, '📢');
       const genCatName = formatCute('General', cuteStyle, '🎀');
+      const botCatName = formatCute('Systems', cuteStyle, '🤖');
       const vcCatName = formatCute('Voice', cuteStyle, '🔊');
-      const staffCatName = formatCute('Staff', cuteStyle, '🔒');
+      const staffCatName = formatCute('Staff Only', cuteStyle, '🔒');
 
-      const catMsg = '📁 Creating categories...';
+      const catMsg = '📁 Provisioning secure category shells...';
       if (isInteraction) await interaction.editReply(catMsg);
       else await interaction.channel.send(catMsg).catch(() => null);
 
-      // ========================================================
-      // 🔒 LOCKDOWN OVERWRITES: BLINDS EVERYONE BY DEFAULT
-      // ========================================================
-      const generalCategory = await guild.channels.create({ 
-        name: genCatName, 
-        type: ChannelType.GuildCategory,
-        permissionOverwrites: [
-          { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] }
-        ]
-      });
-      try { await logAction(guild, 'Category Created', callerUser, `Category: ${genCatName}`); } catch(e){}
-      
-      const voiceCategory = await guild.channels.create({ 
-        name: vcCatName, 
-        type: ChannelType.GuildCategory,
-        permissionOverwrites: [
-          { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] }
-        ]
-      });
-      try { await logAction(guild, 'Category Created', callerUser, `Category: ${vcCatName}`); } catch(e){}
-      
-      const staffCategory = await guild.channels.create({ name: staffCatName, type: ChannelType.GuildCategory });
-      try { await logAction(guild, 'Category Created', callerUser, `Category: ${staffCatName}`); } catch(e){}
-      
-      const roleMsg = '👥 Creating roles...';
-      if (isInteraction) await interaction.editReply(roleMsg);
-      else await interaction.channel.send(roleMsg).catch(() => null);
-
-      // ==========================================
-      // 👥 GLOBAL GENERAL & MANAGEMENT ROLE STACK
-      // ==========================================
+      // 👥 1. INSTANTIATE SYSTEM ROLES STACK (Muted role entirely dropped as requested)
       const adminRole = await guild.roles.create({ name: 'System Administrator', color: '#FF0000', permissions: [PermissionFlagsBits.Administrator] });
       try { await logAction(guild, 'Role Created', callerUser, 'Role: Admin'); } catch(e){}
-      const modRole = await guild.roles.create({ name: 'Server Moderator', color: '#0099FF' });
+      const modRole = await guild.roles.create({ name: 'Server Moderator', color: '#0099FF', permissions: [PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ModerateMembers] });
       try { await logAction(guild, 'Role Created', callerUser, 'Role: Moderator'); } catch(e){}
       const trialModRole = await guild.roles.create({ name: 'Trial Staff', color: '#7CC2FF' });
       const vipRole = await guild.roles.create({ name: 'Premium Server Booster', color: '#F47FFF' });
       const memberRole = await guild.roles.create({ name: 'Verified Member', color: '#00FF00' });
       try { await logAction(guild, 'Role Created', callerUser, 'Role: Member'); } catch(e){}
-      const mutedRole = await guild.roles.create({ name: 'Muted Guard Restrained', color: '#111111' });
 
-      const newlyCreatedRoleIds = [adminRole.id, modRole.id, trialModRole.id, vipRole.id, memberRole.id, mutedRole.id];
+      const newlyCreatedRoleIds = [adminRole.id, modRole.id, trialModRole.id, vipRole.id, memberRole.id];
 
-      // ==========================================
-      // 🎭 THEMATIC ROLE ATTACHMENT BLUEPRINTS
-      // ==========================================
+      // 🎭 2. EXPANDED BLUEPRINT TEMPLATE SPECIFIC ROLES STACK
       if (template === 'gaming') {
-        const r1 = await guild.roles.create({ name: '⭐ Competitive Captain', color: '#E74C3C' });
-        const r2 = await guild.roles.create({ name: '🎮 Active Esport Player', color: '#9B59B6' });
-        const r3 = await guild.roles.create({ name: '🏆 Tournament Competitor', color: '#F1C40F' });
-        const r4 = await guild.roles.create({ name: '👾 Casual Stream Viewer', color: '#1ABC9C' });
+        const r1 = await guild.roles.create({ name: '🥇 Tournament Champion', color: '#F1C40F' });
+        const r2 = await guild.roles.create({ name: '⭐ Clan Team Captain', color: '#E74C3C' });
+        const r3 = await guild.roles.create({ name: '🎮 Pro Esport Athlete', color: '#9B59B6' });
+        const r4 = await guild.roles.create({ name: '🎯 Competitive Scrimmer', color: '#1ABC9C' });
         newlyCreatedRoleIds.push(r1.id, r2.id, r3.id, r4.id);
       } else if (template === 'community') {
-        const r1 = await guild.roles.create({ name: '📢 Community Influencer', color: '#E67E22' });
-        const r2 = await guild.roles.create({ name: '🎉 Event Organiser', color: '#2ECC71' });
-        const r3 = await guild.roles.create({ name: '💬 Chat Contributor', color: '#3498DB' });
-        const r4 = await guild.roles.create({ name: '👋 New Arrival Profile', color: '#95A5A6' });
+        const r1 = await guild.roles.create({ name: '👑 Community VIP', color: '#FD79A8' });
+        const r2 = await guild.roles.create({ name: '📢 Content Creator', color: '#E67E22' });
+        const r3 = await guild.roles.create({ name: '🎉 Active Event Host', color: '#2ECC71' });
+        const r4 = await guild.roles.create({ name: '💬 Elite Chatter', color: '#3498DB' });
         newlyCreatedRoleIds.push(r1.id, r2.id, r3.id, r4.id);
       } else if (template === 'study') {
-        const r1 = await guild.roles.create({ name: '🎓 Lead Educator', color: '#34495E' });
-        const r2 = await guild.roles.create({ name: '🔬 Research Analyst', color: '#E74C3C' });
-        const r3 = await guild.roles.create({ name: '📚 Active Study Peer', color: '#2ECC71' });
-        const r4 = await guild.roles.create({ name: '✏️ Student Guest', color: '#F39C12' });
+        const r1 = await guild.roles.create({ name: '🎓 Dean of Studies', color: '#2C3E50' });
+        const r2 = await guild.roles.create({ name: '🔬 Faculty Professor', color: '#E74C3C' });
+        const r3 = await guild.roles.create({ name: '📚 Certified Tutor', color: '#2ECC71' });
+        const r4 = await guild.roles.create({ name: '✏️ Research Assistant', color: '#F39C12' });
         newlyCreatedRoleIds.push(r1.id, r2.id, r3.id, r4.id);
       } else if (template === 'business') {
-        const r1 = await guild.roles.create({ name: '👔 Corporate Director', color: '#2C3E50' });
-        const r2 = await guild.roles.create({ name: '💼 Project Manager', color: '#2980B9' });
-        const r3 = await guild.roles.create({ name: '📊 Operational Specialist', color: '#27AE60' });
-        const r4 = await guild.roles.create({ name: '🤝 Client External Guest', color: '#BDC3C7' });
+        const r1 = await guild.roles.create({ name: '💼 Executive Board', color: '#2C3E50' });
+        const r2 = await guild.roles.create({ name: '👔 Senior Project Lead', color: '#2980B9' });
+        const r3 = await guild.roles.create({ name: '📊 Account Executive', color: '#27AE60' });
+        const r4 = await guild.roles.create({ name: '👥 Business Partner', color: '#BDC3C7' });
         newlyCreatedRoleIds.push(r1.id, r2.id, r3.id, r4.id);
       } else if (template === 'creative') {
-        const r1 = await guild.roles.create({ name: '🎨 Master Artisan', color: '#9B59B6' });
-        const r2 = await guild.roles.create({ name: '📸 Digital Designer', color: '#E84393' });
-        const r3 = await guild.roles.create({ name: '🖌️ Commission Client', color: '#00 CEC9' });
-        const r4 = await guild.roles.create({ name: '🔍 Art Enthusiast', color: '#FFEAA7' });
+        const r1 = await guild.roles.create({ name: '🎨 Creative Director', color: '#6C5CE7' });
+        const r2 = await guild.roles.create({ name: '📸 Elite Photographer', color: '#E84393' });
+        const r3 = await guild.roles.create({ name: '🖌️ Digital Illustrator', color: '#00CEC9' });
+        const r4 = await guild.roles.create({ name: '💎 Art Patron', color: '#FFEAA7' });
         newlyCreatedRoleIds.push(r1.id, r2.id, r3.id, r4.id);
       } else if (template === 'development') {
-        const r1 = await guild.roles.create({ name: '💻 System Architect', color: '#2D3436' });
-        const r2 = await guild.roles.create({ name: '⚙️ Senior Developer', color: '#0984E3' });
-        const r3 = await guild.roles.create({ name: '🛠️ QA Bug Hunter', color: '#D63031' });
-        const r4 = await guild.roles.create({ name: '🌱 Junior Apprentice', color: '#00B894' });
+        const r1 = await guild.roles.create({ name: '💻 Principal Engineer', color: '#2D3436' });
+        const r2 = await guild.roles.create({ name: '⚙️ Core Dev Contributor', color: '#0984E3' });
+        const r3 = await guild.roles.create({ name: '🛠️ Systems DevOps', color: '#00B894' });
+        const r4 = await guild.roles.create({ name: '🧪 Automation QA Tester', color: '#D63031' });
         newlyCreatedRoleIds.push(r1.id, r2.id, r3.id, r4.id);
       } else if (template === 'finance') {
-        const r1 = await guild.roles.create({ name: '🐋 Whale Whale Investor', color: '#6C5CE7' });
-        const r2 = await guild.roles.create({ name: '📈 Macro Alpha Analyst', color: '#00B894' });
-        const r3 = await guild.roles.create({ name: '📊 Active Day Trader', color: '#FDCB6E' });
-        const r4 = await guild.roles.create({ name: '⛓️ Web3 Scalper', color: '#E17055' });
+        const r1 = await guild.roles.create({ name: '🐋 Macro Fund Manager', color: '#6C5CE7' });
+        const r2 = await guild.roles.create({ name: '📈 Quantitative Analyst', color: '#00B894' });
+        const r3 = await guild.roles.create({ name: '📊 Proprietary Trader', color: '#FDCB6E' });
+        const r4 = await guild.roles.create({ name: '⛓️ Liquidity Provider', color: '#E17055' });
         newlyCreatedRoleIds.push(r1.id, r2.id, r3.id, r4.id);
       } else if (template === 'roleplay') {
-        const r1 = await guild.roles.create({ name: '👑 Game Dungeon Master', color: '#D63031' });
-        const r2 = await guild.roles.create({ name: '🏰 Faction Commander', color: '#E17055' });
-        const r3 = await guild.roles.create({ name: '⚔️ Veteran Adventurer', color: '#F1C40F' });
-        const r4 = await guild.roles.create({ name: '🎲 Town Citizen Local', color: '#7F8C8D' });
+        const r1 = await guild.roles.create({ name: '👑 Lead Loreweaver', color: '#D63031' });
+        const r2 = await guild.roles.create({ name: '🏰 Legendary Hero', color: '#E17055' });
+        const r3 = await guild.roles.create({ name: '⚔️ Mythic Guildmaster', color: '#F1C40F' });
+        const r4 = await guild.roles.create({ name: '🎲 Game Facilitator', color: '#7F8C8D' });
         newlyCreatedRoleIds.push(r1.id, r2.id, r3.id, r4.id);
       } else if (template === 'minimalist') {
-        const r1 = await guild.roles.create({ name: '✨ Curated Tier', color: '#FFFFFF' });
-        const r2 = await guild.roles.create({ name: '▫️ Minimal Node', color: '#DFE6E9' });
+        const r1 = await guild.roles.create({ name: '✨ Premium Focus Tier', color: '#FFFFFF' });
+        const r2 = await guild.roles.create({ name: '▫️ Curated Member', color: '#DFE6E9' });
         newlyCreatedRoleIds.push(r1.id, r2.id);
       } else if (template === 'history') {
-        const r1 = await guild.roles.create({ name: '⏳ Head Archivist', color: '#845EC2' });
-        const r2 = await guild.roles.create({ name: '📜 Chronicle Scholar', color: '#D65DB1' });
-        const r3 = await guild.roles.create({ name: '🏛️ Antiquity Researcher', color: '#FF6F91' });
-        const r4 = await guild.roles.create({ name: '🛡️ Historical Explorer', color: '#FFC75F' });
+        const r1 = await guild.roles.create({ name: '⏳ High Archivist Emeritus', color: '#845EC2' });
+        const r2 = await guild.roles.create({ name: '📜 Classical Historian', color: '#D65DB1' });
+        const r3 = await guild.roles.create({ name: '🏛️ Antiquity Professor', color: '#FF6F91' });
+        const r4 = await guild.roles.create({ name: '🛡️ Excavation Specialist', color: '#FFC75F' });
         newlyCreatedRoleIds.push(r1.id, r2.id, r3.id, r4.id);
       } else if (template === 'geography') {
-        const r1 = await guild.roles.create({ name: '🌍 Global Cartographer', color: '#0081CF' });
-        const r2 = await guild.roles.create({ name: '🧭 Topography Specialist', color: '#008E9B' });
-        const r3 = await guild.roles.create({ name: '🌋 Geology Researcher', color: '#00C9A7' });
-        const r4 = await guild.roles.create({ name: '⛺ Expedition Nomad', color: '#9BDEAC' });
+        const r1 = await guild.roles.create({ name: '🌍 Chief Cartographer', color: '#0081CF' });
+        const r2 = await guild.roles.create({ name: '🧭 Geopolitical Analyst', color: '#008E9B' });
+        const r3 = await guild.roles.create({ name: '🌋 Seismic Volcanologist', color: '#00C9A7' });
+        const r4 = await guild.roles.create({ name: '⛺ Frontier Surveyor', color: '#9BDEAC' });
         newlyCreatedRoleIds.push(r1.id, r2.id, r3.id, r4.id);
       }
-      const chanMsg = '📢 Creating channels...';
+
+      // ==========================================
+      // 🔒 RECONFIGURED SPLIT PERMISSION OVERWRITES
+      // ==========================================
+      // IMPORTANT CATEGORY: Visible to unverified users, but nobody can send text messages except staff
+      const importantCategory = await guild.channels.create({
+        name: importantCatName,
+        type: ChannelType.GuildCategory,
+        permissionOverwrites: [
+          { id: guild.roles.everyone.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] },
+          { id: memberRole.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] },
+          { id: modRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
+        ]
+      });
+
+      // GENERAL & VOICE CATEGORIES: Blind to @everyone (unverified), but fully open to Verified Members!
+      const generalCategory = await guild.channels.create({ 
+        name: genCatName, 
+        type: ChannelType.GuildCategory,
+        permissionOverwrites: [
+          { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+          { id: memberRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.Speak] }
+        ]
+      });
+      
+      const systemsCategory = await guild.channels.create({ 
+        name: botCatName, 
+        type: ChannelType.GuildCategory,
+        permissionOverwrites: [
+          { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+          { id: memberRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
+        ]
+      });
+
+      const voiceCategory = await guild.channels.create({ 
+        name: vcCatName, 
+        type: ChannelType.GuildCategory,
+        permissionOverwrites: [
+          { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+          { id: memberRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.Speak] }
+        ]
+      });
+
+      // STAFF CATEGORY: Absolutely private. Blocked from everyone, only visible to managers
+      const staffCategory = await guild.channels.create({ 
+        name: staffCatName, 
+        type: ChannelType.GuildCategory,
+        permissionOverwrites: [
+          { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+          { id: memberRole.id, deny: [PermissionFlagsBits.ViewChannel] },
+          { id: modRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+          { id: trialModRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
+        ]
+      });
+      const chanMsg = '📢 Initializing layout generation matrices...';
       if (isInteraction) await interaction.editReply(chanMsg);
       else await interaction.channel.send(chanMsg).catch(() => null);
       
+      // Seed base system infrastructure nodes across categories
       const channels = {
-        general: { name: formatCute('general', cuteStyle, '💬'), parent: generalCategory.id, type: ChannelType.GuildText },
-        announcements: { name: formatCute('announcements', cuteStyle, '📢'), parent: generalCategory.id, type: ChannelType.GuildText },
+        // Important Shell Layer
+        welcome: { name: formatCute('welcome-gate', cuteStyle, '👋'), parent: importantCategory.id, type: ChannelType.GuildText },
+        rules: { name: formatCute('server-rules', cuteStyle, '📜'), parent: importantCategory.id, type: ChannelType.GuildText },
+        announcements: { name: formatCute('announcements', cuteStyle, '📢'), parent: importantCategory.id, type: ChannelType.GuildText },
+        
+        // General Chat Shell Layer
+        general: { name: formatCute('global-chat', cuteStyle, '💬'), parent: generalCategory.id, type: ChannelType.GuildText },
+        media: { name: formatCute('media-vault', cuteStyle, '🖼️'), parent: generalCategory.id, type: ChannelType.GuildText }, // Added media channel
+        
+        // Dedicated Systems Shell Layer (Levels and Bot Commands separated)
+        levels: { name: formatCute('level-tracking', cuteStyle, '✨'), parent: systemsCategory.id, type: ChannelType.GuildText },
+        commands: { name: formatCute('bot-commands', cuteStyle, '🤖'), parent: systemsCategory.id, type: ChannelType.GuildText },
+        
+        // Private Administrative Shell Layer
         'audit-logs': { name: formatCute('audit-logs', cuteStyle, '📜'), parent: staffCategory.id, type: ChannelType.GuildText },
         'mod-logs': { name: formatCute('mod-logs', cuteStyle, '🛡️'), parent: staffCategory.id, type: ChannelType.GuildText },
-        'staff-chat': { name: formatCute('staff-chat', cuteStyle, '💬'), parent: staffCategory.id, type: ChannelType.GuildText },
-        levels: { name: formatCute('levels', cuteStyle, '✨'), parent: generalCategory.id, type: ChannelType.GuildText },
-        commands: { name: formatCute('commands', cuteStyle, '🤖'), parent: generalCategory.id, type: ChannelType.GuildText },
+        'staff-chat': { name: formatCute('staff-headquarters', cuteStyle, '💬'), parent: staffCategory.id, type: ChannelType.GuildText },
       };
 
+      // Apply immersive Niche Specific Blueprints
       if (template === 'gaming') {
-        channels['tournament-rules'] = { name: formatCute('tournament-rules', cuteStyle, '🏆'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels['tournament-hub'] = { name: formatCute('tournament-hub', cuteStyle, '🏆'), parent: generalCategory.id, type: ChannelType.GuildText };
         channels['brackets-standings'] = { name: formatCute('brackets-standings', cuteStyle, '📊'), parent: generalCategory.id, type: ChannelType.GuildText };
-        channels['theorycrafting'] = { name: formatCute('theorycrafting', cuteStyle, '🎮'), parent: generalCategory.id, type: ChannelType.GuildText };
-        channels['voice-chat-1'] = { name: formatCute('Squad Room 1', cuteStyle, '🎧'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
-        channels['voice-chat-2'] = { name: formatCute('Squad Room 2', cuteStyle, '🎧'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
+        channels['theorycrafting'] = { name: formatCute('meta-theorycrafting', cuteStyle, '🎮'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels['voice-chat-1'] = { name: formatCute('Squad Room Alpha', cuteStyle, '🎧'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
+        channels['voice-chat-2'] = { name: formatCute('Squad Room Beta', cuteStyle, '🎧'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
       } else if (template === 'community') {
-        channels.introductions = { name: formatCute('introductions', cuteStyle, '👋'), parent: generalCategory.id, type: ChannelType.GuildText };
-        channels.events = { name: formatCute('events', cuteStyle, '📅'), parent: generalCategory.id, type: ChannelType.GuildText };
-        channels.memes = { name: formatCute('memes', cuteStyle, '😂'), parent: generalCategory.id, type: ChannelType.GuildText };
-        channels['public-lounge'] = { name: formatCute('Public Lounge', cuteStyle, '🎧'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
+        channels.introductions = { name: formatCute('introductions-lobby', cuteStyle, '👋'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels.events = { name: formatCute('server-events', cuteStyle, '📅'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels.memes = { name: formatCute('meme-dump', cuteStyle, '😂'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels['public-lounge'] = { name: formatCute('Main Public Lounge', cuteStyle, '🎧'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
       } else if (template === 'study') {
         channels['study-materials'] = { name: formatCute('study-materials', cuteStyle, '📚'), parent: generalCategory.id, type: ChannelType.GuildText };
         channels['research-archives'] = { name: formatCute('research-archives', cuteStyle, '🔬'), parent: generalCategory.id, type: ChannelType.GuildText };
-        channels['voice-study'] = { name: formatCute('Silent Library', cuteStyle, '✏️'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
+        channels['assignment-help'] = { name: formatCute('peer-tutoring', cuteStyle, '✏️'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels['voice-study'] = { name: formatCute('Silent Library Room', cuteStyle, '🎧'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
       } else if (template === 'business') {
-        channels.meetings = { name: formatCute('meetings', cuteStyle, '💼'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels.meetings = { name: formatCute('corporate-meetings', cuteStyle, '💼'), parent: generalCategory.id, type: ChannelType.GuildText };
         channels['product-roadmap'] = { name: formatCute('product-roadmap', cuteStyle, '📊'), parent: generalCategory.id, type: ChannelType.GuildText };
-        channels['voice-meetings'] = { name: formatCute('Boardroom Alpha', cuteStyle, '👔'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
+        channels['project-tracker'] = { name: formatCute('sprint-schedules', cuteStyle, '📝'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels['voice-meetings'] = { name: formatCute('Boardroom Alpha Node', cuteStyle, '🎧'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
       } else if (template === 'creative') {
         channels['portfolio-showcase'] = { name: formatCute('portfolio-showcase', cuteStyle, '🎨'), parent: generalCategory.id, type: ChannelType.GuildText };
-        channels['work-in-progress'] = { name: formatCute('work-in-progress', cuteStyle, '🖌️'), parent: generalCategory.id, type: ChannelType.GuildText };
-        channels['creative-studio'] = { name: formatCute('Live Studio', cuteStyle, '📸'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
+        channels['work-in-progress'] = { name: formatCute('art-wip-critique', cuteStyle, '🖌️'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels['commissions'] = { name: formatCute('open-commissions', cuteStyle, '💰'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels['creative-studio'] = { name: formatCute('Live Atelier Audio', cuteStyle, '📸'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
       } else if (template === 'development') {
-        channels['production-logs'] = { name: formatCute('production-logs', cuteStyle, '💻'), parent: generalCategory.id, type: ChannelType.GuildText };
-        channels['github-feed'] = { name: formatCute('github-feed', cuteStyle, '⚙️'), parent: generalCategory.id, type: ChannelType.GuildText };
-        channels['pair-programming'] = { name: formatCute('Pair Coding', cuteStyle, '🛠️'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
+        channels['production-logs'] = { name: formatCute('production-changelogs', cuteStyle, '💻'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels['github-feed'] = { name: formatCute('git-webhook-feed', cuteStyle, '⚙️'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels['api-specs'] = { name: formatCute('api-specifications', cuteStyle, '📄'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels['pair-programming'] = { name: formatCute('Pair Coding Terminals', cuteStyle, '🛠️'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
       } else if (template === 'finance') {
-        channels['market-news'] = { name: formatCute('market-news', cuteStyle, '📈'), parent: generalCategory.id, type: ChannelType.GuildText };
-        channels['crypto-analysis'] = { name: formatCute('crypto-analysis', cuteStyle, '⛓️'), parent: generalCategory.id, type: ChannelType.GuildText };
-        channels['trading-pit'] = { name: formatCute('Trading Pit', cuteStyle, '📊'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
+        channels['market-news'] = { name: formatCute('macro-market-news', cuteStyle, '📈'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels['crypto-analysis'] = { name: formatCute('on-chain-analytics', cuteStyle, '⛓️'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels['trade-setups'] = { name: formatCute('technical-charts', cuteStyle, '💱'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels['trading-pit'] = { name: formatCute('Live Squawk Pit', cuteStyle, '🎧'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
       } else if (template === 'roleplay') {
-        channels['world-lore'] = { name: formatCute('world-lore', cuteStyle, '🏰'), parent: generalCategory.id, type: ChannelType.GuildText };
-        channels['character-sheets'] = { name: formatCute('character-sheets', cuteStyle, '📜'), parent: generalCategory.id, type: ChannelType.GuildText };
-        channels['tavern-comms'] = { name: formatCute('The Inn Voice', cuteStyle, '🎲'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
+        channels['world-lore'] = { name: formatCute('world-lorebook', cuteStyle, '🏰'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels['character-sheets'] = { name: formatCute('character-compendium', cuteStyle, '📜'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels['ooc-chat'] = { name: formatCute('out-of-character', cuteStyle, '💬'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels['tavern-comms'] = { name: formatCute('The Drifting Tavern', cuteStyle, '🎲'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
       } else if (template === 'minimalist') {
-        channels['slate'] = { name: formatCute('slate', cuteStyle, '▫️'), parent: generalCategory.id, type: ChannelType.GuildText };
-        channels['focus'] = { name: formatCute('focus', cuteStyle, '✨'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
+        channels['slate'] = { name: formatCute('clean-slate', cuteStyle, '▫️'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels['focus'] = { name: formatCute('zen-focus-node', cuteStyle, '✨'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
       } else if (template === 'history') {
-        channels['ancient-records'] = { name: formatCute('ancient-records', cuteStyle, '⏳'), parent: generalCategory.id, type: ChannelType.GuildText };
-        channels['artifacts-gallery'] = { name: formatCute('artifacts-gallery', cuteStyle, '🏛️'), parent: generalCategory.id, type: ChannelType.GuildText };
-        channels['chronicle-feed'] = { name: formatCute('chronicle-discussion', cuteStyle, '📜'), parent: generalCategory.id, type: ChannelType.GuildText };
-        channels['council-chamber'] = { name: formatCute('Grand Lyceum', cuteStyle, '🔊'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
+        channels['ancient-records'] = { name: formatCute('ancient-archives', cuteStyle, '⏳'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels['artifacts-gallery'] = { name: formatCute('museum-exhibits', cuteStyle, '🏛️'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels['chronicle-feed'] = { name: formatCute('chronicle-debates', cuteStyle, '📜'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels['council-chamber'] = { name: formatCute('Grand Lyceum Hall', cuteStyle, '🎧'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
       } else if (template === 'geography') {
         channels['atlas-cartography'] = { name: formatCute('atlas-cartography', cuteStyle, '🌍'), parent: generalCategory.id, type: ChannelType.GuildText };
-        channels['expedition-logs'] = { name: formatCute('expedition-logs', cuteStyle, '🧭'), parent: generalCategory.id, type: ChannelType.GuildText };
-        channels['earth-science'] = { name: formatCute('earth-science', cuteStyle, '🌋'), parent: generalCategory.id, type: ChannelType.GuildText };
-        channels['horizon-comms'] = { name: formatCute('Basecamp Comms', cuteStyle, '🔊'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
+        channels['expedition-logs'] = { name: formatCute('expedition-journals', cuteStyle, '🧭'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels['earth-science'] = { name: formatCute('geology-seismic-info', cuteStyle, '🌋'), parent: generalCategory.id, type: ChannelType.GuildText };
+        channels['horizon-comms'] = { name: formatCute('Basecamp Comms Link', cuteStyle, '🎧'), parent: voiceCategory.id, type: ChannelType.GuildVoice };
       }
 
       let createdGeneralChannelId = null;
@@ -303,11 +343,11 @@ module.exports = {
         .setTitle(isCuteActive ? '✨ Server Setup Complete! ✨' : '✅ Server Setup Complete!')
         .addFields(
           { name: 'Template Deployment', value: template.toUpperCase(), inline: true },
-          { name: 'Categories Provisioned', value: '3 Layout Rows', inline: true },
+          { name: 'Categories Provisioned', value: '5 Layout Rows', inline: true },
           { name: 'Channels Spawned', value: Object.keys(channels).length.toString(), inline: true },
           { name: 'Role Tree Density', value: `${newlyCreatedRoleIds.length} Total Ranks`, inline: true },
           { name: 'Prefix Gateway', value: '|', inline: true },
-          { name: 'Next Steps Operations', value: 'Run `/help` or `|help` to inspect systems!' }
+          { name: 'Permissions Matrix', value: '🟢 Corrected Split Logic Verified' }
         );
 
       if (isInteraction) {
@@ -343,7 +383,6 @@ module.exports = {
     const templateArg = argsArray ? argsArray.toLowerCase().trim() : null;
     const clearArg = argsArray ? argsArray.toLowerCase().trim() : null;
     
-    // Whitelist parameters tracker matrix index loops matching all 11 configurations
     const validTemplates = ['gaming', 'community', 'study', 'business', 'creative', 'development', 'finance', 'roleplay', 'minimalist', 'history', 'geography'];
     if (!templateArg || !validTemplates.includes(templateArg)) {
       return message.reply(`❌ **Usage:** \`|setup <${validTemplates.join('|')}> [clear]\``).catch(() => null);
