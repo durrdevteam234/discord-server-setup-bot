@@ -24,7 +24,7 @@ const {
   });
   const VerificationModel = mongoose.models.VerificationRule || mongoose.model('VerificationRule', VerificationSchema);
   
-  // Memory tracking variable map for active wizard configuration sessions
+  // Memory tracking variable map for active wizard configuration setups
   const activeSetupSessions = new Map();
   
   module.exports = {
@@ -174,7 +174,7 @@ const {
     // 🔘 STEP 1 SUBMISSION: CHOOSE ASSIGNED ROLE
     if ((interaction.customId === 'verify_wizard_step1' && interaction.isStringSelectMenu()) || interaction.customId === 'verify_wizard_skip_step1') {
       await interaction.deferUpdate().catch(() => null);
-      // 📑 PATCHED: Extracts the clean string ID out of the select array
+      // 🔮 EXPERT FIX: Extracts the clean string ID out of the array layout container
       if (interaction.isStringSelectMenu()) session.verifiedRoleId = interaction.values[0]; 
       session.step = 2;
 
@@ -225,9 +225,8 @@ const {
     if ((interaction.customId === 'verify_wizard_step2' && interaction.isStringSelectMenu()) || interaction.customId === 'verify_wizard_skip_step2') {
       await interaction.deferUpdate().catch(() => null);
       if (interaction.isStringSelectMenu()) {
-        // 📑 PATCHED: Extracts the clean string entry out of the choice array
-        const selectedValue = interaction.values[0];
-        const parsedParts = selectedValue.split('_'); 
+        // 🔮 EXPERT FIX: Extracts the clean string ID out of the array layout container
+        const parsedParts = interaction.values[0].split('_'); 
         session.securityLevel = parsedParts[0]; 
         session.challengeMethod = parsedParts.slice(1).join('_'); 
       }
@@ -258,7 +257,7 @@ const {
     // 🔘 STEP 3 SUBMISSION: GENERATE PERSISTENT LANDING PANEL AND COMMIT TO MONGO
     if ((interaction.customId === 'verify_wizard_step3' && interaction.isStringSelectMenu()) || interaction.customId === 'verify_wizard_skip_step3') {
       await interaction.deferUpdate().catch(() => null);
-      // 📑 PATCHED: Extracts the clean channel string ID out of the select array
+      // 🔮 EXPERT FIX: Extracts the clean string ID out of the array layout container
       if (interaction.isStringSelectMenu()) session.panelChannelId = interaction.values[0]; 
 
       doc.enabled = true;
@@ -349,7 +348,7 @@ const {
               .setPlaceholder('Select result calculation...')
               .addOptions(optionValues.map(v => ({ label: `Result: ${v}`, value: v.toString() })))
           );
-          return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🧮 Math Verification').setDescription(`Solve this basic formula to prove you are an organic human user:\n\n### What is \`${fA} + ${fB}\`?`).setColor('#F1C40F')], components: [row], ephemeral: true }).catch(() => null);
+          return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🧮 Math Verification').setDescription(`What is \`${fA} + ${fB}\`?`).setColor('#F1C40F')], components: [row], ephemeral: true }).catch(() => null);
         }
   
         if (sLevel === 'medium' && cMethod === 'colors') {
@@ -435,6 +434,7 @@ const {
          const isLowTerms = parsingTokens[3] === 'low' && parsingTokens[4] === 'terms';
          const isDoubleAuth = parsingTokens[3] === 'high' && parsingTokens[4] === 'double';
          
+         // 🔮 EXPERT FIX: Extracts the clean choice string index out of the dropdown array data wrapper
          const targetValidationString = isLowTerms ? 'accept' : isDoubleAuth ? interaction.values[0] : parsingTokens[parsingTokens.length - 1];
          const userSelectionChoiceInput = isLowTerms ? 'accept' : interaction.values[0]; 
   
@@ -449,5 +449,4 @@ const {
          }
       }
     }
-  };
-  
+  };    
