@@ -199,7 +199,7 @@ module.exports = {
 
         const mainSettings = db.readData('settings.json') || {};
         const currentGuildSettings = mainSettings[message.guild?.id] || {};
-        const coreUtilityCommands = ['setup', 'cute', 'fun-module', 'fun-menu', 'autorole', 'automodrule', 'ticket', 'verification', 'mod-logs-toggle','analytics','clearroles','clear-channels']; 
+        const coreUtilityCommands = ['setup', 'cute', 'fun-module', 'fun-menu', 'autorole', 'automodrule', 'ticket', 'verification', 'mod-logs-toggle', 'analytics', 'clearroles']; 
         
         if (!coreUtilityCommands.includes(commandName)) {
           if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false) {
@@ -207,9 +207,6 @@ module.exports = {
           }
         }
 
-        // ========================================================
-        // 🚨 COMPREHENSIVE ARCHITECTURE WHITELIST MUTATION 🚨
-        // ========================================================
         if (commandName === 'setup') {
           const guild = message.guild; if (!guild) return;
           const member = message.member || await guild.members.fetch(message.author.id).catch(() => null);
@@ -218,11 +215,10 @@ module.exports = {
             return message.reply('❌ Permissions required! You need Administrator access to wipe or provision rooms.').catch(() => null);
           }
           
-          const templateArg = argsArray[0] ? argsArray[0].toLowerCase().trim() : null;
-          const clearArg = argsArray[1] ? argsArray[1].toLowerCase().trim() : null;
+          const templateArg = argsArray ? argsArray.toLowerCase().trim() : null;
+          const clearArg = argsArray ? argsArray.toLowerCase().trim() : null;
           const clear = clearArg === 'clear' || clearArg === 'true';
           
-          // Fully expanded verification matrix handling all 11 predefined templates cleanly!
           const validTemplates = ['gaming', 'community', 'study', 'business', 'creative', 'development', 'finance', 'roleplay', 'minimalist', 'history', 'geography'];
           
           if (!templateArg || !validTemplates.includes(templateArg)) {
@@ -248,15 +244,16 @@ module.exports = {
             replied: false,
             deferred: false,
             options: {
-              getSubcommand: () => argsArray[0] || null,
-              getString: (name) => name === 'template' || name === 'subcommand' || name === 'status' || name === 'role' ? argsArray.join(' ').trim() : (rawArgsString.length > 0 ? rawArgsString : null),
+              getSubcommand: () => argsArray || null,
+              // 📑 FIXED: Added 'channel' to safely resolve channel arguments across mock commands
+              getString: (name) => name === 'template' || name === 'subcommand' || name === 'status' || name === 'role' || name === 'channel' ? argsArray.join(' ').trim() : (rawArgsString.length > 0 ? rawArgsString : null),
               getUser: (name) => resolvedTargetUser,
               getMember: (name) => resolvedTargetMember,
-              getRole: (name) => message.guild ? (message.mentions.roles.first() || message.guild.roles.cache.get(argsArray[0]) || message.guild.roles.cache.find(r => r.name.toLowerCase() === argsArray.slice(1).join(' ').toLowerCase())) : null,
-              getChannel: (name) => message.mentions.channels.first() || message.channel,
+              getRole: (name) => message.guild ? (message.mentions.roles.first() || message.guild.roles.cache.get(argsArray) || message.guild.roles.cache.find(r => r.name.toLowerCase() === argsArray.slice(1).join(' ').toLowerCase())) : null,
+              getChannel: (name) => message.mentions.channels.first() || message.guild.channels.cache.get(argsArray.join('').replace(/[^0-9]/g, '')) || message.channel,
               getBoolean: (name) => argsArray.includes('clear') || argsArray.includes('true'),
               getInteger: (name) => {
-                const processedInt = parseInt(argsArray[0]);
+                const processedInt = parseInt(argsArray);
                 return isNaN(processedInt) ? null : processedInt;
               },
               getAttachment: (name) => {

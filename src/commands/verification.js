@@ -149,7 +149,7 @@ const {
         return interaction.reply({ content: '🔴 Onboarding checking layers have been pulled offline.' }).catch(() => null);
       }
     },
-   // ========================================================
+  // ========================================================
   // 🔘 WIZARD INTERACTIVE SELECTION MENU HANDLING CONTROLLER
   // ========================================================
   async handleInteraction(interaction) {
@@ -174,6 +174,7 @@ const {
     // 🔘 STEP 1 SUBMISSION: CHOOSE ASSIGNED ROLE
     if ((interaction.customId === 'verify_wizard_step1' && interaction.isStringSelectMenu()) || interaction.customId === 'verify_wizard_skip_step1') {
       await interaction.deferUpdate().catch(() => null);
+      // 📑 PATCHED: Extracts the clean string ID out of the select array
       if (interaction.isStringSelectMenu()) session.verifiedRoleId = interaction.values[0]; 
       session.step = 2;
 
@@ -224,7 +225,9 @@ const {
     if ((interaction.customId === 'verify_wizard_step2' && interaction.isStringSelectMenu()) || interaction.customId === 'verify_wizard_skip_step2') {
       await interaction.deferUpdate().catch(() => null);
       if (interaction.isStringSelectMenu()) {
-        const parsedParts = interaction.values[0].split('_'); 
+        // 📑 PATCHED: Extracts the clean string entry out of the choice array
+        const selectedValue = interaction.values[0];
+        const parsedParts = selectedValue.split('_'); 
         session.securityLevel = parsedParts[0]; 
         session.challengeMethod = parsedParts.slice(1).join('_'); 
       }
@@ -255,6 +258,7 @@ const {
     // 🔘 STEP 3 SUBMISSION: GENERATE PERSISTENT LANDING PANEL AND COMMIT TO MONGO
     if ((interaction.customId === 'verify_wizard_step3' && interaction.isStringSelectMenu()) || interaction.customId === 'verify_wizard_skip_step3') {
       await interaction.deferUpdate().catch(() => null);
+      // 📑 PATCHED: Extracts the clean channel string ID out of the select array
       if (interaction.isStringSelectMenu()) session.panelChannelId = interaction.values[0]; 
 
       doc.enabled = true;
@@ -264,9 +268,7 @@ const {
       doc.panelChannelId = session.panelChannelId || interaction.channelId;
       await doc.save();
 
-      const targetChannelIdString = String(doc.panelChannelId);
-      const panelTargetChannel = guild.channels.cache.get(targetChannelIdString) || await guild.channels.fetch(targetChannelIdString).catch(() => null);
-      
+      const panelTargetChannel = guild.channels.cache.get(doc.panelChannelId);
       if (panelTargetChannel) {
         const lvlColor = doc.securityLevel === 'low' ? '#2ECC71' : doc.securityLevel === 'medium' ? '#F1C40F' : '#E74C3C';
         const lvlEmoji = doc.securityLevel === 'low' ? '🟢' : doc.securityLevel === 'medium' ? '🟡' : '🔴';
