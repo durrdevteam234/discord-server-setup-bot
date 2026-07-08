@@ -20,7 +20,20 @@ module.exports = {
         }
 
         // ========================================================
-        // 🎫 2. TICKET & REACTION ROLES ROUTING LAYER
+        // 📊 2. STATS ANALYTICS WIZARD INTERCEPTOR
+        // ========================================================
+        // Intercepts all custom IDs starting with 'analytics_' to route setup,
+        // edit, and choice menus directly to the analytics component layout.
+        if (interaction.customId && interaction.customId.startsWith('analytics_')) {
+            const analyticsCommand = activeClient.commands.get('analytics');
+            if (analyticsCommand && typeof analyticsCommand.handleInteraction === 'function') {
+                return await analyticsCommand.handleInteraction(interaction);
+            }
+            return;
+        }
+
+        // ========================================================
+        // 🎫 3. TICKET & REACTION ROLES ROUTING LAYER
         // ========================================================
         // Routes interactive ticketing buttons/menus cleanly
         if (interaction.customId && interaction.customId.startsWith('ticket_system_')) {
@@ -41,7 +54,7 @@ module.exports = {
         }
 
         // ========================================================
-        // 📡 3. SLASH COMMAND ENGINE GATEWAYS
+        // 📡 4. SLASH COMMAND ENGINE GATEWAYS
         // ========================================================
         if (!interaction.isChatInputCommand()) return;
         
@@ -64,7 +77,7 @@ module.exports = {
         const coreUtilityCommands = [
             'setup', 'cute', 'fun-module', 'help', 'setup-audit', 
             'mod-logs-toggle', 'reactionroles', 'autorole', 'automodrule', 
-            'ticket', 'verification', 'leaderboard', 'rank'
+            'ticket', 'verification', 'leaderboard', 'rank', 'analytics'
         ];
 
         if (!coreUtilityCommands.includes(commandName.toLowerCase())) {

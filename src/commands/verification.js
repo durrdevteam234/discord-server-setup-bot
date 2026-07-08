@@ -24,7 +24,7 @@ const {
   });
   const VerificationModel = mongoose.models.VerificationRule || mongoose.model('VerificationRule', VerificationSchema);
   
-  // Memory tracking variable map for active wizard configuration setups
+  // Memory tracking variable map for active wizard configuration sessions
   const activeSetupSessions = new Map();
   
   module.exports = {
@@ -174,7 +174,7 @@ const {
     // 🔘 STEP 1 SUBMISSION: CHOOSE ASSIGNED ROLE
     if ((interaction.customId === 'verify_wizard_step1' && interaction.isStringSelectMenu()) || interaction.customId === 'verify_wizard_skip_step1') {
       await interaction.deferUpdate().catch(() => null);
-      if (interaction.isStringSelectMenu()) session.verifiedRoleId = interaction.values[0];
+      if (interaction.isStringSelectMenu()) session.verifiedRoleId = interaction.values[0]; // Extracts string cleanly
       session.step = 2;
 
       const step2Embed = new EmbedBuilder()
@@ -224,7 +224,7 @@ const {
     if ((interaction.customId === 'verify_wizard_step2' && interaction.isStringSelectMenu()) || interaction.customId === 'verify_wizard_skip_step2') {
       await interaction.deferUpdate().catch(() => null);
       if (interaction.isStringSelectMenu()) {
-        const parsedParts = interaction.values[0].split('_');
+        const parsedParts = interaction.values[0].split('_'); // Extracts string cleanly
         session.securityLevel = parsedParts[0]; 
         session.challengeMethod = parsedParts.slice(1).join('_'); 
       }
@@ -255,7 +255,7 @@ const {
     // 🔘 STEP 3 SUBMISSION: GENERATE PERSISTENT LANDING PANEL AND COMMIT TO MONGO
     if ((interaction.customId === 'verify_wizard_step3' && interaction.isStringSelectMenu()) || interaction.customId === 'verify_wizard_skip_step3') {
       await interaction.deferUpdate().catch(() => null);
-      if (interaction.isStringSelectMenu()) session.panelChannelId = interaction.values[0];
+      if (interaction.isStringSelectMenu()) session.panelChannelId = interaction.values[0]; // Extracts string cleanly
 
       doc.enabled = true;
       doc.securityLevel = session.securityLevel;
@@ -293,7 +293,7 @@ const {
       activeSetupSessions.delete(wizardKey);
 
       const setupSuccess = new EmbedBuilder()
-        .setTitle(`./✅ Gatekeeper Setup ${session.mode === 'edit' ? 'Updated' : 'Configured'}!`)
+        .setTitle(`✅ Gatekeeper Setup ${session.mode === 'edit' ? 'Updated' : 'Configured'}!`)
         .setDescription(`• **Target Member Role:** <@&${session.verifiedRoleId}>\n• **Security Class:** \`${session.securityLevel.toUpperCase()}\`\n• **Method Layer:** \`${session.challengeMethod.toUpperCase()}\`\n• **Anchorage Room:** <#${doc.panelChannelId}>`)
         .setColor('#2ECC71');
 
@@ -304,8 +304,8 @@ const {
     // ========================================================
     if (interaction.customId && interaction.customId.startsWith('verify_gate_launch_')) {
         const parts = interaction.customId.split('_');
-        const sLevel = parts[3]; 
-        const cMethod = parts.slice(4).join('_'); 
+        const sLevel = parts[3]; // Extract 'low', 'medium', or 'high'
+        const cMethod = parts.slice(4).join('_'); // Extract specific method name string
   
         const configRecord = await VerificationModel.findOne({ guildId }).catch(() => null);
         if (!configRecord || !configRecord.enabled) {
@@ -315,10 +315,10 @@ const {
           return interaction.reply({ content: '✅ **Verification Check Cleared:** You already hold member roles.', ephemeral: true }).catch(() => null);
         }
   
-        // --- 🟢 LOW SECURITY CHALLENGES ---
+        // --- 🟢 LOW SECURITY CHALLENGE CHANNELS ---
         if (sLevel === 'low' && cMethod === 'button') {
           await interaction.member.roles.add(configRecord.verifiedRoleId).catch(() => null);
-          return interaction.reply({ content: '🎉 **Verification Passed!** Server channels unblinded. Welcome inside!', ephemeral: true }).catch(() => null);
+          return interaction.reply({ content: '🎉 **Verification Passed!** Initial server blind layers unblinded. Welcome inside!', ephemeral: true }).catch(() => null);
         }
   
         if (sLevel === 'low' && cMethod === 'terms') {
@@ -332,7 +332,7 @@ const {
           return interaction.reply({ embeds: [termsEmbed], components: [termsRow], ephemeral: true }).catch(() => null);
         }
   
-        // --- 🟡 MEDIUM SECURITY CHALLENGES ---
+        // --- 🟡 MEDIUM SECURITY CHALLENGE CHANNELS ---
         if (sLevel === 'medium' && cMethod === 'math') {
           const fA = Math.floor(Math.random() * 8) + 4;
           const fB = Math.floor(Math.random() * 7) + 2;
@@ -345,7 +345,7 @@ const {
               .setPlaceholder('Select result calculation...')
               .addOptions(optionValues.map(v => ({ label: `Result: ${v}`, value: v.toString() })))
           );
-          return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🧮 Math Verification').setDescription(`What is \`${fA} + ${fB}\`?`).setColor('#F1C40F')], components: [row], ephemeral: true }).catch(() => null);
+          return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🧮 Math Verification').setDescription(`Solve this basic formula to prove you are an organic human user:\n\n### What is \`${fA} + ${fB}\`?`).setColor('#F1C40F')], components: [row], ephemeral: true }).catch(() => null);
         }
   
         if (sLevel === 'medium' && cMethod === 'colors') {
@@ -372,7 +372,7 @@ const {
           return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🧩 Odd-One-Out Puzzle').setDescription('One item option inside the dropdown listing array has a completely different asset fruit type. Identify it: \n\n` 🍎  |  🍏  |  Automated  |  🍊 `').setColor('#F1C40F')], components: [oddRow], ephemeral: true }).catch(() => null);
         }
   
-        // --- 🔴 HIGH SECURITY CHALLENGES ---
+        // --- 🔴 HIGH SECURITY CHALLENGE CHANNELS ---
         if (sLevel === 'high' && cMethod === 'captcha') {
           const codes = ['NX7B', 'K9WP', '4Z2Q', 'R6MY', 'L3HV'];
           const code = codes[Math.floor(Math.random() * codes.length)];
@@ -428,8 +428,8 @@ const {
          await interaction.deferUpdate().catch(() => null);
          
          const parsingTokens = interaction.customId.split('_');
-         const targetValidationString = parsingTokens[4]; 
-         const userSelectionChoiceInput = interaction.isButton() ? 'accept' : interaction.values[0];
+         const targetValidationString = parsingTokens[4]; // Extract target answer token safely
+         const userSelectionChoiceInput = interaction.isButton() ? 'accept' : interaction.values[0]; // Extracts string cleanly
   
          const configRecord = await VerificationModel.findOne({ guildId }).catch(() => null);
          if (!configRecord) return;
@@ -442,4 +442,4 @@ const {
          }
       }
     }
-  };    
+  };
