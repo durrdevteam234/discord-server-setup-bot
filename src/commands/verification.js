@@ -11,21 +11,26 @@ const {
   const mongoose = require('mongoose');
   const database = require('../utils/database'); // Points to your MongoDB model connection
   
-  // ==========================================
-  // 1. EMBEDDED MONGOOSE VERIFICATION SCHEMA
-  // ==========================================
+  // ========================================================
+  // 1. ROBUST MONGOOSE VERIFICATION STATE SCHEMAS
+  // ========================================================
   const VerificationSchema = new mongoose.Schema({
       guildId: { type: String, required: true, unique: true },
       enabled: { type: Boolean, default: false },
-      securityLevel: { type: String, default: 'low' }, // low, medium, high
-      challengeMethod: { type: String, default: 'button' }, // specific challenge type
+      securityLevel: { type: String, default: 'low' }, 
+      challengeMethod: { type: String, default: 'button' }, 
       verifiedRoleId: { type: String, default: null },
-      panelChannelId: { type: String, default: null }
+      panelChannelId: { type: String, default: null },
+      
+      // PERSISTENT FLOW TRACKING FIELDS (Bypasses volatile server memory drops)
+      wizardActive: { type: Boolean, default: false },
+      wizardStep: { type: Number, default: 0 },
+      wizardUserId: { type: String, default: null },
+      tempRoleId: { type: String, default: null },
+      tempLevel: { type: String, default: 'low' },
+      tempMethod: { type: String, default: 'button' }
   });
   const VerificationModel = mongoose.models.VerificationRule || mongoose.model('VerificationRule', VerificationSchema);
-  
-  // Memory tracking variable map for active wizard configuration sessions
-  const activeSetupSessions = new Map();
   
   module.exports = {
     data: new SlashCommandBuilder()
@@ -50,15 +55,26 @@ const {
       }
   
       let subcommand = isInteraction ? interaction.options.getSubcommand() : interaction.options.getString('subcommand')?.toLowerCase();
+      
+      // Fast translation mapping fallback initialization vectors
+      if (!subcommand && !isInteraction) {
+         const textArgs = interaction.content?.split(/ +/);
+         subcommand = textArgs[1]?.toLowerCase();
+      }
+  
       const doc = await VerificationModel.findOne({ guildId }).catch(() => null) || new VerificationModel({ guildId });
-      const wizardKey = `${guildId}-${interaction.user.id}`;
   
       // ==========================================
       // ⚙️ WIZARD LAUNCH ENGINE: SETUP
       // ==========================================
-      if (subcommand === 'setup') {
+      if (subcommand === 'setup' || !subcommand) {
         if (isInteraction) await interaction.deferReply({ ephemeral: true });
-        activeSetupSessions.set(wizardKey, { step: 1, mode: 'setup', securityLevel: 'low', challengeMethod: 'button', verifiedRoleId: null, panelChannelId: null });
+  
+        // Save initial wizard states directly inside the safe database layer
+        doc.wizardActive = true;
+        doc.wizardStep = 1;
+        doc.wizardUserId = interaction.user.id;
+        await doc.save();
   
         const availableRoles = guild.roles.cache.filter(r => r.id !== guild.roles.everyone.id && !r.managed).first(24);
         if (availableRoles.length === 0) return interaction.reply('❌ This server lacks manually configurable roles. Run `|setup` first.').catch(() => null);
@@ -87,14 +103,13 @@ const {
         }
         if (isInteraction) await interaction.deferReply({ ephemeral: true });
   
-        activeSetupSessions.set(wizardKey, { 
-          step: 1, 
-          mode: 'edit', 
-          securityLevel: doc.securityLevel, 
-          challengeMethod: doc.challengeMethod,
-          verifiedRoleId: doc.verifiedRoleId, 
-          panelChannelId: doc.panelChannelId 
-        });
+        doc.wizardActive = true;
+        doc.wizardStep = 1;
+        doc.wizardUserId = interaction.user.id;
+        doc.tempRoleId = doc.verifiedRoleId;
+        doc.tempLevel = doc.securityLevel;
+        doc.tempMethod = doc.challengeMethod;
+        await doc.save();
   
         const availableRoles = guild.roles.cache.filter(r => r.id !== guild.roles.everyone.id && !r.managed).first(24);
         
@@ -145,7 +160,7 @@ const {
       }
   
       if (subcommand === 'disable') {
-        await VerificationModel.findOneAndUpdate({ guildId }, { $set: { enabled: false } });
+        await VerificationModel.findOneAndUpdate({ guildId }, { $set: { enabled: false, wizardActive: false } });
         return interaction.reply({ content: '🔴 Onboarding checking layers have been pulled offline.' }).catch(() => null);
       }
     },
@@ -156,7 +171,6 @@ const {
     const guild = interaction.guild;
     const guildId = interaction.guildId;
     const userId = interaction.user.id;
-    const wizardKey = `${guildId}-${userId}`;
 
     if (interaction.customId === 'verify_wizard_delete_confirm') {
       await interaction.deferUpdate().catch(() => null);
@@ -168,20 +182,24 @@ const {
       return interaction.editReply({ content: '✅ Deletion cancelled. Configuration traces remain safe.', embeds: [], components: [] });
     }
 
-    const session = activeSetupSessions.get(wizardKey);
-    if (!session) return; 
+    // 📡 FETCH LIVE PERSISTENT BLUEPRINT FROM CLUSTER CORE DISKS
+    const doc = await VerificationModel.findOne({ guildId }).catch(() => null) || new VerificationModel({ guildId });
+    if (!doc.wizardActive || doc.wizardUserId !== userId) return; 
 
     // 🔘 STEP 1 SUBMISSION: CHOOSE ASSIGNED ROLE
     if ((interaction.customId === 'verify_wizard_step1' && interaction.isStringSelectMenu()) || interaction.customId === 'verify_wizard_skip_step1') {
       await interaction.deferUpdate().catch(() => null);
-      // 🔥 FIX: Extracts the absolute string out of the array container natively
-      if (interaction.isStringSelectMenu()) session.verifiedRoleId = interaction.values[0]; 
-      session.step = 2;
+      
+      if (interaction.isStringSelectMenu()) {
+         doc.tempRoleId = String(interaction.values[0]); // Explicitly isolates clean String Snowflake ID from array index
+      }
+      doc.wizardStep = 2;
+      await doc.save();
 
       const step2Embed = new EmbedBuilder()
-        .setTitle(`${session.mode === 'edit' ? '✏️' : '🛡️'} Step 2: Select Challenge Security Level`)
+        .setTitle(`${doc.tempRoleId ? '✏️' : '🛡️'} Step 2: Select Challenge Security Level`)
         .setDescription(
-          `**Current Role Target:** <@&${session.verifiedRoleId}>\n\n` +
+          `**Current Role Target:** <@&${doc.tempRoleId}>\n\n` +
           `Choose the security level and specific challenge model you want to deploy to incoming servers users:\n\n` +
           `**🟢 LOW SECURITY**\n` +
           `• \`button\` - Simple minimalist click confirmation rule layer.\n` +
@@ -214,7 +232,7 @@ const {
       );
 
       const comps = [selectMenu];
-      if (session.mode === 'edit') {
+      if (doc.tempRoleId) {
         comps.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('verify_wizard_skip_step2').setLabel('Skip This Step').setStyle(ButtonStyle.Secondary)));
       }
 
@@ -224,20 +242,20 @@ const {
     // 🔘 STEP 2 SUBMISSION: CAPTURED SECURITY LAYER CHOICE
     if ((interaction.customId === 'verify_wizard_step2' && interaction.isStringSelectMenu()) || interaction.customId === 'verify_wizard_skip_step2') {
       await interaction.deferUpdate().catch(() => null);
+      
       if (interaction.isStringSelectMenu()) {
-        // 🔥 FIX: Extracts the absolute string out of the array container natively
-        const selectedValue = interaction.values[0];
-        const parsedParts = selectedValue.split('_'); 
-        session.securityLevel = parsedParts[0]; 
-        session.challengeMethod = parsedParts.slice(1).join('_'); 
+        const parsedParts = String(interaction.values[0]).split('_'); 
+        doc.tempLevel = parsedParts[0]; 
+        doc.tempMethod = parsedParts.slice(1).join('_'); 
       }
-      session.step = 3;
+      doc.wizardStep = 3;
+      await doc.save();
 
       const targetTextChannels = guild.channels.cache.filter(c => c.type === ChannelType.GuildText).first(24);
       
       const step3Embed = new EmbedBuilder()
-        .setTitle(`${session.mode === 'edit' ? '✏️' : '🛡️'} Step 3: Choose Deployment Channel Location`)
-        .setDescription(`Current Anchorage Channel: <#${session.panelChannelId || interaction.channelId}>\n\nSelect a text channel below to drop your persistent validation panel layout.`)
+        .setTitle(`${doc.tempRoleId ? '✏️' : '🛡️'} Step 3: Choose Deployment Channel Location`)
+        .setDescription(`Select a text channel below to drop your persistent validation panel layout.`)
         .setColor('#9B59B6');
 
       const selectMenu = new ActionRowBuilder().addComponents(
@@ -248,24 +266,27 @@ const {
       );
 
       const comps = [selectMenu];
-      if (session.mode === 'edit') {
+      if (doc.tempRoleId) {
         comps.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('verify_wizard_skip_step3').setLabel('Skip This Step & Finalize').setStyle(ButtonStyle.Secondary)));
       }
 
       return interaction.editReply({ embeds: [step3Embed], components: comps });
     }
 
-    // 🔘 STEP 3 SUBMISSION: GENERATE PERSISTENT LANDING PANEL AND COMMIT TO MONGO
+    // 🔘 STEP 3 SUBMISSION: COMMIT EVERYTHING TO PERMANENT DOCUMENT AND SPAWN INTERFACES
     if ((interaction.customId === 'verify_wizard_step3' && interaction.isStringSelectMenu()) || interaction.customId === 'verify_wizard_skip_step3') {
       await interaction.deferUpdate().catch(() => null);
-      // 🔥 FIX: Extracts the absolute string out of the array container natively
-      if (interaction.isStringSelectMenu()) session.panelChannelId = interaction.values[0]; 
-
+      
+      if (interaction.isStringSelectMenu()) {
+         doc.panelChannelId = String(interaction.values[0]); // Explicitly isolates clean String Snowflake ID from array index
+      }
+      
+      // Lock and flush atomic parameters back to disk storage fields
       doc.enabled = true;
-      doc.securityLevel = session.securityLevel;
-      doc.challengeMethod = session.challengeMethod;
-      doc.verifiedRoleId = session.verifiedRoleId;
-      doc.panelChannelId = session.panelChannelId || interaction.channelId;
+      doc.wizardActive = false; // Turn wizard processing trackers off cleanly
+      doc.securityLevel = doc.tempLevel;
+      doc.challengeMethod = doc.tempMethod;
+      doc.verifiedRoleId = doc.tempRoleId;
       await doc.save();
 
       const panelTargetChannel = guild.channels.cache.get(doc.panelChannelId) || await guild.channels.fetch(doc.panelChannelId).catch(() => null);
@@ -294,11 +315,9 @@ const {
         await panelTargetChannel.send({ embeds: [landingEmbed], components: [launchRow] }).catch(() => null);
       }
 
-      activeSetupSessions.delete(wizardKey);
-
       const setupSuccess = new EmbedBuilder()
-        .setTitle(`✅ Gatekeeper Setup ${session.mode === 'edit' ? 'Updated' : 'Configured'}!`)
-        .setDescription(`• **Target Member Role:** <@&${session.verifiedRoleId}>\n• **Security Class:** \`${session.securityLevel.toUpperCase()}\`\n• **Method Layer:** \`${session.challengeMethod.toUpperCase()}\`\n• **Anchorage Room:** <#${doc.panelChannelId}>`)
+        .setTitle('✅ Gatekeeper Configuration Finalized!')
+        .setDescription(`• **Target Member Role:** <@&${doc.verifiedRoleId}>\n• **Security Class:** \`${doc.securityLevel.toUpperCase()}\`\n• **Method Layer:** \`${doc.challengeMethod.toUpperCase()}\`\n• **Anchorage Room:** <#${doc.panelChannelId}>`)
         .setColor('#2ECC71');
 
       return interaction.editReply({ embeds: [setupSuccess], components: [] });
@@ -319,7 +338,7 @@ const {
           return interaction.reply({ content: '✅ **Verification Check Cleared:** You already hold member roles.', ephemeral: true }).catch(() => null);
         }
   
-        // --- 🟢 LOW SECURITY CHALLENGES ---
+        // --- 🟢 LOW SECURITY ---
         if (sLevel === 'low' && cMethod === 'button') {
           await interaction.member.roles.add(configRecord.verifiedRoleId).catch(() => null);
           return interaction.reply({ content: '🎉 **Verification Passed!** Initial server blind layers unblinded. Welcome inside!', ephemeral: true }).catch(() => null);
@@ -336,7 +355,7 @@ const {
           return interaction.reply({ embeds: [termsEmbed], components: [termsRow], ephemeral: true }).catch(() => null);
         }
   
-        // --- 🟡 MEDIUM SECURITY CHALLENGES ---
+        // --- 🟡 MEDIUM SECURITY ---
         if (sLevel === 'medium' && cMethod === 'math') {
           const fA = Math.floor(Math.random() * 8) + 4;
           const fB = Math.floor(Math.random() * 7) + 2;
@@ -376,7 +395,7 @@ const {
           return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🧩 Odd-One-Out Puzzle').setDescription('One item option inside the dropdown listing array has a completely different asset fruit type. Identify it: \n\n` 🍎  |  🍏  |  Automated  |  🍊 `').setColor('#F1C40F')], components: [oddRow], ephemeral: true }).catch(() => null);
         }
   
-        // --- 🔴 HIGH SECURITY CHALLENGES ---
+        // --- 🔴 HIGH SECURITY ---
         if (sLevel === 'high' && cMethod === 'captcha') {
           const codes = ['NX7B', 'K9WP', '4Z2Q', 'R6MY', 'L3HV'];
           const code = codes[Math.floor(Math.random() * codes.length)];
@@ -426,7 +445,7 @@ const {
       }
   
       // ==========================================
-      // 🔘 ANSWER SUBMISSION PROCESSING CIRCUITS
+      // 🔘 USER ANSWER SOLUTION RECEPTORS
       // ==========================================
       if (interaction.customId && interaction.customId.startsWith('verify_user_solve_')) {
          await interaction.deferUpdate().catch(() => null);
@@ -435,7 +454,6 @@ const {
          const isLowTerms = parsingTokens[3] === 'low' && parsingTokens[4] === 'terms';
          const isDoubleAuth = parsingTokens[3] === 'high' && parsingTokens[4] === 'double';
          
-         // 🔥 FIX: Pull first index of values array cleanly to allow strict string validation
          const userSelectionChoiceInput = isLowTerms ? 'accept' : String(interaction.values[0]); 
          const targetValidationString = isLowTerms ? 'accept' : isDoubleAuth ? userSelectionChoiceInput : String(parsingTokens[parsingTokens.length - 1]);
   
@@ -450,4 +468,5 @@ const {
          }
       }
     }
-  };    
+  };
+    
