@@ -7,9 +7,9 @@ module.exports = {
         const activeClient = client || interaction.client;
 
         // ========================================================
-        // 🔒 1. ONBOARDING VERIFICATION ROUTER INTERCEPTOR
+        // 🔒 A. ONBOARDING VERIFICATION ROUTER INTERCEPTOR
         // ========================================================
-        // Instantly routes all verification panels, buttons, and select menus 
+        // Routes verification panels, buttons, and select menus instantly
         // to verification.js to prevent "Interaction Failed" errors.
         if (interaction.customId && interaction.customId.startsWith('verify_')) {
             const verifyCommand = activeClient.commands.get('verification');
@@ -20,10 +20,10 @@ module.exports = {
         }
 
         // ========================================================
-        // 📊 2. STATS ANALYTICS WIZARD INTERCEPTOR
+        // 📊 B. STATS ANALYTICS WIZARD INTERCEPTOR
         // ========================================================
-        // Intercepts all custom IDs starting with 'analytics_' to route setup,
-        // edit, and choice menus directly to the analytics component layout.
+        // Routes analytics setups, edits, and choice menus directly
+        // to the analytics component layout instantly.
         if (interaction.customId && interaction.customId.startsWith('analytics_')) {
             const analyticsCommand = activeClient.commands.get('analytics');
             if (analyticsCommand && typeof analyticsCommand.handleInteraction === 'function') {
@@ -33,9 +33,21 @@ module.exports = {
         }
 
         // ========================================================
-        // 🎫 3. TICKET & REACTION ROLES ROUTING LAYER
+        // 🗑️ C. ROLE CLEANER CONTROL INTERCEPTOR
         // ========================================================
-        // Routes interactive ticketing buttons/menus cleanly
+        // Directs role wipe button confirmations instantly to the clearroles file.
+        if (interaction.customId && interaction.customId.startsWith('clear_roles_')) {
+            const clearRolesCommand = activeClient.commands.get('clearroles');
+            if (clearRolesCommand && typeof clearRolesCommand.handleInteraction === 'function') {
+                return await clearRolesCommand.handleInteraction(interaction);
+            }
+            return;
+        }
+
+        // ========================================================
+        // 🎫 D. TICKET SYSTEM INTERCEPTOR
+        // ========================================================
+        // Routes persistent ticketing panel operations cleanly
         if (interaction.customId && interaction.customId.startsWith('ticket_system_')) {
             const ticketCommand = activeClient.commands.get('ticket');
             if (ticketCommand && typeof ticketCommand.handleInteraction === 'function') {
@@ -54,7 +66,7 @@ module.exports = {
         }
 
         // ========================================================
-        // 📡 4. SLASH COMMAND ENGINE GATEWAYS
+        // 📡 E. SLASH COMMAND ENGINE GATEWAY
         // ========================================================
         if (!interaction.isChatInputCommand()) return;
         
@@ -73,15 +85,15 @@ module.exports = {
         const mainSettings = (await db.readData('settings.json')) || {};
         const currentGuildSettings = mainSettings[interaction.guildId] || {};
         
-        // Comprehensive whitelisted array preventing module blockouts on critical infrastructure commands
+        // Whitelist array protecting critical infrastructure and wizards from fun lockouts
         const coreUtilityCommands = [
             'setup', 'cute', 'fun-module', 'help', 'setup-audit', 
             'mod-logs-toggle', 'reactionroles', 'autorole', 'automodrule', 
-            'ticket', 'verification', 'leaderboard', 'rank', 'analytics'
+            'ticket', 'verification', 'leaderboard', 'rank', 'analytics', 'clearroles'
         ];
 
         if (!coreUtilityCommands.includes(commandName.toLowerCase())) {
-            // Checks if the module state was flipped off inside your custom dynamic schema structure
+            // Checks if the module state was flipped off inside your settings mapping
             if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false || currentGuildSettings.funModule === 'off') {
                 return interaction.reply({ 
                     content: '❌ The complete **Fun Command Suite** has been globally disabled by a server administrator.', 

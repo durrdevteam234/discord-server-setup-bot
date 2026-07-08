@@ -199,7 +199,7 @@ module.exports = {
 
         const mainSettings = db.readData('settings.json') || {};
         const currentGuildSettings = mainSettings[message.guild?.id] || {};
-        const coreUtilityCommands = ['setup', 'cute', 'fun-module', 'fun-menu', 'autorole', 'automodrule', 'ticket', 'verification', 'mod-logs-toggle','analytics']; 
+        const coreUtilityCommands = ['setup', 'cute', 'fun-module', 'fun-menu', 'autorole', 'automodrule', 'ticket', 'verification', 'mod-logs-toggle','analytics','clearroles','clear-channels']; 
         
         if (!coreUtilityCommands.includes(commandName)) {
           if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false) {
