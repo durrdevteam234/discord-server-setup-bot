@@ -174,7 +174,7 @@ const {
     // 🔘 STEP 1 SUBMISSION: CHOOSE ASSIGNED ROLE
     if ((interaction.customId === 'verify_wizard_step1' && interaction.isStringSelectMenu()) || interaction.customId === 'verify_wizard_skip_step1') {
       await interaction.deferUpdate().catch(() => null);
-      if (interaction.isStringSelectMenu()) session.verifiedRoleId = interaction.values[0]; // Extracts string cleanly
+      if (interaction.isStringSelectMenu()) session.verifiedRoleId = interaction.values[0]; // Extracts index string cleanly
       session.step = 2;
 
       const step2Embed = new EmbedBuilder()
@@ -224,7 +224,7 @@ const {
     if ((interaction.customId === 'verify_wizard_step2' && interaction.isStringSelectMenu()) || interaction.customId === 'verify_wizard_skip_step2') {
       await interaction.deferUpdate().catch(() => null);
       if (interaction.isStringSelectMenu()) {
-        const parsedParts = interaction.values[0].split('_'); // Extracts string cleanly
+        const parsedParts = interaction.values[0].split('_'); // Extracts index string cleanly
         session.securityLevel = parsedParts[0]; 
         session.challengeMethod = parsedParts.slice(1).join('_'); 
       }
@@ -255,7 +255,7 @@ const {
     // 🔘 STEP 3 SUBMISSION: GENERATE PERSISTENT LANDING PANEL AND COMMIT TO MONGO
     if ((interaction.customId === 'verify_wizard_step3' && interaction.isStringSelectMenu()) || interaction.customId === 'verify_wizard_skip_step3') {
       await interaction.deferUpdate().catch(() => null);
-      if (interaction.isStringSelectMenu()) session.panelChannelId = interaction.values[0]; // Extracts string cleanly
+      if (interaction.isStringSelectMenu()) session.panelChannelId = interaction.values[0]; // Extracts index string cleanly
 
       doc.enabled = true;
       doc.securityLevel = session.securityLevel;
@@ -304,8 +304,8 @@ const {
     // ========================================================
     if (interaction.customId && interaction.customId.startsWith('verify_gate_launch_')) {
         const parts = interaction.customId.split('_');
-        const sLevel = parts[3]; // Extract 'low', 'medium', or 'high'
-        const cMethod = parts.slice(4).join('_'); // Extract specific method name string
+        const sLevel = parts[3]; // Fixed index offset token placement 
+        const cMethod = parts.slice(4).join('_'); // Specific challenge strings extractor
   
         const configRecord = await VerificationModel.findOne({ guildId }).catch(() => null);
         if (!configRecord || !configRecord.enabled) {
@@ -345,7 +345,7 @@ const {
               .setPlaceholder('Select result calculation...')
               .addOptions(optionValues.map(v => ({ label: `Result: ${v}`, value: v.toString() })))
           );
-          return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🧮 Math Verification').setDescription(`Solve this basic formula to prove you are an organic human user:\n\n### What is \`${fA} + ${fB}\`?`).setColor('#F1C40F')], components: [row], ephemeral: true }).catch(() => null);
+          return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🧮 Math Verification').setDescription(`What is \`${fA} + ${fB}\`?`).setColor('#F1C40F')], components: [row], ephemeral: true }).catch(() => null);
         }
   
         if (sLevel === 'medium' && cMethod === 'colors') {
@@ -409,7 +409,7 @@ const {
   
           const doubleRow = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder()
-              .setCustomId(`verify_user_solve_high_double_${compoundKey}`)
+              .setCustomId('verify_user_solve_high_double_choice')
               .setPlaceholder('Select the matching unified formula result token...')
               .addOptions([
                 { label: `Compound Token: ${sum} | Code: ${token}`, value: compoundKey },
@@ -425,11 +425,16 @@ const {
       // 🔘 ANSWER SUBMISSION PROCESSING CIRCUITS
       // ==========================================
       if (interaction.customId && interaction.customId.startsWith('verify_user_solve_')) {
+         // Acknowledge dropdown action instantly to completely prevent "Interaction Failed" alerts!
          await interaction.deferUpdate().catch(() => null);
          
          const parsingTokens = interaction.customId.split('_');
-         const targetValidationString = parsingTokens[4]; // Extract target answer token safely
-         const userSelectionChoiceInput = interaction.isButton() ? 'accept' : interaction.values[0]; // Extracts string cleanly
+         const isLowTerms = parsingTokens[3] === 'low' && parsingTokens[4] === 'terms';
+         const isDoubleAuth = parsingTokens[3] === 'high' && parsingTokens[4] === 'double';
+         
+         // FIXED STRING CONVERSION LOGIC EXTRACTION: Evaluates raw keys instead of comparison objects
+         const targetValidationString = isLowTerms ? 'accept' : isDoubleAuth ? interaction.values[0] : parsingTokens[parsingTokens.length - 1];
+         const userSelectionChoiceInput = isLowTerms ? 'accept' : interaction.values[0];
   
          const configRecord = await VerificationModel.findOne({ guildId }).catch(() => null);
          if (!configRecord) return;
@@ -442,4 +447,4 @@ const {
          }
       }
     }
-  };
+  };    
