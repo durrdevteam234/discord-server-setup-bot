@@ -6,6 +6,16 @@ module.exports = {
     async execute(interaction, client) {
         const activeClient = client || interaction.client;
 
+        // ==========================================
+        // 🔒 ONBOARDING VERIFICATION INTERCEPT ROUTER
+        // ==========================================
+        if (interaction.customId && interaction.customId.startsWith('verify_')) {
+            const verifyCommand = activeClient.commands.get('verification');
+            if (verifyCommand && typeof verifyCommand.handleInteraction === 'function') {
+                return await verifyCommand.handleInteraction(interaction);
+            }
+        }
+
         // 1. REACTION ROLES COMPONENT ROUTING LAYER
         if (interaction.isButton() || interaction.isStringSelectMenu()) {
             const reactionRolesCommand = activeClient.commands.get('reactionroles');
@@ -32,7 +42,11 @@ module.exports = {
         // ========================================================
         const mainSettings = (await db.readData('settings.json')) || {};
         const currentGuildSettings = mainSettings[interaction.guildId] || {};
-        const coreUtilityCommands = ['setup', 'cute', 'fun-module', 'help', 'setup-audit', 'mod-logs-toggle', 'reactionroles'];
+        const coreUtilityCommands = [
+            'setup', 'cute', 'fun-module', 'help', 'setup-audit', 
+            'mod-logs-toggle', 'reactionroles', 'autorole', 'automodrule', 
+            'ticket', 'verification'
+        ];
 
         if (!coreUtilityCommands.includes(commandName.toLowerCase())) {
             // Checks if the module state was flipped off inside your custom dynamic schema structure
@@ -45,7 +59,14 @@ module.exports = {
         }
 
         try {
-            await command.execute(interaction, activeClient);
+            // ========================================================
+            // 📡 DYNAMIC SLASH ROUTER ADAPTER
+            // ========================================================
+            if (typeof command.executeSlash === 'function') {
+                await command.executeSlash(interaction, activeClient);
+            } else if (typeof command.execute === 'function') {
+                await command.execute(interaction, activeClient);
+            }
         } catch (error) {
             console.error(`❌ Slash Command Error [/${commandName}]:`, error);
             const errorPayload = { 

@@ -2,6 +2,7 @@ const discord = require('discord.js');
 const audit = require('../utils/auditLog');
 const db = require('../utils/database');
 const formatter = require('../utils/textFormatter.js');
+const mongoose = require('mongoose');
 
 const xpCooldowns = new Map();
 
@@ -16,6 +17,177 @@ module.exports = {
       
       const prefix = client?.prefix || '|';
       // ==========================================
+      // 🛡️ BACKGROUND AUTOMOD CRITERIA MESSAGE SCANNER (FULL 20-PARAM EXECUTOR)
+      // ==========================================
+      try {
+        const AutoModModel = mongoose.models.AutoModRule;
+        const recentMessages = global.recentMessagesMap || (global.recentMessagesMap = new Map());
+        const linkCooldowns = global.linkCooldownsMap || (global.linkCooldownsMap = new Map());
+        const mentionCooldowns = global.mentionCooldownsMap || (global.mentionCooldownsMap = new Map());
+        const stickerCooldowns = global.stickerCooldownsMap || (global.stickerCooldownsMap = new Map());
+
+        if (AutoModModel && message.guild && !message.member?.permissions.has(discord.PermissionFlagsBits.ManageMessages)) {
+          const automodConfig = await AutoModModel.findOne({ guildId: message.guild.id });
+          if (automodConfig && automodConfig.rules && automodConfig.rules.size > 0) {
+            
+            let violatesFilter = null;
+            const content = message.content;
+            const contentLower = content.toLowerCase();
+            const now = Date.now();
+            const userKey = `${message.guild.id}-${message.author.id}`;
+
+            automodConfig.rules.forEach((rule) => {
+              if (!rule.enabled) return;
+
+              // 1. ALL CAPS
+              if (rule.filterType === 'all_caps' && content.length > 6) {
+                const letters = content.replace(/[^a-zA-Z]/g, '');
+                if (letters.length > 0 && letters === letters.toUpperCase()) violatesFilter = rule;
+              }
+              // 2. BAD WORDS
+              if (rule.filterType === 'bad_words') {
+                const blacklist = ['backdoor', 'exploit', 'tokengrabber']; 
+                if (blacklist.some(word => contentLower.includes(word))) violatesFilter = rule;
+              }
+              // 3. CHAT CLEARING NEW LINES
+              if (rule.filterType === 'new_lines' && (content.match(/\n/g) || []).length > 8) {
+                violatesFilter = rule;
+              }
+              // 4. DUPLICATE TEXTS
+              if (rule.filterType === 'duplicate_texts') {
+                const userHistory = recentMessages.get(userKey) || [];
+                if (userHistory.includes(contentLower)) violatesFilter = rule;
+              }
+              // 5. CHARACTER COUNT
+              if (rule.filterType === 'character_count' && content.length > 1500) {
+                violatesFilter = rule;
+              }
+              // 6. EMOJI SPAM
+              if (rule.filterType === 'emoji_spam') {
+                const emojiMatch = content.match(/<a?:.+?:\d+>|[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD00-\uDFFF]/g);
+                if (emojiMatch && emojiMatch.length > 6) violatesFilter = rule;
+              }
+              // 7. FAST MESSAGE SPAM
+              if (rule.filterType === 'fast_spam') {
+                const timestamps = recentMessages.get(`${userKey}-times`) || [];
+                timestamps.push(now);
+                const activeBursts = timestamps.filter(t => now - t < 4000);
+                recentMessages.set(`${userKey}-times`, activeBursts);
+                if (activeBursts.length > 4) violatesFilter = rule;
+              }
+              // 8. IMAGE SPAM
+              if (rule.filterType === 'image_spam' && message.attachments.size > 3) {
+                violatesFilter = rule;
+              }
+              // 9. INVITE LINKS
+              if (rule.filterType === 'invite_links' && /(discord\.gg|discord\.com\/invite)/.test(contentLower)) {
+                violatesFilter = rule;
+              }
+              // 10. LINKS
+              if (rule.filterType === 'links' && /(https?:\/\/[^\s]+)/.test(contentLower)) {
+                violatesFilter = rule;
+              }
+              // 11. LINKS COOLDOWN
+              if (rule.filterType === 'links_cooldown' && /(https?:\/\/[^\s]+)/.test(contentLower)) {
+                const lastLink = linkCooldowns.get(userKey) || 0;
+                if (now - lastLink < 15000) violatesFilter = rule;
+                else linkCooldowns.set(userKey, now);
+              }
+              // 12. MASS MENTIONS
+              if (rule.filterType === 'mass_mentions' && (message.mentions.users.size + message.mentions.roles.size) > 4) {
+                violatesFilter = rule;
+              }
+              // 13. MENTIONS COOLDOWN
+              if (rule.filterType === 'mentions_cooldown' && (message.mentions.users.size > 0)) {
+                const lastMention = mentionCooldowns.get(userKey) || 0;
+                if (now - lastMention < 10000) violatesFilter = rule;
+                else mentionCooldowns.set(userKey, now);
+              }
+              // 14. SPOILERS
+              if (rule.filterType === 'spoilers' && content.includes('||')) {
+                violatesFilter = rule;
+              }
+              // 15. MASKED LINKS
+              if (rule.filterType === 'masked_links' && /\[.+?\]\(https?:\/\/[^\s]+\)/.test(contentLower)) {
+                violatesFilter = rule;
+              }
+              // 16. STICKERS
+              if (rule.filterType === 'stickers' && message.stickers.size > 0) {
+                violatesFilter = rule;
+              }
+              // 17. STICKERS COOLDOWN
+              if (rule.filterType === 'stickers_cooldown' && message.stickers.size > 0) {
+                const lastSticker = stickerCooldowns.get(userKey) || 0;
+                if (now - lastSticker < 12000) violatesFilter = rule;
+                else stickerCooldowns.set(userKey, now);
+              }
+              // 18. ZALGO TEXT
+              if (rule.filterType === 'zalgo_text' && /[\u0300-\u036F\u1DC0-\u1DFF\u20D0-\u20FF\uFE20-\uFE2F]{6,}/.test(content)) {
+                violatesFilter = rule;
+              }
+              // 19. KNOWN PHISHING LINKS
+              if (rule.filterType === 'phishing_links' && /(https?:\/\/[^\s]+)/.test(contentLower)) {
+                const phishingSignatures = [
+                  'dlscord-', 'discord-nitro', 'discorcl', 'discord-app', 'discords',
+                  'free-nitro', 'steam-nitro', 'boost-nitro', 'nitro-gift', 'giveaway-nitro',
+                  'cliscord', 'd1scord', 'gift-discord', 'nitro-drop', 'claim-nitro',
+                  'collab-land', 'metamask-security', 'phantom-wallet-update', 'airdrop-claim'
+                ];
+                if (phishingSignatures.some(sig => contentLower.includes(sig))) {
+                  violatesFilter = rule;
+                  if (!rule.actions.includes('block_message')) rule.actions.push('block_message');
+                  if (!rule.actions.includes('timeout_user')) rule.actions.push('timeout_user');
+                }
+              }
+              // 20. RAID BOT DEFENSES
+              if (rule.filterType === 'raid_bots') {
+                const isNewAccount = (now - message.author.createdTimestamp) < 432000000;
+                const containsMassLinks = (contentLower.match(/(https?:\/\/[^\s]+)/g) || []).length > 2;
+                const userHistory = recentMessages.get(userKey) || [];
+                
+                if (isNewAccount && (containsMassLinks || userHistory.length >= 2)) {
+                  violatesFilter = rule;
+                  if (!rule.actions.includes('block_message')) rule.actions.push('block_message');
+                  if (message.member?.kickable && !rule.actions.includes('kick_user')) rule.actions.push('kick_user');
+                }
+              }
+            });
+
+            if (!violatesFilter) {
+              const history = recentMessages.get(userKey) || [];
+              history.push(contentLower);
+              if (history.length > 3) history.shift();
+              recentMessages.set(userKey, history);
+            } else {
+              if (violatesFilter.actions.includes('block_message')) {
+                await message.delete().catch(() => null);
+                await message.channel.send(`⚠️ ${message.author}, flagged by AutoMod filter: **${violatesFilter.ruleName}**!`).then(m => setTimeout(() => m.delete().catch(() => null), 4000));
+              }
+              if (violatesFilter.actions.includes('timeout_user') && message.member?.moderatable) {
+                await message.member.timeout(300000, `AutoMod Violation: ${violatesFilter.ruleName}`).catch(() => null);
+              }
+              if (violatesFilter.actions.includes('kick_user') && message.member?.kickable) {
+                await message.member.kick(`AutoMod Escalation: ${violatesFilter.ruleName}`).catch(() => null);
+              }
+              if (violatesFilter.actions.includes('log_to_channel')) {
+                 const logChannel = message.guild.channels.cache.find(c => c.name.includes('mod-logs'));
+                 if (logChannel) {
+                    const alert = new discord.EmbedBuilder()
+                      .setTitle('🚨 AutoMod Rule Violation Intercepted')
+                      .setColor('#ED4245')
+                      .setDescription(`User ${message.author} triggered safety filter \`${violatesFilter.filterType.toUpperCase()}\`.`)
+                      .setTimestamp();
+                    await logChannel.send({ embeds: [alert] }).catch(() => null);
+                 }
+              }
+              return; 
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[AutoMod Engine Scanner Error]:', err.message);
+      }
+      // ==========================================
       // PART A: COMMAND PARSING & EXECUTION
       // ==========================================
       if (message.content.startsWith(prefix)) {
@@ -25,241 +197,136 @@ module.exports = {
         const commandName = argsArray.shift().toLowerCase();
         const rawArgsString = argsArray.join(' ').trim();
 
-        // Check Global Server Configuration Switch For Fun Modules
         const mainSettings = db.readData('settings.json') || {};
         const currentGuildSettings = mainSettings[message.guild?.id] || {};
-        const coreUtilityCommands = ['setup', 'cute', 'fun-module', 'fun-menu']; 
+        const coreUtilityCommands = ['setup', 'cute', 'fun-module', 'fun-menu', 'autorole', 'automodrule', 'ticket', 'verification', 'mod-logs-toggle']; 
         
         if (!coreUtilityCommands.includes(commandName)) {
           if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false) {
             return message.reply('❌ The complete **Fun Command Suite** has been globally disabled by a server administrator.').catch(() => null);
           }
         }
-        // 2. Main Administration Setup Router Block
+
+        // ========================================================
+        // 🚨 COMPREHENSIVE ARCHITECTURE WHITELIST MUTATION 🚨
+        // ========================================================
         if (commandName === 'setup') {
           const guild = message.guild; if (!guild) return;
           const member = message.member || await guild.members.fetch(message.author.id).catch(() => null);
           if (!member) return;
           if (!member.permissions.has(discord.PermissionFlagsBits.Administrator) && !member.permissions.has(discord.PermissionFlagsBits.ManageGuild)) {
-            return message.reply('❌ Permissions required!').catch(() => null);
+            return message.reply('❌ Permissions required! You need Administrator access to wipe or provision rooms.').catch(() => null);
           }
           
-          const templateArg = argsArray[0] ? argsArray[0].toLowerCase() : null;
-          const clearArg = argsArray[1] ? argsArray[1].toLowerCase() : null;
+          const templateArg = argsArray[0] ? argsArray[0].toLowerCase().trim() : null;
+          const clearArg = argsArray[1] ? argsArray[1].toLowerCase().trim() : null;
           const clear = clearArg === 'clear' || clearArg === 'true';
-          const validTemplates = ['gaming', 'community', 'study', 'business'];
+          
+          // Fully expanded verification matrix handling all 11 predefined templates cleanly!
+          const validTemplates = ['gaming', 'community', 'study', 'business', 'creative', 'development', 'finance', 'roleplay', 'minimalist', 'history', 'geography'];
           
           if (!templateArg || !validTemplates.includes(templateArg)) {
-            return message.reply('❌ Usage: ' + prefix + 'setup <gaming|community|study|business> [clear]').catch(() => null);
+            return message.reply(`❌ **Usage:** \`${prefix}setup <${validTemplates.join('|')}> [clear]\``).catch(() => null);
           }
-          const statusMessage = await message.reply('⏳ Initializing setup...').catch(() => null);
-          try {
-            let cuteStyle = 'off';
-            try { const cuteData = db.readData('cute.json') || {}; cuteStyle = cuteData[guild.id] || 'off'; } catch (e) {}
-            const isCuteActive = cuteStyle !== 'off';
-            if (clear) {
-              if (statusMessage) await statusMessage.edit('🗑️ Clearing channels...').catch(() => null);
-              for (const channel of guild.channels.cache.values()) {
-                if (channel.id === message.channelId) continue;
-                await channel.delete().catch(() => null);
-              }
-            }
-            const genCatName = formatter.formatCute('General', cuteStyle, '🎀');
-            const vcCatName = formatter.formatCute('Voice', cuteStyle, '🔊');
-            const staffCatName = formatter.formatCute('Staff', cuteStyle, '🔒');
-            if (statusMessage) await statusMessage.edit('📁 Creating categories...').catch(() => null);
-            const generalCategory = await guild.channels.create({ name: genCatName, type: discord.ChannelType.GuildCategory });
-            const voiceCategory = await guild.channels.create({ name: vcCatName, type: discord.ChannelType.GuildCategory });
-            const staffCategory = await guild.channels.create({ name: staffCatName, type: discord.ChannelType.GuildCategory });
-            if (statusMessage) await statusMessage.edit('👥 Creating roles...').catch(() => null);
-            const adminRole = await guild.roles.create({ name: 'Admin', color: '#FF0000' });
-            const modRole = await guild.roles.create({ name: 'Moderator', color: '#0099FF' });
-            const memberRole = await guild.roles.create({ name: 'Member', color: '#00FF00' });
-            if (statusMessage) await statusMessage.edit('📢 Creating channels...').catch(() => null);
-            const channels = {
-              general: { name: formatter.formatCute('general', cuteStyle, '💬'), parent: generalCategory.id, type: discord.ChannelType.GuildText },
-              announcements: { name: formatter.formatCute('announcements', cuteStyle, '📢'), parent: generalCategory.id, type: discord.ChannelType.GuildText },
-              'audit-logs': { name: formatter.formatCute('audit-logs', cuteStyle, '📜'), parent: staffCategory.id, type: discord.ChannelType.GuildText },
-              'mod-logs': { name: formatter.formatCute('mod-logs', cuteStyle, '🛡️'), parent: staffCategory.id, type: discord.ChannelType.GuildText },
-              'staff-chat': { name: formatter.formatCute('staff-chat', cuteStyle, '💬'), parent: staffCategory.id, type: discord.ChannelType.GuildText },
-              levels: { name: formatter.formatCute('levels', cuteStyle, '✨'), parent: generalCategory.id, type: discord.ChannelType.GuildText },
-              commands: { name: formatter.formatCute('commands', cuteStyle, '🤖'), parent: generalCategory.id, type: discord.ChannelType.GuildText },
-            };
-            if (templateArg === 'gaming') {
-              channels.gaming = { name: formatter.formatCute('gaming', cuteStyle, '🎮'), parent: generalCategory.id, type: discord.ChannelType.GuildText };
-              channels['voice-chat'] = { name: formatter.formatCute('voice-chat', cuteStyle, '🎧'), parent: voiceCategory.id, type: discord.ChannelType.GuildVoice };
-            } else if (templateArg === 'community') {
-              channels.introductions = { name: formatter.formatCute('introductions', cuteStyle, '👋'), parent: generalCategory.id, type: discord.ChannelType.GuildText };
-              channels.events = { name: formatter.formatCute('events', cuteStyle, '📅'), parent: generalCategory.id, type: discord.ChannelType.GuildText };
-              channels['voice-chat'] = { name: formatter.formatCute('voice-chat', cuteStyle, '🎧'), parent: voiceCategory.id, type: discord.ChannelType.GuildVoice };
-            } else if (templateArg === 'study') {
-              channels['study-materials'] = { name: formatter.formatCute('study-materials', cuteStyle, '📚'), parent: generalCategory.id, type: discord.ChannelType.GuildText };
-              channels['voice-study'] = { name: formatter.formatCute('voice-study', cuteStyle, '✏️'), parent: voiceCategory.id, type: discord.ChannelType.GuildVoice };
-            } else if (templateArg === 'business') {
-              channels.meetings = { name: formatter.formatCute('meetings', cuteStyle, '💼'), parent: generalCategory.id, type: discord.ChannelType.GuildText };
-              channels['voice-meetings'] = { name: formatter.formatCute('voice-meetings', cuteStyle, '👔'), parent: voiceCategory.id, type: discord.ChannelType.GuildVoice };
-            }
-            let createdGeneralChannelId = null;
-            for (const [key, channelData] of Object.entries(channels)) {
-              const createdChannel = await guild.channels.create({ name: channelData.name, type: channelData.type, parent: channelData.parent });
-              if (key === 'general') createdGeneralChannelId = createdChannel.id;
-            }
-            currentGuildSettings.template = templateArg;
-            currentGuildSettings.channels = Object.keys(channels);
-            currentGuildSettings.welcomeChannelId = createdGeneralChannelId;
-            currentGuildSettings.roles = [adminRole.id, modRole.id, memberRole.id];
-            currentGuildSettings.setupComplete = true;
-            currentGuildSettings.setupDate = new Date().toISOString();
-            
-            mainSettings[guild.id] = currentGuildSettings;
-            db.writeData('settings.json', mainSettings);
-            
-            const embed = new discord.EmbedBuilder().setColor(isCuteActive ? '#FF69B4' : '#00FF00').setTitle(isCuteActive ? '✨ Setup Complete! ✨' : '✅ Setup Complete!').addFields({ name: 'Template', value: templateArg, inline: true }, { name: 'Categories', value: '3', inline: true }, { name: 'Channels', value: Object.keys(channels).length.toString(), inline: true });
-            if (statusMessage) await statusMessage.edit({ content: ' ', embeds: [embed] }).catch(() => null);
-          } catch (error) { console.error(error); }
-          return;
-        } else if (commandName === 'cute') {
-          const guild = message.guild; if (!guild) return;
-          if (!message.member.permissions.has(discord.PermissionFlagsBits.Administrator) && !message.member.permissions.has(discord.PermissionFlagsBits.ManageGuild)) {
-            return message.reply('❌ Permissions required!').catch(() => null);
-          }
-          
-          const choice = argsArray[0] ? argsArray[0].toLowerCase() : null;
-          const validStyles = ['off', 'wide', 'smallcaps', 'bubbles'];
-          if (!choice || !validStyles.includes(choice)) {
-            const embed = new discord.EmbedBuilder().setColor('#FF69B4').setTitle('✨ Font Menu ✨').setDescription('Usage: `|cute <choice>`\n• `off` ➡️ Normal\n• `wide` ➡️ ᴡɪᴅᴇ\n• `smallcaps` ➡️ sᴍᴀʟʟᴄᴀᴘs\n• `bubbles` ➡️ ⓑⓤⓑⓑⓛⓔⓢ');
-            return message.reply({ embeds: [embed] }).catch(() => null);
-          }
-          const cuteData = db.readData('cute.json') || {}; cuteData[guild.id] = choice; db.writeData('cute.json', cuteData);
-          const successEmbed = new discord.EmbedBuilder().setColor('#00FF00').setTitle('✅ Saved!').setDescription('Layout is now: ' + choice.toUpperCase());
-          return message.reply({ embeds: [successEmbed] }).catch(() => null);
-        } else {
-          // =======================================================
-          // FIXED RESILIENT DYNAMIC PREFIX ROUTER WITH EMULATOR
-          // =======================================================
-          const targetCommand = client.commands.get(commandName);
-          if (targetCommand) {
-            if (typeof targetCommand.executePrefix === 'function') {
-              await targetCommand.executePrefix(message, argsArray, client).catch(err => console.error(`Prefix execution error inside |${commandName}:`, err));
-            } else if (typeof targetCommand.runPrefix === 'function') {
-              await targetCommand.runPrefix(message, argsArray, client).catch(err => console.error(`Legacy runPrefix error inside |${commandName}:`, err));
-            } else if (typeof targetCommand.execute === 'function') {
-              
-              let explicitRawId = null;
-              if (rawArgsString) {
-                const pureNumbersOnly = rawArgsString.replace(/[^0-9]/g, '');
-                if (pureNumbersOnly.length >= 17 && pureNumbersOnly.length <= 20) {
-                  explicitRawId = pureNumbersOnly;
+        }
+
+        const targetCommand = client.commands.get(commandName);
+        if (targetCommand && typeof targetCommand.execute === 'function') {
+          let resolvedTargetUser = message.mentions.users.first() || message.author;
+          let resolvedTargetMember = message.mentions.members.first() || message.member;
+          let activeBotResponse = null;
+
+          const mockInteraction = {
+            id: message.id,
+            commandName: commandName,
+            guild: message.guild,
+            guildId: message.guildId,
+            channel: message.channel,
+            channelId: message.channelId,
+            user: message.author,
+            member: message.member,
+            replied: false,
+            deferred: false,
+            options: {
+              getSubcommand: () => argsArray[0] || null,
+              getString: (name) => name === 'template' || name === 'subcommand' || name === 'status' || name === 'role' ? argsArray.join(' ').trim() : (rawArgsString.length > 0 ? rawArgsString : null),
+              getUser: (name) => resolvedTargetUser,
+              getMember: (name) => resolvedTargetMember,
+              getRole: (name) => message.guild ? (message.mentions.roles.first() || message.guild.roles.cache.get(argsArray[0]) || message.guild.roles.cache.find(r => r.name.toLowerCase() === argsArray.slice(1).join(' ').toLowerCase())) : null,
+              getChannel: (name) => message.mentions.channels.first() || message.channel,
+              getBoolean: (name) => argsArray.includes('clear') || argsArray.includes('true'),
+              getInteger: (name) => {
+                const processedInt = parseInt(argsArray[0]);
+                return isNaN(processedInt) ? null : processedInt;
+              },
+              getAttachment: (name) => {
+                const nativeAttachment = message.attachments.first();
+                if (nativeAttachment) return nativeAttachment;
+                if (rawArgsString.startsWith('http://') || rawArgsString.startsWith('https://')) {
+                  return { url: rawArgsString, proxyURL: rawArgsString };
                 }
+                return null;
+              },
+              get: (name) => {
+                if (name === 'image' || name === 'file' || name === 'attachment' || name === 'url' || name === 'link') {
+                  const nativeAttachment = message.attachments.first();
+                  if (nativeAttachment) return { attachment: nativeAttachment, value: nativeAttachment.id };
+                  if (rawArgsString.startsWith('http://') || rawArgsString.startsWith('https://')) {
+                    return { value: rawArgsString, attachment: { url: rawArgsString, proxyURL: rawArgsString } };
+                  }
+                }
+                return { value: rawArgsString || null };
               }
-
-              let resolvedTargetUser = message.mentions.users.first() || null;
-              let resolvedTargetMember = message.mentions.members.first() || null;
-
-              if (!resolvedTargetUser && explicitRawId && message.guild) {
-                try {
-                  resolvedTargetMember = message.guild.members.cache.get(explicitRawId) || await message.guild.members.fetch(explicitRawId).catch(() => null);
-                  if (resolvedTargetMember) resolvedTargetUser = resolvedTargetMember.user;
-                } catch (_) {}
+            },
+            reply: async (options) => {
+              if (mockInteraction.replied || mockInteraction.deferred) return mockInteraction.editReply(options);
+              mockInteraction.replied = true;
+              if (typeof options === 'string') {
+                activeBotResponse = await message.reply({ content: options }).catch(() => null);
+              } else {
+                if (options && options.flags) delete options.flags; 
+                activeBotResponse = await message.reply(options).catch(() => null);
               }
-
-              let activeBotResponse = null;
-
-              const mockInteraction = {
-                isCommand: () => true,
-                isChatInputCommand: () => true,
-                deferred: false,
-                replied: false,
-                id: message.id,
-                guildId: message.guildId,
-                channelId: message.channelId,
-                guild: message.guild,
-                channel: message.channel,
-                user: message.author,
-                member: message.member,
-                client: client,
-                options: {
-                  getSubcommand: () => argsArray[0] || null,
-                  getString: (name) => rawArgsString.length > 0 ? rawArgsString : null,
-                  getUser: (name) => resolvedTargetUser,
-                  getMember: (name) => resolvedTargetMember,
-                  getRole: (name) => message.guild ? (message.mentions.roles.first() || message.guild.roles.cache.get(argsArray[0]) || message.guild.roles.cache.find(r => r.name.toLowerCase() === argsArray.slice(1).join(' ').toLowerCase())) : null,
-                  getInteger: (name) => {
-                    const processedInt = parseInt(argsArray[0]);
-                    return isNaN(processedInt) ? null : processedInt;
-                  },
-                  getAttachment: (name) => {
-                    const nativeAttachment = message.attachments.first();
-                    if (nativeAttachment) return nativeAttachment;
-                    if (rawArgsString.startsWith('http://') || rawArgsString.startsWith('https://')) {
-                      return { url: rawArgsString, proxyURL: rawArgsString };
-                    }
-                    return null;
-                  },
-                  get: (name) => {
-                    if (name === 'image' || name === 'file' || name === 'attachment' || name === 'url' || name === 'link') {
-                      const nativeAttachment = message.attachments.first();
-                      if (nativeAttachment) return { attachment: nativeAttachment, value: nativeAttachment.id };
-                      if (rawArgsString.startsWith('http://') || rawArgsString.startsWith('https://')) {
-                        return { value: rawArgsString, attachment: { url: rawArgsString, proxyURL: rawArgsString } };
-                      }
-                    }
-                    return { value: rawArgsString || null };
-                  }
-                },
-                reply: async (options) => {
-                  if (mockInteraction.replied || mockInteraction.deferred) {
-                    return mockInteraction.editReply(options);
-                  }
-                  mockInteraction.replied = true;
-                  if (typeof options === 'string') {
-                    activeBotResponse = await message.reply({ content: options }).catch(() => null);
-                  } else {
-                    if (options && options.flags) delete options.flags; 
-                    activeBotResponse = await message.reply(options).catch(() => null);
-                  }
-                  return activeBotResponse;
-                },
-                editReply: async (options) => {
-                  mockInteraction.replied = true;
-                  if (activeBotResponse) {
-                    if (typeof options === 'string') return await activeBotResponse.edit({ content: options }).catch(() => null);
-                    if (options && options.flags) delete options.flags;
-                    return await activeBotResponse.edit(options).catch(() => null);
-                  } else {
-                    if (typeof options === 'string') {
-                      activeBotResponse = await message.channel.send({ content: options }).catch(() => null);
-                    } else {
-                      if (options && options.flags) delete options.flags;
-                      activeBotResponse = await message.channel.send(options).catch(() => null);
-                    }
-                    return activeBotResponse;
-                  }
-                },
-                followUp: async (options) => {
-                  if (typeof options === 'string') return message.channel.send({ content: options });
+              return activeBotResponse;
+            },
+            editReply: async (options) => {
+              mockInteraction.replied = true;
+              if (activeBotResponse) {
+                if (typeof options === 'string') return await activeBotResponse.edit({ content: options }).catch(() => null);
+                if (options && options.flags) delete options.flags;
+                return await activeBotResponse.edit(options).catch(() => null);
+              } else {
+                if (typeof options === 'string') {
+                  activeBotResponse = await message.reply({ content: options }).catch(() => null);
+                } else {
                   if (options && options.flags) delete options.flags;
-                  return message.channel.send(options);
-                },
-                deferReply: async (options) => {
-                  mockInteraction.deferred = true;
-                  return null;
-                },
-                deleteReply: async () => {
-                  if (activeBotResponse && typeof activeBotResponse.delete === 'function') {
-                    await activeBotResponse.delete().catch(() => null);
-                  }
-                  return null;
+                  activeBotResponse = await message.reply(options).catch(() => null);
                 }
-              };
-
-              try {
-                await targetCommand.execute(mockInteraction, client);
-              } catch (err) {
-                console.error(`Execution failure inside hybrid command |${commandName}:`, err);
-                message.reply('❌ There was an internal error executing this command!').catch(() => null);
+                return activeBotResponse;
               }
+            },
+            followUp: async (options) => {
+              if (typeof options === 'string') return message.channel.send({ content: options });
+              if (options && options.flags) delete options.flags;
+              return message.channel.send(options);
+            },
+            deferReply: async (options) => {
+              mockInteraction.deferred = true;
+              return null;
+            },
+            deleteReply: async () => {
+              if (activeBotResponse && typeof activeBotResponse.delete === 'function') {
+                await activeBotResponse.delete().catch(() => null);
+              }
+              return null;
             }
+          };
+
+          try {
+            await targetCommand.execute(mockInteraction, client);
+          } catch (err) {
+            console.error(`Execution failure inside hybrid command |${commandName}:`, err);
+            message.reply('❌ There was an internal error executing this command!').catch(() => null);
           }
           return;
         }
@@ -341,6 +408,8 @@ module.exports = {
 
       db.writeData('levels.json', levelsData);
 
-    } catch (globalError) { console.error('XP Global Catch Error:', globalError); }
+    } catch (globalError) { 
+      console.error('XP Global Catch Error:', globalError); 
+    }
   },
 };

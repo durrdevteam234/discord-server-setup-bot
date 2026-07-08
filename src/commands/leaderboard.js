@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const database = require('../utils/database'); // Updated to use your live MongoDB layout connection
+const database = require('../utils/database'); // Points directly to your MongoDB client model
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -18,24 +18,37 @@ module.exports = {
     if (!guild) return;
 
     try {
+      // ==========================================
+      // 🔒 LEVELING ENABLED VALIDATION PROTOCOL
+      // ==========================================
+      // Fetch historical configurations to verify if the leveling system was disabled
+      const guildConfig = await database.findOne({ guildId: guildId }).catch(() => null) || {};
+      
+      const mainSettingsLocal = guildConfig.settings || {}; 
+      const levelConfig = guildConfig.levelingSettings || {};
+
+      const targetStatus = levelConfig.status || levelConfig.enabled;
+      const mainLevelingStatus = mainSettingsLocal.leveling || guildConfig.levelingEnabled || guildConfig.leveling;
+
+      const isLevelingActive = 
+        (mainLevelingStatus === 'on' || mainLevelingStatus === true) ||
+        (targetStatus === 'on' || targetStatus === true);
+
+      if (!isLevelingActive) {
+        const disabledMsg = '❌ **System Offline:** The global server leveling economy and experience loops have been disabled by a server administrator.';
+        return interaction.reply({ content: disabledMsg, ephemeral: true }).catch(() => null);
+      }
+
       // 1. Force fetch all current active members in the server to bypass caching issues
       const activeMembersMap = await guild.members.fetch({ force: true }).catch(() => null);
       
-      // ========================================================
-      // NEW: MONGO-DB LEVELS REGISTRY PARSING LOOKUP
-      // ========================================================
       // Fetch level mapping objects saved dynamically inside the guild config document
-      const guildConfig = await database.findOne({ guildId: guildId }).catch(() => null) || {};
-      
-      // Assumes your levels data is nested under user profiles map keys or a dedicated levels object array
-      // Re-aligning lookup tracking matching your levelsData dictionary schemas:
       const levelsData = guildConfig.levelsData || guildConfig.levels || {};
       
       // 2. Map, FILTER out users who are no longer in the server, sort, and slice the top 10
       const sorted = Object.entries(levelsData)
         .map(([userId, data]) => ({ userId, ...data }))
         .filter(entry => {
-          // If activeMembersMap couldn't be fetched, fallback to checking local cache safely
           if (!activeMembersMap) return guild.members.cache.has(entry.userId);
           return activeMembersMap.has(entry.userId);
         })
@@ -53,7 +66,6 @@ module.exports = {
         .setDescription('Top 10 users by level');
 
       for (let i = 0; i < sorted.length; i++) {
-        // Safely fetch user fallback via the protected client context
         const user = await activeClient.users.fetch(sorted[i].userId).catch(() => null);
         const username = user ? user.username : `Unknown User (${sorted[i].userId})`;
         
@@ -71,7 +83,6 @@ module.exports = {
     }
   },
 
-  // ADDED: Complete prefix execution loop to handle |leaderboard text triggers natively
   async executePrefix(message, argsArray, client) {
     const mockInteraction = {
       guild: message.guild,

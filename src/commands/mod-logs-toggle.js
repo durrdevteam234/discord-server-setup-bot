@@ -9,7 +9,7 @@ module.exports = {
     .setDescription('Log all moderator actions into one channel.')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addStringOption(opt => 
-      opt.setName('status')
+      opt.setName('status') // Unified identifier name
         .setDescription('Toggle logging status')
         .setRequired(true)
         .addChoices(
@@ -24,10 +24,52 @@ module.exports = {
         .setRequired(false)
     ),
 
-  async execute(interaction) {
-    const status = interaction.options.getString('status');
-    const channel = interaction.options.getChannel('channel');
-    const guildId = interaction.guild.id;
+  /**
+   * Unified Entry Point. Processes both native application slash options 
+   * and your mock create message variables flawlessly.
+   */
+  async execute(interaction, client) {
+    const guild = interaction.guild;
+    const guildId = guild.id;
+    const memberExecutor = interaction.member;
+
+    // Enforce administrative safety gating across platform variations
+    if (memberExecutor && !memberExecutor.permissions.has(PermissionFlagsBits.ManageGuild)) {
+      return interaction.reply({ content: '❌ **Permissions Required!** You need `Manage Server` to toggle logging streams.', ephemeral: true });
+    }
+
+    // Secure timing loops using safe fallback validation models
+    if (typeof interaction.deferReply === 'function') {
+      await interaction.deferReply({ ephemeral: true }).catch(() => null);
+    }
+
+    // 📡 HYBRID PARAMETER EXTRACTOR
+    let status = null;
+    let channel = null;
+
+    if (interaction.options && typeof interaction.options.getSubcommand !== 'function') {
+      // PROCESSED VIA PREFIX MOCK EMULATOR ADAPTER FLOWS
+      const rawTextArgs = interaction.options.getString('status'); 
+      const parsedArray = typeof rawTextArgs === 'string' ? rawTextArgs.split(/ +/) : Array.isArray(rawTextArgs) ? rawTextArgs : [];
+      
+      status = parsedArray[0] ? parsedArray[0].toLowerCase() : null;
+      
+      // Look for a channel mention or ID inside the raw message context parameters
+      channel = guild.channels.cache.get(parsedArray[1]?.replace(/[^0-9]/g, '')) || message?.mentions?.channels?.first() || null;
+    } else {
+      // PROCESSED VIA NATIVE APPLICATION SLASH OPTIONS
+      status = interaction.options.getString('status');
+      channel = interaction.options.getChannel('channel');
+    }
+
+    // Validation Check Fallback Warning Screen
+    if (status !== 'on' && status !== 'off') {
+      const usageNotice = '❌ **Invalid syntax:** Use `|mod-logs-toggle <on|off> [#channel]` or `/mod-logs-toggle` interfaces.';
+      if (interaction.deferred || interaction.replied) {
+        return interaction.editReply({ content: usageNotice });
+      }
+      return interaction.reply({ content: usageNotice, ephemeral: true });
+    }
 
     // 1. Fetch historical record layout from MongoDB
     const guildConfig = await database.findOne({ guildId: guildId }).catch(() => null) || {};
@@ -38,7 +80,11 @@ module.exports = {
     if (channel) {
       unifiedLogChannelId = channel.id;
     } else if (status === 'on' && !unifiedLogChannelId) {
-      return interaction.reply({ content: '❌ Please specify a channel when turning the logs ON for the first time.', ephemeral: true });
+      const firstTimeError = '❌ Please specify or mention a text channel when turning logging options ON for the first time.';
+      if (interaction.deferred || interaction.replied) {
+        return interaction.editReply({ content: firstTimeError });
+      }
+      return interaction.reply({ content: firstTimeError, ephemeral: true });
     }
 
     // 2. Commit update state modifications back to your MongoDB cluster
@@ -58,52 +104,9 @@ module.exports = {
       .setColor(status === 'on' ? '#00FF00' : '#FF0000')
       .setDescription(`Unified moderator action logging has been set to: **${status.toUpperCase()}**\nTarget Logs Channel: ${unifiedLogChannelId ? `<#${unifiedLogChannelId}>` : '`None` Layout'}`);
 
+    if (interaction.deferred || interaction.replied) {
+      return interaction.editReply({ content: null, embeds: [embed] });
+    }
     return interaction.reply({ embeds: [embed] });
-  },
-
-  // FIXED ARGS PACKING MAPPER FOR D_JS EVENTS INTERACTION PARSING
-  async executePrefix(message, args, client) {
-    if (!message.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-      return message.reply('❌ Permissions required!');
-    }
-
-    const statusArg = args && args[0] ? args[0].toLowerCase() : null;
-    if (statusArg !== 'on' && statusArg !== 'off') {
-      return message.reply('❌ Usage: `|mod-logs-toggle <on|off> [#channel]`');
-    }
-
-    const targetChannel = message.mentions.channels.first() || (args && args[1] ? message.guild.channels.cache.get(args[1]) : null);
-    const guildId = message.guild.id;
-
-    // 1. Fetch current settings from MongoDB
-    const guildConfig = await database.findOne({ guildId: guildId }).catch(() => null) || {};
-
-    const modLogsEnabled = (statusArg === 'on');
-    let unifiedLogChannelId = guildConfig.unifiedLogChannelId || null;
-
-    if (targetChannel) {
-      unifiedLogChannelId = targetChannel.id;
-    } else if (statusArg === 'on' && !unifiedLogChannelId) {
-      return message.reply('❌ Please mention a text channel to send logs to! Example: `|mod-logs-toggle on #mod-logs`');
-    }
-
-    // 2. Save modifications to your MongoDB document
-    await database.findOneAndUpdate(
-      { guildId: guildId },
-      { 
-        $set: { 
-          modLogsEnabled: modLogsEnabled,
-          unifiedLogChannelId: unifiedLogChannelId
-        } 
-      },
-      { upsert: true }
-    ).catch(() => null);
-
-    const embed = new EmbedBuilder()
-      .setTitle('🛡️ Unified Mod Logging Configuration')
-      .setColor(statusArg === 'on' ? '#00FF00' : '#FF0000')
-      .setDescription(`Unified moderator action logging has been set to: **${statusArg.toUpperCase()}**\nTarget Logs Channel: ${unifiedLogChannelId ? `<#${unifiedLogChannelId}>` : '`None` Layout'}`);
-
-    return message.reply({ embeds: [embed] });
   }
 };
