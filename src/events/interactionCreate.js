@@ -9,12 +9,11 @@ module.exports = {
         // ========================================================
         // 🔒 A. ONBOARDING VERIFICATION ROUTER INTERCEPTOR
         // ========================================================
-        // Routes verification panels, buttons, and select menus instantly
-        // to verification.js to prevent "Interaction Failed" errors.
+        // 🛠️ CRITICAL FIX: Explicitly passes activeClient into the wizard handler
         if (interaction.customId && interaction.customId.startsWith('verify_')) {
             const verifyCommand = activeClient.commands.get('verification');
             if (verifyCommand && typeof verifyCommand.handleInteraction === 'function') {
-                return await verifyCommand.handleInteraction(interaction);
+                return await verifyCommand.handleInteraction(interaction, activeClient);
             }
             return;
         }
@@ -22,24 +21,21 @@ module.exports = {
         // ========================================================
         // 📊 B. STATS ANALYTICS WIZARD INTERCEPTOR
         // ========================================================
-        // Routes analytics setups, edits, and choice menus directly
-        // to the analytics component layout instantly.
+        // 🛠️ CRITICAL FIX: Explicitly passes activeClient into the wizard handler
         if (interaction.customId && interaction.customId.startsWith('analytics_')) {
             const analyticsCommand = activeClient.commands.get('analytics');
             if (analyticsCommand && typeof analyticsCommand.handleInteraction === 'function') {
-                return await analyticsCommand.handleInteraction(interaction);
+                return await analyticsCommand.handleInteraction(interaction, activeClient);
             }
             return;
         }
-
         // ========================================================
         // 🗑️ C. ROLE CLEANER CONTROL INTERCEPTOR
         // ========================================================
-        // Directs role wipe button confirmations instantly to the clearroles file.
         if (interaction.customId && interaction.customId.startsWith('clear_roles_')) {
             const clearRolesCommand = activeClient.commands.get('clearroles');
             if (clearRolesCommand && typeof clearRolesCommand.handleInteraction === 'function') {
-                return await clearRolesCommand.handleInteraction(interaction);
+                return await clearRolesCommand.handleInteraction(interaction, activeClient);
             }
             return;
         }
@@ -47,11 +43,10 @@ module.exports = {
         // ========================================================
         // 🎫 D. TICKET SYSTEM INTERCEPTOR
         // ========================================================
-        // Routes persistent ticketing panel operations cleanly
         if (interaction.customId && interaction.customId.startsWith('ticket_system_')) {
             const ticketCommand = activeClient.commands.get('ticket');
             if (ticketCommand && typeof ticketCommand.handleInteraction === 'function') {
-                return await ticketCommand.handleInteraction(interaction);
+                return await ticketCommand.handleInteraction(interaction, activeClient);
             }
             return;
         }
@@ -60,7 +55,7 @@ module.exports = {
         if (interaction.isButton() || interaction.isStringSelectMenu()) {
             const reactionRolesCommand = activeClient.commands.get('reactionroles');
             if (reactionRolesCommand && typeof reactionRolesCommand.handleInteraction === 'function') {
-                return await reactionRolesCommand.handleInteraction(interaction);
+                return await reactionRolesCommand.handleInteraction(interaction, activeClient);
             }
             return;
         }
@@ -78,7 +73,6 @@ module.exports = {
             console.warn(`[WARNING] Received slash interaction for /${commandName}, but it is not registered.`);
             return;
         }
-
         // ========================================================
         // 🌟 FIXED GLOBAL SWITCH GATING USING NATIVE ADAPTERS
         // ========================================================
