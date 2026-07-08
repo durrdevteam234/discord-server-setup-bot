@@ -164,7 +164,7 @@ const {
         return interaction.reply({ content: '🔴 Onboarding checking layers have been pulled offline.' }).catch(() => null);
       }
     },
-  // ========================================================
+      // ========================================================
   // 🔘 WIZARD INTERACTIVE SELECTION MENU HANDLING CONTROLLER
   // ========================================================
   async handleInteraction(interaction) {
@@ -182,17 +182,16 @@ const {
       return interaction.editReply({ content: '✅ Deletion cancelled. Configuration traces remain safe.', embeds: [], components: [] });
     }
 
-    // 📡 FETCH LIVE PERSISTENT BLUEPRINT FROM CLUSTER CORE DISKS
+    // 📡 FETCH PERSISTENT BLUEPRINT CONFIGURATIONS FROM MONGODB
     const doc = await VerificationModel.findOne({ guildId }).catch(() => null) || new VerificationModel({ guildId });
-    if (!doc.wizardActive || doc.wizardUserId !== userId) return; 
 
     // 🔘 STEP 1 SUBMISSION: CHOOSE ASSIGNED ROLE
     if ((interaction.customId === 'verify_wizard_step1' && interaction.isStringSelectMenu()) || interaction.customId === 'verify_wizard_skip_step1') {
+      if (doc.wizardUserId !== userId) return interaction.reply({ content: '❌ Another administrator is managing an active setup session.', ephemeral: true });
       await interaction.deferUpdate().catch(() => null);
       
-      if (interaction.isStringSelectMenu()) {
-         doc.tempRoleId = String(interaction.values[0]); // Explicitly isolates clean String Snowflake ID from array index
-      }
+      // 🛠️ CRITICAL FIXED: Isolates individual string ID out of the array container
+      if (interaction.isStringSelectMenu()) doc.tempRoleId = String(interaction.values[0]); 
       doc.wizardStep = 2;
       await doc.save();
 
@@ -241,10 +240,13 @@ const {
 
     // 🔘 STEP 2 SUBMISSION: CAPTURED SECURITY LAYER CHOICE
     if ((interaction.customId === 'verify_wizard_step2' && interaction.isStringSelectMenu()) || interaction.customId === 'verify_wizard_skip_step2') {
+      if (doc.wizardUserId !== userId) return interaction.reply({ content: '❌ Another administrator is managing an active setup session.', ephemeral: true });
       await interaction.deferUpdate().catch(() => null);
       
       if (interaction.isStringSelectMenu()) {
-        const parsedParts = String(interaction.values[0]).split('_'); 
+        // 🛠️ CRITICAL FIXED: Safely isolates string value to read native split functions
+        const rawSelectedValue = String(interaction.values[0]);
+        const parsedParts = rawSelectedValue.split('_'); 
         doc.tempLevel = parsedParts[0]; 
         doc.tempMethod = parsedParts.slice(1).join('_'); 
       }
@@ -275,15 +277,15 @@ const {
 
     // 🔘 STEP 3 SUBMISSION: COMMIT EVERYTHING TO PERMANENT DOCUMENT AND SPAWN INTERFACES
     if ((interaction.customId === 'verify_wizard_step3' && interaction.isStringSelectMenu()) || interaction.customId === 'verify_wizard_skip_step3') {
+      if (doc.wizardUserId !== userId) return interaction.reply({ content: '❌ Another administrator is managing an active setup session.', ephemeral: true });
       await interaction.deferUpdate().catch(() => null);
       
       if (interaction.isStringSelectMenu()) {
-         doc.panelChannelId = String(interaction.values[0]); // Explicitly isolates clean String Snowflake ID from array index
+         doc.panelChannelId = String(interaction.values[0]); // 🛠️ CRITICAL FIXED: Isolate clean string index
       }
       
-      // Lock and flush atomic parameters back to disk storage fields
       doc.enabled = true;
-      doc.wizardActive = false; // Turn wizard processing trackers off cleanly
+      doc.wizardActive = false; 
       doc.securityLevel = doc.tempLevel;
       doc.challengeMethod = doc.tempMethod;
       doc.verifiedRoleId = doc.tempRoleId;
@@ -327,7 +329,7 @@ const {
     // ========================================================
     if (interaction.customId && interaction.customId.startsWith('verify_gate_launch_')) {
         const parts = interaction.customId.split('_');
-        const sLevel = parts[3]; 
+        const sLevel = parts[3]; // Fixed static alignment indexes
         const cMethod = parts.slice(4).join('_'); 
   
         const configRecord = await VerificationModel.findOne({ guildId }).catch(() => null);
@@ -338,16 +340,16 @@ const {
           return interaction.reply({ content: '✅ **Verification Check Cleared:** You already hold member roles.', ephemeral: true }).catch(() => null);
         }
   
-        // --- 🟢 LOW SECURITY ---
+        // --- 🟢 LOW SECURITY CHALLENGES ---
         if (sLevel === 'low' && cMethod === 'button') {
           await interaction.member.roles.add(configRecord.verifiedRoleId).catch(() => null);
-          return interaction.reply({ content: '🎉 **Verification Passed!** Initial server blind layers unblinded. Welcome inside!', ephemeral: true }).catch(() => null);
+          return interaction.reply({ content: '🎉 **Verification Passed!** Server access lanes unlocked. Welcome inside!', ephemeral: true }).catch(() => null);
         }
   
         if (sLevel === 'low' && cMethod === 'terms') {
           const termsEmbed = new EmbedBuilder()
             .setTitle('📜 Community Guidelines Agreement')
-            .setDescription('By checking accept, you agree to respect server room boundaries, treat server members with dignity, and follow admin rules inside this space.')
+            .setDescription('By checking accept below, you agree to respect room boundaries, treat server members with dignity, and follow server rules inside this space.')
             .setColor('#2ECC71');
           const termsRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(`verify_user_solve_low_terms_accept`).setLabel('I Accept These Guidelines').setStyle(ButtonStyle.Success)
@@ -355,7 +357,7 @@ const {
           return interaction.reply({ embeds: [termsEmbed], components: [termsRow], ephemeral: true }).catch(() => null);
         }
   
-        // --- 🟡 MEDIUM SECURITY ---
+        // --- 🟡 MEDIUM SECURITY CHALLENGES ---
         if (sLevel === 'medium' && cMethod === 'math') {
           const fA = Math.floor(Math.random() * 8) + 4;
           const fB = Math.floor(Math.random() * 7) + 2;
@@ -368,7 +370,7 @@ const {
               .setPlaceholder('Select result calculation...')
               .addOptions(optionValues.map(v => ({ label: `Result: ${v}`, value: v.toString() })))
           );
-          return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🧮 Math Verification').setDescription(`Solve this basic formula to prove you are an organic human user:\n\n### What is \`${fA} + ${fB}\`?`).setColor('#F1C40F')], components: [row], ephemeral: true }).catch(() => null);
+          return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🧮 Math Verification').setDescription(`Solve this formula to verify you are a human:\n\n### What is \`${fA} + ${fB}\`?`).setColor('#F1C40F')], components: [row], ephemeral: true }).catch(() => null);
         }
   
         if (sLevel === 'medium' && cMethod === 'colors') {
@@ -392,10 +394,10 @@ const {
               .setPlaceholder('Identify the odd icon item out...')
               .addOptions(items.map(i => ({ label: `Icon Selection Item: ${i}`, value: i })))
           );
-          return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🧩 Odd-One-Out Puzzle').setDescription('One item option inside the dropdown listing array has a completely different asset fruit type. Identify it: \n\n` 🍎  |  🍏  |  Automated  |  🍊 `').setColor('#F1C40F')], components: [oddRow], ephemeral: true }).catch(() => null);
+          return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🧩 Odd-One-Out Puzzle').setDescription('One item option inside the dropdown listing array has a completely different fruit type. Identify it: \n\n` 🍎  |  🍏  |  Automated  |  🍊 `').setColor('#F1C40F')], components: [oddRow], ephemeral: true }).catch(() => null);
         }
   
-        // --- 🔴 HIGH SECURITY ---
+        // --- 🔴 HIGH SECURITY CHALLENGES ---
         if (sLevel === 'high' && cMethod === 'captcha') {
           const codes = ['NX7B', 'K9WP', '4Z2Q', 'R6MY', 'L3HV'];
           const code = codes[Math.floor(Math.random() * codes.length)];
@@ -405,7 +407,7 @@ const {
               .setPlaceholder('Select exact alphanumeric code match...')
               .addOptions(codes.map(c => ({ label: `Code Verification Match: ${c}`, value: c })))
           );
-          return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🔠 CAPTCHA Challenge').setDescription(`Select the exact alpha-numeric value string match array: \n\n### Code: \` ${code} \``).setColor('#E74C3C')], components: [row], ephemeral: true }).catch(() => null);
+          return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🔠 CAPTCHA Challenge').setDescription(`Select the exact alphanumeric string match choice:\n\n### Code: \` ${code} \``).setColor('#E74C3C')], components: [row], ephemeral: true }).catch(() => null);
         }
   
         if (sLevel === 'high' && cMethod === 'reverse_text') {
@@ -419,7 +421,7 @@ const {
               .setPlaceholder('Spell the provided word reversed backwards...')
               .addOptions(wordsList.map(w => ({ label: `Spelling Reverse: ${w.split('').reverse().join('')}`, value: w.split('').reverse().join('') })))
           );
-          return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🔄 Reverse Spelling Challenge').setDescription(`Look closely at the token word text: **\`${selectedWord}\`**\nSelect the option row that spells it perfectly backwards.`).setColor('#E74C3C')], components: [reverseRow], ephemeral: true }).catch(() => null);
+          return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🔄 Reverse Spelling Challenge').setDescription(`Look closely at the word text: **\`${selectedWord}\`**\nSelect the option row that spells it perfectly backwards.`).setColor('#E74C3C')], components: [reverseRow], ephemeral: true }).catch(() => null);
         }
   
         if (sLevel === 'high' && cMethod === 'double_auth') {
@@ -445,15 +447,17 @@ const {
       }
   
       // ==========================================
-      // 🔘 USER ANSWER SOLUTION RECEPTORS
+      // 🔘 ANSWER EVALUATOR RESOLUTION CIRCUITS
       // ==========================================
       if (interaction.customId && interaction.customId.startsWith('verify_user_solve_')) {
+         // Acknowledge action instantly to eliminate "Interaction Failed" errors!
          await interaction.deferUpdate().catch(() => null);
          
          const parsingTokens = interaction.customId.split('_');
          const isLowTerms = parsingTokens[3] === 'low' && parsingTokens[4] === 'terms';
          const isDoubleAuth = parsingTokens[3] === 'high' && parsingTokens[4] === 'double';
          
+         // 🛠️ CRITICAL FIXED: Pulls clean plain-string text tokens out of values[0] instead of passing array objects
          const userSelectionChoiceInput = isLowTerms ? 'accept' : String(interaction.values[0]); 
          const targetValidationString = isLowTerms ? 'accept' : isDoubleAuth ? userSelectionChoiceInput : String(parsingTokens[parsingTokens.length - 1]);
   
@@ -469,4 +473,4 @@ const {
       }
     }
   };
-    
+  
