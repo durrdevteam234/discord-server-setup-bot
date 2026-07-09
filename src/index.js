@@ -22,7 +22,8 @@ intents: [
   GatewayIntentBits.Guilds,
   GatewayIntentBits.GuildMessages,
   GatewayIntentBits.MessageContent, 
-  GatewayIntentBits.GuildMembers // Crucial for blazing-fast, precise user calculations!
+  GatewayIntentBits.GuildMembers, // Crucial for blazing-fast, precise user calculations!
+  GatewayIntentBits.GuildVoiceStates
 ]
 });
 client.commands = new Collection();

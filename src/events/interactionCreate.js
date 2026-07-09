@@ -17,14 +17,6 @@ module.exports = {
             }
             return;
         }
-        // Ensure this code block is live inside your existing events/interactionCreate.js file:
-        if (interaction.customId && interaction.customId.startsWith('automod_')) {
-            const automodCommand = activeClient.commands.get('automodrule');
-            if (automodCommand && typeof automodCommand.handleInteraction === 'function') {
-                return await automodCommand.handleInteraction(interaction, activeClient);
-            }
-            return;
-        }
 
         // ========================================================
         // 📊 B. STATS ANALYTICS WIZARD INTERCEPTOR
@@ -59,6 +51,19 @@ module.exports = {
             return;
         }
 
+        // ========================================================
+        // 🔊 E. SELF VOICE INTERCEPTOR (buttons, selects, modal submits)
+        // ========================================================
+        // MUST run BEFORE the legacy reaction roles fallback, otherwise that
+        // catch-all swallows every button/select before self voice can route.
+        if (interaction.customId && interaction.customId.startsWith('selfvoice_')) {
+            const selfVoiceCommand = activeClient.commands.get('selfvoice');
+            if (selfVoiceCommand && typeof selfVoiceCommand.handleInteraction === 'function') {
+                return await selfVoiceCommand.handleInteraction(interaction, activeClient);
+            }
+            return;
+        }
+
         // Legacy Reaction Roles Component Fallback Routing Layer
         if (interaction.isButton() || interaction.isStringSelectMenu()) {
             const reactionRolesCommand = activeClient.commands.get('reactionroles');
@@ -69,7 +74,7 @@ module.exports = {
         }
 
         // ========================================================
-        // 📡 E. SLASH COMMAND ENGINE GATEWAY
+        // 📡 F. SLASH COMMAND ENGINE GATEWAY
         // ========================================================
         if (!interaction.isChatInputCommand()) return;
         
@@ -91,7 +96,8 @@ module.exports = {
         const coreUtilityCommands = [
             'setup', 'cute', 'fun-module', 'help', 'setup-audit', 
             'mod-logs-toggle', 'reactionroles', 'autorole', 'automodrule', 
-            'ticket', 'verification', 'leaderboard', 'rank', 'analytics', 'clearroles'
+            'ticket', 'verification', 'leaderboard', 'rank', 'analytics', 'clearroles',
+            'selfvoice'
         ];
 
         if (!coreUtilityCommands.includes(commandName.toLowerCase())) {
