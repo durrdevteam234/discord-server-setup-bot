@@ -383,11 +383,17 @@ module.exports = {
           )
           .setThumbnail(message.author.displayAvatarURL({ dynamic: true }));
 
-        let targetChannelId = levelConfig.channelId || 
-                              levelConfig._doc?.channelId || 
-                              levelConfig.settings?.channelId || 
-                              guildSettingsLocal.channelId ||
-                              guildSettingsLocal._doc?.channelId;
+        // Locate this specific segment in chunk 4 of your messageCreate.js file and replace it:
+        let targetChannelId = null;
+        if (levelConfig) {
+          targetChannelId = levelConfig.channelId || 
+                            levelConfig.settings?.channelId || 
+                            levelConfig._doc?.channelId;
+        }
+        if (!targetChannelId && guildSettingsLocal) {
+          targetChannelId = guildSettingsLocal.channelId || 
+                            guildSettingsLocal._doc?.channelId;
+        }
 
         let targetChannel = message.channel;
         if (targetChannelId && typeof targetChannelId === 'string') {

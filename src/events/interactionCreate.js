@@ -17,6 +17,14 @@ module.exports = {
             }
             return;
         }
+        // Ensure this code block is live inside your existing events/interactionCreate.js file:
+        if (interaction.customId && interaction.customId.startsWith('automod_')) {
+            const automodCommand = activeClient.commands.get('automodrule');
+            if (automodCommand && typeof automodCommand.handleInteraction === 'function') {
+                return await automodCommand.handleInteraction(interaction, activeClient);
+            }
+            return;
+        }
 
         // ========================================================
         // 📊 B. STATS ANALYTICS WIZARD INTERCEPTOR
