@@ -197,9 +197,9 @@ module.exports = {
         const commandName = argsArray.shift().toLowerCase();
         const rawArgsString = argsArray.join(' ').trim();
 
-        const mainSettings = db.readData('settings.json') || {};
+        const mainSettings = (await db.readData('settings.json')) || {};
         const currentGuildSettings = mainSettings[message.guild?.id] || {};
-        const coreUtilityCommands = ['setup', 'cute', 'fun-module', 'fun-menu', 'autorole', 'automodrule', 'ticket', 'verification', 'mod-logs-toggle', 'analytics', 'clearroles']; 
+        const coreUtilityCommands = ['setup', 'cute', 'fun-module', 'fun-menu', 'autorole', 'automodrule', 'ticket', 'verification', 'mod-logs-toggle', 'analytics', 'clearroles', 'selfvoice', 'autoresponder', 'capabilities', 'help']; 
         
         if (!coreUtilityCommands.includes(commandName)) {
           if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false) {
@@ -215,8 +215,8 @@ module.exports = {
             return message.reply('❌ Permissions required! You need Administrator access to wipe or provision rooms.').catch(() => null);
           }
           
-          const templateArg = argsArray ? argsArray.toLowerCase().trim() : null;
-          const clearArg = argsArray ? argsArray.toLowerCase().trim() : null;
+          const templateArg = argsArray[0] ? String(argsArray[0]).toLowerCase().trim() : null;
+          const clearArg = argsArray[1] ? String(argsArray[1]).toLowerCase().trim() : null;
           const clear = clearArg === 'clear' || clearArg === 'true';
           
           const validTemplates = ['gaming', 'community', 'study', 'business', 'creative', 'development', 'finance', 'roleplay', 'minimalist', 'history', 'geography'];
@@ -334,10 +334,10 @@ module.exports = {
       const guildId = message.guild?.id;
       if (!guildId) return;
 
-      const mainSettingsLocal = db.readData('settings.json') || {};
+      const mainSettingsLocal = (await db.readData('settings.json')) || {};
       const guildSettingsLocal = mainSettingsLocal[guildId] || {};
 
-      const levelingSettings = db.readData('leveling_settings.json') || {};
+      const levelingSettings = (await db.readData('leveling_settings.json')) || {};
       const levelConfig = levelingSettings[guildId] || {};
 
       const targetStatus = levelConfig.status || levelConfig._doc?.status || levelConfig.enabled || levelConfig._doc?.enabled;
@@ -354,7 +354,7 @@ module.exports = {
       if (xpCooldowns.has(cooldownKey) && now < (xpCooldowns.get(cooldownKey) + 60000)) return; 
       xpCooldowns.set(cooldownKey, now);
 
-      const levelsData = db.readData('levels.json') || {};
+      const levelsData = (await db.readData('levels.json')) || {};
       if (!levelsData[guildId]) levelsData[guildId] = {};
       if (!levelsData[guildId][message.author.id]) {
         levelsData[guildId][message.author.id] = { xp: 0, level: 0 };
@@ -370,7 +370,7 @@ module.exports = {
         userProfile.xp = 0;
 
         let cuteStyle = 'off';
-        try { const cuteData = db.readData('cute.json') || {}; cuteStyle = cuteData[guildId] || 'off'; } catch (e) {}
+        try { const cuteData = (await db.readData('cute.json')) || {}; cuteStyle = cuteData[guildId] || 'off'; } catch (e) {}
         const isCuteActive = cuteStyle !== 'off';
 
         const embed = new discord.EmbedBuilder()
@@ -409,7 +409,7 @@ module.exports = {
         await targetChannel.send({ embeds: [embed] }).catch(() => null);
       }
 
-      db.writeData('levels.json', levelsData);
+      await db.writeData('levels.json', levelsData);
 
     } catch (globalError) { 
       console.error('XP Global Catch Error:', globalError); 

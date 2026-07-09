@@ -23,7 +23,7 @@ intents: [
   GatewayIntentBits.GuildMessages,
   GatewayIntentBits.MessageContent, 
   GatewayIntentBits.GuildMembers, // Crucial for blazing-fast, precise user calculations!
-  GatewayIntentBits.GuildVoiceStates
+  GatewayIntentBits.GuildVoiceStates // Required for the Self Voice module (temp VC lifecycle tracking)
 ]
 });
 client.commands = new Collection();

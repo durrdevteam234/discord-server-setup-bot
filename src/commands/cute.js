@@ -14,6 +14,16 @@ module.exports = {
           { name: 'Wide (ａｅｓｔｈｅｔｉｃ)', value: 'wide' },
           { name: 'Small Caps (sᴍᴀʟʟ ᴄᴀᴘs)', value: 'small-caps' },
           { name: 'Bubbles (ⓑⓤⓑⓑⓛⓔⓢ)', value: 'bubbles' },
+          { name: 'Bold (𝐛𝐨𝐥𝐝)', value: 'bold' },
+          { name: 'Italic (𝑖𝑡𝑎𝑙𝑖𝑐)', value: 'italic' },
+          { name: 'Bold Italic (𝒃𝒐𝒍𝒅)', value: 'bolditalic' },
+          { name: 'Script (𝓼𝓬𝓻𝓲𝓹𝓽)', value: 'script' },
+          { name: 'Fraktur (𝔤𝔬𝔱𝔥𝔦𝔠)', value: 'fraktur' },
+          { name: 'Double-Struck (𝕕𝕠𝕦𝕓𝕝𝕖)', value: 'doublestruck' },
+          { name: 'Monospace (𝚖𝚘𝚗𝚘)', value: 'monospace' },
+          { name: 'Upside Down (uʍop)', value: 'upsidedown' },
+          { name: 'Strikethrough (s̶t̶r̶i̶k̶e̶)', value: 'strikethrough' },
+          { name: 'Underline (u̲n̲d̲e̲r̲)', value: 'underline' },
           { name: 'Turn Off (Normal Text)', value: 'off' }
         )
     )
@@ -56,8 +66,18 @@ module.exports = {
       const styleNames = {
         'wide': 'Wide Text Layout (ａｅｓｔｈｅｔｉｃ)',
         'small-caps': 'Small Caps Layout (sᴍᴀʟʟ ᴄᴀᴘs)',
+        'smallcaps': 'Small Caps Layout (sᴍᴀʟʟ ᴄᴀᴘs)',
         'bubbles': 'Bubble Text Layout (ⓑⓤⓑⓑⓛⓔⓢ)',
-        'smallcaps': 'Small Caps Layout (sᴍᴀʟʟ ᴄᴀᴘs)'
+        'bold': 'Bold Layout (𝐛𝐨𝐥𝐝)',
+        'italic': 'Italic Layout (𝑖𝑡𝑎𝑙𝑖𝑐)',
+        'bolditalic': 'Bold Italic Layout (𝒃𝒐𝒍𝒅 𝒊𝒕𝒂𝒍𝒊𝒄)',
+        'script': 'Script Layout (𝓼𝓬𝓻𝓲𝓹𝓽)',
+        'fraktur': 'Fraktur Layout (𝔤𝔬𝔱𝔥𝔦𝔠)',
+        'doublestruck': 'Double-Struck Layout (𝕕𝕠𝕦𝕓𝕝𝕖)',
+        'monospace': 'Monospace Layout (𝚖𝚘𝚗𝚘𝚜𝚙𝚊𝚌𝚎)',
+        'upsidedown': 'Upside Down Layout (uʍop ǝpᴉsdn)',
+        'strikethrough': 'Strikethrough Layout (s̶t̶r̶i̶k̶e̶)',
+        'underline': 'Underline Layout (u̲n̲d̲e̲r̲l̲i̲n̲e̲)'
       };
 
       // 🌟 TEST UTILITY: Demonstrates formatCute parsing data dynamically inside your confirmation panel

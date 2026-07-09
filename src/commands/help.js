@@ -1,172 +1,194 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
+const {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  StringSelectMenuBuilder,
+  ComponentType,
+} = require('discord.js');
+
+// ============================================================================
+// FULL HELP DIRECTORY
+// Every command in the bot is listed here, grouped into browsable categories.
+// Navigation uses a select menu so new categories scale cleanly.
+// ============================================================================
+const PREFIX_NOTE = '💡 All commands work with both `/` and the `|` prefix.';
+
+const PAGES = [
+  {
+    key: 'general',
+    label: 'General',
+    emoji: '👤',
+    color: '#5865F2',
+    title: '👤 General & Info',
+    body:
+      '`/help` - Open this interactive help directory.\n' +
+      '`/capabilities` - A full, detailed tour of everything the bot can do.\n' +
+      '`/purpose` - Learn about the bot and view its profile.\n' +
+      '`/rank` - Check your level and XP progress.\n' +
+      '`/leaderboard` - View the top 10 ranked members.\n' +
+      '`/mydata` - View or manage the data stored about you.\n' +
+      '`/analytics` - View server activity and growth stats.',
+  },
+  {
+    key: 'setup',
+    label: 'Server Setup',
+    emoji: '🛠️',
+    color: '#EB459E',
+    title: '🛠️ Server Setup & Configuration',
+    body:
+      '`/setup <template> [clear]` - Build a full server layout from templates.\n' +
+      '`/setup-audit` - Configure the audit log channel.\n' +
+      '`/mod-logs-toggle` - Enable/disable moderation logging.\n' +
+      '`/welcome` - Configure welcome messages for new members.\n' +
+      '`/leveling <on/off>` - Toggle the XP tracking system.\n' +
+      '`/fun-module <on/off>` - Toggle the entire fun suite.\n' +
+      '`/clear-channels` - Mass-delete channels quickly.\n' +
+      '`/cute <style>` - Change the bot\'s text styling.\n' +
+      '`/flavour` - Manage custom response variations.',
+  },
+  {
+    key: 'moderation',
+    label: 'Moderation',
+    emoji: '🛡️',
+    color: '#ED4245',
+    title: '🛡️ Moderation & AutoMod',
+    body:
+      '`/warn <user> <reason>` - Formally warn a member.\n' +
+      '`/warnings [user]` - View warning history.\n' +
+      '`/mute <user>` • `/unmute <user>` - Timeout or restore a member.\n' +
+      '`/kick <user> [reason]` - Kick a member.\n' +
+      '`/ban <user> [reason]` • `/unban <username>` - Ban or unban.\n' +
+      '`/automodrule` - Configure up to 20 automod filters.\n' +
+      '`/clearroles` - Strip roles in bulk.',
+  },
+  {
+    key: 'roles',
+    label: 'Roles',
+    emoji: '🎭',
+    color: '#FEE75C',
+    title: '🎭 Role Management',
+    body:
+      '`/role user` • `/role remove` - Add/remove roles from members.\n' +
+      '`/role create` • `/role delete` - Create/delete roles.\n' +
+      '`/role everyone` • `bots` • `humans` - Mass-assign roles.\n' +
+      '`/role color` • `rename` • `hoist` • `mentionable` - Edit role properties.\n' +
+      '`/role info` • `/role list` - Inspect the role hierarchy.\n' +
+      '`/autorole` - Auto-grant a role when members join.\n' +
+      '`/reactionroles` - Build interactive role panels.\n' +
+      '`/verification` - Set up a member verification gate.',
+  },
+  {
+    key: 'tickets',
+    label: 'Tickets',
+    emoji: '🎫',
+    color: '#57F287',
+    title: '🎫 Ticket Support System',
+    body:
+      '`/ticket create` - Open a private support room.\n' +
+      '`/ticket close` - Close and archive a ticket (staff).\n\n' +
+      'Members open tickets for private help; staff manage and close them.',
+  },
+  {
+    key: 'selfvoice',
+    label: 'Self Voice',
+    emoji: '🔊',
+    color: '#3498DB',
+    title: '🔊 Self Voice — Temp Voice Channels',
+    body:
+      '`/selfvoice create [name] [limit]` - Create your own temp VC (when enabled). ' +
+      'Auto-deletes in ~10s unless you join, and removes itself when you leave.\n' +
+      '`/selfvoice setup` - Staff wizard for the module.\n' +
+      '`/selfvoice set <setting> <value>` - Fine-tune defaults.\n' +
+      '`/selfvoice enable` • `disable` - Staff module toggle.\n\n' +
+      'Owners get a control panel: rename, lock, hide, limit, bitrate, region, kick, transfer, claim, delete.',
+  },
+  {
+    key: 'autoresponder',
+    label: 'Auto Responder',
+    emoji: '💬',
+    color: '#9B59B6',
+    title: '💬 Auto Responder',
+    body:
+      '`/autoresponder setup` - Step-by-step wizard with live preview.\n' +
+      '`/autoresponder add <trigger> <response>` - Quick create.\n' +
+      '`/autoresponder variables` - See all dynamic placeholders.\n' +
+      '`/autoresponder list` • `info` • `edit` • `remove` • `toggle` • `test` - Manage responders.\n' +
+      '`/autoresponder enable` • `disable` - Staff module toggle.\n\n' +
+      'Supports exact/contains/wildcard/regex matching, cooldowns, chance rolls, reactions, embeds, and role gating.',
+  },
+  {
+    key: 'fun',
+    label: 'Fun & Games',
+    emoji: '🎉',
+    color: '#F1C40F',
+    title: '🎉 Fun & Social',
+    body:
+      '**Games:** `/trivia` `/wouldyourather` `/capital-quiz` `/dice-duel` `/coinflip` `/roll` `/dice` `/8ball`\n' +
+      '**Social:** `/hug` `/slap` `/roast` `/rate` `/predict-love`\n' +
+      '**Content:** `/joke` `/dadjoke` `/meme` `/fortune` `/spacefact` `/cat` `/dog`\n' +
+      '**Menu:** `/fun-menu` to explore the fun suite.',
+  },
+];
+
+function buildEmbed(page, index) {
+  return new EmbedBuilder()
+    .setColor(page.color)
+    .setTitle(`${page.title}`)
+    .setDescription(page.body)
+    .setFooter({ text: `${PREFIX_NOTE}  •  Category ${index + 1}/${PAGES.length}` })
+    .setTimestamp();
+}
+
+function buildMenu(activeKey) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('help_select')
+      .setPlaceholder('📚 Choose a category to browse…')
+      .addOptions(PAGES.map(p => ({
+        label: p.label,
+        value: p.key,
+        emoji: p.emoji,
+        default: p.key === activeKey,
+      }))),
+  );
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('help')
-    .setDescription('View the full list of available bot commands across pages.'),
+    .setDescription('View the full list of available bot commands by category.'),
   name: 'help',
 
   async execute(interaction, client) {
-    // CRITICAL FIX: Ensure isInteraction strictly returns false for text messages
     const isInteraction = typeof interaction.isChatInputCommand === 'function' ? interaction.isChatInputCommand() : false;
 
-    if (isInteraction) {
-      await interaction.deferReply().catch(() => null);
-    }
+    const first = PAGES[0];
+    const payload = { embeds: [buildEmbed(first, 0)], components: [buildMenu(first.key)] };
 
-    const prefixText = "💡 Prefer text shortcuts? You can also trigger these commands using the prefix: |";
-
-    // =========================================================
-    // PAGE 1: USER COMMANDS (CORE + FUN SUMMARY)
-    // =========================================================
-    const userCommandsPart1 = 
-      "`/help` - View this interactive multi-page help directory menu.\n" +
-      "`/purpose` - Learn about the bot and view its official profile picture.\n" +
-      "`/rank` - Check your personal server level and current XP progress.\n" +
-      "`/leaderboard` - View top 10 users ranked by level experience.\n" +
-      "`/ticket create` - Open a secure, private assistance room for help.\n" +
-      "`/fun-menu` - Explore what the Fun Module is and view its options.\n" +
-      "`/joke` / `/dadjoke` - Get a clean, funny random joke.\n" +
-      "`/fortune` - Reveals a mystical prediction about your future.\n" +
-      "`/spacefact` - Get a mind-blowing cosmic planetary space fact.\n" +
-      "`/cat` / `/dog` - Fetch an optimized random animated animal picture.\n" +
-      "`/trivia` - Spits out a random brain-teaser trivia question.";
-
-    // =========================================================
-    // PAGE 2: USER COMMANDS (FUN INTERACTIONS CONT.)
-    // =========================================================
-    const userCommandsPart2 =
-      "`/wouldyourather` - Presents an impossible split decision puzzle.\n" +
-      "`/capital-quiz` - Tests your geographic knowledge of world capitals.\n" +
-      "`/hug <user>` - Give a member a warm, fuzzy virtual hug.\n" +
-      "`/slap <user>` - Slap another user with a giant yellow trout.\n" +
-      "`/dice-duel <opponent>` - Challenge another user to a dice duel.\n" +
-      "`/predict-love <a, b>` - Calculate compatibility percentage.\n" +
-      "`/coinflip` / `/roll` / `/dice` - Run probability rolling games.\n" +
-      "`/roast <user>` - Fire off a lighthearted, witty burn at a friend.\n" +
-      "`/rate <item>` - Let the bot assess any object from 1 to 10.\n" +
-      "`/meme` - Spits out a random funny, relatable lifestyle meme.";
-
-    // =========================================================
-    // PAGE 3: STAFF COMMANDS (UTILITIES & UTILITY SWITCHES)
-    // =========================================================
-    const staffCommandsPart1 =
-      "`/cute <style>` - Change font layout display display options.\n" +
-      "`/setup <template> [clear]` - Run server template builder layouts.\n" +
-      "`/setup-audit` - Configure the server log recording channels.\n" +
-      "`/mod-logs-toggle` - Enable or disable background moderation logs.\n" +
-      "`/leveling <on/off>` - Enable or disable the XP tracking loops.\n" +
-      "`/fun-module <on/off>` - Turn the server fun suite globally on or off.\n" +
-      "`/ticket close` - Permanently lock and archive an active support ticket.\n" +
-      "`/flavour` - View or manage custom bot response speech variations.\n" +
-      "`/clear-channels` - Mass delete and purge chat layers quickly.";
-
-    // =========================================================
-    // PAGE 4: STAFF COMMANDS (ROLES & MODERATION)
-    // =========================================================
-    const staffCommandsPart2 =
-      "`/role user <member> <role>` — Add a role assignment.\n" +
-      "`/role remove <member> <role>` — Remove a role from a member.\n" +
-      "`/role create <name> [color]` — Build a new custom server role.\n" +
-      "`/role delete <role>` — Discard an old role folder.\n" +
-      "`/role everyone/bots/humans` — Mass-assign roles directly.\n" +
-      "`/role info/list [role]` — View server role directory hierarchies.\n" +
-      "`/role color/rename/hoist/mentionable` — Modify properties.\n" +
-      "`/warn <user> <reason>` - Formally warn a problematic member.\n" +
-      "`/warnings [user]` - View the moderation warning logs.\n" +
-      "`/mute <user> [reason]` - Mute a user from channels.\n" +
-      "`/unmute <user>` - Restore standard text/voice privileges.\n" +
-      "`/kick <user> [reason]` - Kick a member from the guild.\n" +
-      "`/ban <user> [reason]` - Hard ban a member from the server.\n" +
-      "`/unban <username> [reason]` - Revoke a ban using their username.\n" +
-      "`/reactionroles <subcommand>` - Deploy or test interactive role panels.";
-
-    // =========================================================
-    // EMBED LAYOUT BUILDER BLOCKS
-    // =========================================================
-    const embedPage1 = new EmbedBuilder()
-      .setColor('#00FF00')
-      .setTitle('📚 Help Menu — Page 1/4 (User Commands)')
-      .setDescription('Use the action row buttons below to browse instructions.')
-      .addFields({ name: '👤 Public User Utilities', value: userCommandsPart1 })
-      .setFooter({ text: prefixText })
-      .setTimestamp();
-
-    const embedPage2 = new EmbedBuilder()
-      .setColor('#FF69B4')
-      .setTitle('📚 Help Menu — Page 2/4 (User Commands Cont.)')
-      .setDescription('Use the action row buttons below to browse instructions.')
-      .addFields({ name: '🎭 Interactive & Whimsical Modules', value: userCommandsPart2 })
-      .setFooter({ text: prefixText })
-      .setTimestamp();
-
-    const embedPage3 = new EmbedBuilder()
-      .setColor('#5865F2')
-      .setTitle('🛡️ Help Menu — Page 3/4 (Staff Commands)')
-      .setDescription('Administrative template controls and status toggle options.')
-      .addFields({ name: '⚙️ Configuration & Setup Controls', value: staffCommandsPart1 })
-      .setFooter({ text: prefixText })
-      .setTimestamp();
-
-    const embedPage4 = new EmbedBuilder()
-      .setColor('#E74C3C')
-      .setTitle('🛡️ Help Menu — Page 4/4 (Staff Commands Cont.)')
-      .setDescription('Advanced utility structures to manage roles, users, and panels quickly.')
-      .addFields({ name: '🔒 Server Security & Role Administration', value: staffCommandsPart2 })
-      .setFooter({ text: prefixText })
-      .setTimestamp();
-
-    const buttons = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('help_page1').setLabel('Page 1 (User)').setStyle(ButtonStyle.Primary).setDisabled(true),
-      new ButtonBuilder().setCustomId('help_page2').setLabel('Page 2 (User)').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('help_page3').setLabel('Page 3 (Staff)').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('help_page4').setLabel('Page 4 (Staff)').setStyle(ButtonStyle.Secondary)
-    );
-    // Dynamic message delivery based on triggering execution frame
-    const response = isInteraction 
-      ? await interaction.editReply({ embeds: [embedPage1], components: [buttons] }).catch(() => null)
-      : await interaction.reply({ embeds: [embedPage1], components: [buttons], fetchReply: true }).catch(() => null);
-
+    const response = await interaction.reply({ ...payload, fetchReply: true }).catch(() => null);
     if (!response) return;
 
+    const authorId = isInteraction ? interaction.user.id : interaction.author.id;
+
     const collector = response.createMessageComponentCollector({
-      componentType: ComponentType.Button,
-      time: 90000
+      componentType: ComponentType.StringSelect,
+      time: 120000,
     });
 
-    collector.on('collect', async (btnInteraction) => {
-      // Safely capture target runner ID whether using text message or slash layout
-      const authorId = isInteraction ? interaction.user.id : interaction.author.id;
-      if (btnInteraction.user.id !== authorId) {
-        return btnInteraction.reply({ content: '❌ Run the command yourself to flip pages!', ephemeral: true }).catch(() => null);
+    collector.on('collect', async (sel) => {
+      if (sel.user.id !== authorId) {
+        return sel.reply({ content: '❌ Run the command yourself to browse the menu!', ephemeral: true }).catch(() => null);
       }
-
-      // Re-enable all page switching option buttons
-      buttons.components.forEach(btn => btn.setDisabled(false));
-
-      // Route custom page components securely using button interaction updates
-      if (btnInteraction.customId === 'help_page1') {
-        buttons.components[0].setDisabled(true);
-        await btnInteraction.update({ embeds: [embedPage1], components: [buttons] }).catch(() => null);
-      } else if (btnInteraction.customId === 'help_page2') {
-        buttons.components[1].setDisabled(true);
-        await btnInteraction.update({ embeds: [embedPage2], components: [buttons] }).catch(() => null);
-      } else if (btnInteraction.customId === 'help_page3') {
-        buttons.components[2].setDisabled(true);
-        await btnInteraction.update({ embeds: [embedPage3], components: [buttons] }).catch(() => null);
-      } else if (btnInteraction.customId === 'help_page4') {
-        buttons.components[3].setDisabled(true);
-        await btnInteraction.update({ embeds: [embedPage4], components: [buttons] }).catch(() => null);
-      }
+      const index = PAGES.findIndex(p => p.key === sel.values[0]);
+      const page = PAGES[index] || PAGES[0];
+      await sel.update({ embeds: [buildEmbed(page, index)], components: [buildMenu(page.key)] }).catch(() => null);
     });
 
     collector.on('end', () => {
-      buttons.components.forEach(btn => btn.setDisabled(true));
-      if (isInteraction) {
-        interaction.editReply({ components: [buttons] }).catch(() => null);
-      } else {
-        response.edit({ components: [buttons] }).catch(() => null);
-      }
+      const disabled = buildMenu('none');
+      disabled.components[0].setDisabled(true);
+      if (isInteraction) interaction.editReply({ components: [disabled] }).catch(() => null);
+      else response.edit({ components: [disabled] }).catch(() => null);
     });
-  }
+  },
 };

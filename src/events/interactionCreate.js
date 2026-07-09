@@ -64,6 +64,35 @@ module.exports = {
             return;
         }
 
+        // ========================================================
+        // 💬 G. AUTO RESPONDER INTERCEPTOR (buttons, selects, modal submits)
+        // ========================================================
+        // Must also run BEFORE the reaction roles fallback. This one additionally
+        // catches modal submits (customId "autoresponder_modal_*"), which the
+        // button/select fallback below would never route.
+        if (interaction.customId && interaction.customId.startsWith('autoresponder_')) {
+            const autoResponderCommand = activeClient.commands.get('autoresponder');
+            if (autoResponderCommand && typeof autoResponderCommand.handleInteraction === 'function') {
+                return await autoResponderCommand.handleInteraction(interaction, activeClient);
+            }
+            return;
+        }
+
+        // ========================================================
+        // 🔊 E2. SELF VOICE MODAL SUBMIT SAFETY NET
+        // ========================================================
+        // Modal submits are neither buttons nor string selects, so ensure any
+        // stray selfvoice_/autoresponder_ modal is routed even if reached here.
+        if (typeof interaction.isModalSubmit === 'function' && interaction.isModalSubmit()) {
+            if (interaction.customId && interaction.customId.startsWith('selfvoice_')) {
+                const selfVoiceCommand = activeClient.commands.get('selfvoice');
+                if (selfVoiceCommand && typeof selfVoiceCommand.handleInteraction === 'function') {
+                    return await selfVoiceCommand.handleInteraction(interaction, activeClient);
+                }
+            }
+            return;
+        }
+
         // Legacy Reaction Roles Component Fallback Routing Layer
         if (interaction.isButton() || interaction.isStringSelectMenu()) {
             const reactionRolesCommand = activeClient.commands.get('reactionroles');
@@ -97,7 +126,7 @@ module.exports = {
             'setup', 'cute', 'fun-module', 'help', 'setup-audit', 
             'mod-logs-toggle', 'reactionroles', 'autorole', 'automodrule', 
             'ticket', 'verification', 'leaderboard', 'rank', 'analytics', 'clearroles',
-            'selfvoice'
+            'selfvoice', 'autoresponder', 'capabilities'
         ];
 
         if (!coreUtilityCommands.includes(commandName.toLowerCase())) {
