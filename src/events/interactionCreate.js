@@ -1,112 +1,151 @@
 const { MessageFlags } = require('discord.js');
-const db = require('../utils/database'); // Points back to your native helper wrapper
+const db = require('../utils/database');
 
 module.exports = {
     name: 'interactionCreate',
     async execute(interaction, client) {
         const activeClient = client || interaction.client;
+        const cid = interaction.customId || '';
 
         // ========================================================
-        // 🔒 A. ONBOARDING VERIFICATION ROUTER INTERCEPTOR
+        // A. ONBOARDING VERIFICATION ROUTER
         // ========================================================
-        // 🛠️ CRITICAL FIX: Explicitly passes activeClient into the wizard handler
-        if (interaction.customId && interaction.customId.startsWith('verify_')) {
-            const verifyCommand = activeClient.commands.get('verification');
-            if (verifyCommand && typeof verifyCommand.handleInteraction === 'function') {
-                return await verifyCommand.handleInteraction(interaction, activeClient);
-            }
+        if (cid.startsWith('verify_')) {
+            const cmd = activeClient.commands.get('verification');
+            if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
             return;
         }
 
         // ========================================================
-        // 📊 B. STATS ANALYTICS WIZARD INTERCEPTOR
+        // B. STATS ANALYTICS WIZARD
         // ========================================================
-        // 🛠️ CRITICAL FIX: Explicitly passes activeClient into the wizard handler
-        if (interaction.customId && interaction.customId.startsWith('analytics_')) {
-            const analyticsCommand = activeClient.commands.get('analytics');
-            if (analyticsCommand && typeof analyticsCommand.handleInteraction === 'function') {
-                return await analyticsCommand.handleInteraction(interaction, activeClient);
-            }
-            return;
-        }
-        // ========================================================
-        // 🗑️ C. ROLE CLEANER CONTROL INTERCEPTOR
-        // ========================================================
-        if (interaction.customId && interaction.customId.startsWith('clear_roles_')) {
-            const clearRolesCommand = activeClient.commands.get('clearroles');
-            if (clearRolesCommand && typeof clearRolesCommand.handleInteraction === 'function') {
-                return await clearRolesCommand.handleInteraction(interaction, activeClient);
-            }
+        if (cid.startsWith('analytics_')) {
+            const cmd = activeClient.commands.get('analytics');
+            if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
             return;
         }
 
         // ========================================================
-        // 🎫 D. TICKET SYSTEM INTERCEPTOR
+        // C. ROLE CLEANER
         // ========================================================
-        if (interaction.customId && interaction.customId.startsWith('ticket_system_')) {
-            const ticketCommand = activeClient.commands.get('ticket');
-            if (ticketCommand && typeof ticketCommand.handleInteraction === 'function') {
-                return await ticketCommand.handleInteraction(interaction, activeClient);
-            }
+        if (cid.startsWith('clear_roles_')) {
+            const cmd = activeClient.commands.get('clearroles');
+            if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
             return;
         }
 
         // ========================================================
-        // 🔊 E. SELF VOICE INTERCEPTOR (buttons, selects, modal submits)
+        // D. TICKET SYSTEM
         // ========================================================
-        // MUST run BEFORE the legacy reaction roles fallback, otherwise that
-        // catch-all swallows every button/select before self voice can route.
-        if (interaction.customId && interaction.customId.startsWith('selfvoice_')) {
-            const selfVoiceCommand = activeClient.commands.get('selfvoice');
-            if (selfVoiceCommand && typeof selfVoiceCommand.handleInteraction === 'function') {
-                return await selfVoiceCommand.handleInteraction(interaction, activeClient);
-            }
+        if (cid.startsWith('ticket_system_')) {
+            const cmd = activeClient.commands.get('ticket');
+            if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
             return;
         }
 
         // ========================================================
-        // 💬 G. AUTO RESPONDER INTERCEPTOR (buttons, selects, modal submits)
+        // E. SELF VOICE
         // ========================================================
-        // Must also run BEFORE the reaction roles fallback. This one additionally
-        // catches modal submits (customId "autoresponder_modal_*"), which the
-        // button/select fallback below would never route.
-        if (interaction.customId && interaction.customId.startsWith('autoresponder_')) {
-            const autoResponderCommand = activeClient.commands.get('autoresponder');
-            if (autoResponderCommand && typeof autoResponderCommand.handleInteraction === 'function') {
-                return await autoResponderCommand.handleInteraction(interaction, activeClient);
-            }
+        if (cid.startsWith('selfvoice_')) {
+            const cmd = activeClient.commands.get('selfvoice');
+            if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
             return;
         }
 
         // ========================================================
-        // 🔊 E2. SELF VOICE MODAL SUBMIT SAFETY NET
+        // F. AUTO RESPONDER
         // ========================================================
-        // Modal submits are neither buttons nor string selects, so ensure any
-        // stray selfvoice_/autoresponder_ modal is routed even if reached here.
+        if (cid.startsWith('autoresponder_')) {
+            const cmd = activeClient.commands.get('autoresponder');
+            if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
+            return;
+        }
+
+        // ========================================================
+        // F2. STARBOARD WIZARD
+        // ========================================================
+        if (cid.startsWith('starboard_')) {
+            const cmd = activeClient.commands.get('starboard');
+            if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
+            return interaction.deferUpdate().catch(() => null);
+        }
+
+        // ========================================================
+        // G. SUGGESTIONS (vote buttons + staff modals)
+        // ========================================================
+        if (cid.startsWith('suggestions_')) {
+            const cmd = activeClient.commands.get('suggestions');
+            if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
+            return interaction.deferUpdate().catch(() => null);
+        }
+
+        // ========================================================
+        // H. GIVEAWAY (entry button + modals)
+        // ========================================================
+        if (cid.startsWith('giveaway_')) {
+            const cmd = activeClient.commands.get('giveaway');
+            if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
+            return interaction.deferUpdate().catch(() => null);
+        }
+
+        // ========================================================
+        // I. EMBED BUILDER (preview buttons + modals)
+        // ========================================================
+        if (cid.startsWith('embed_')) {
+            const cmd = activeClient.commands.get('embed');
+            if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
+            return interaction.deferUpdate().catch(() => null);
+        }
+
+        // ========================================================
+        // J. BIRTHDAY WIZARD
+        // ========================================================
+        if (cid.startsWith('birthday_wizard_')) {
+            const cmd = activeClient.commands.get('birthdays');
+            if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
+            return interaction.deferUpdate().catch(() => null);
+        }
+
+        // ========================================================
+        // K. INVITE TRACKING WIZARD
+        // ========================================================
+        if (cid.startsWith('invites_wizard_')) {
+            const cmd = activeClient.commands.get('invites');
+            if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
+            return interaction.deferUpdate().catch(() => null);
+        }
+
+        // ========================================================
+        // L. CAPABILITIES MENU
+        // ========================================================
+        if (cid === 'capabilities_select') {
+            const cmd = activeClient.commands.get('capabilities');
+            if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
+            return interaction.deferUpdate().catch(() => null);
+        }
+
+        // ========================================================
+        // K. MODAL SAFETY NET (any remaining unmatched modals)
+        // ========================================================
         if (typeof interaction.isModalSubmit === 'function' && interaction.isModalSubmit()) {
-            if (interaction.customId && interaction.customId.startsWith('selfvoice_')) {
-                const selfVoiceCommand = activeClient.commands.get('selfvoice');
-                if (selfVoiceCommand && typeof selfVoiceCommand.handleInteraction === 'function') {
-                    return await selfVoiceCommand.handleInteraction(interaction, activeClient);
-                }
-            }
-            return;
+            // Already handled by the prefixed sections above; silently ack anything that falls through
+            return interaction.deferUpdate?.().catch(() => null);
         }
 
-        // Legacy Reaction Roles Component Fallback Routing Layer
+        // ========================================================
+        // REACTION ROLES FALLBACK (buttons & selects not matched above)
+        // ========================================================
         if (interaction.isButton() || interaction.isStringSelectMenu()) {
-            const reactionRolesCommand = activeClient.commands.get('reactionroles');
-            if (reactionRolesCommand && typeof reactionRolesCommand.handleInteraction === 'function') {
-                return await reactionRolesCommand.handleInteraction(interaction, activeClient);
-            }
+            const cmd = activeClient.commands.get('reactionroles');
+            if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
             return;
         }
 
         // ========================================================
-        // 📡 F. SLASH COMMAND ENGINE GATEWAY
+        // L. SLASH COMMAND ENGINE
         // ========================================================
         if (!interaction.isChatInputCommand()) return;
-        
+
         const commandName = interaction.commandName;
         if (!commandName) return;
 
@@ -115,34 +154,33 @@ module.exports = {
             console.warn(`[WARNING] Received slash interaction for /${commandName}, but it is not registered.`);
             return;
         }
-        // ========================================================
-        // 🌟 FIXED GLOBAL SWITCH GATING USING NATIVE ADAPTERS
-        // ========================================================
+
         const mainSettings = (await db.readData('settings.json')) || {};
         const currentGuildSettings = mainSettings[interaction.guildId] || {};
-        
-        // Whitelist array protecting critical infrastructure and wizards from fun lockouts
+
         const coreUtilityCommands = [
-            'setup', 'cute', 'fun-module', 'help', 'setup-audit', 
-            'mod-logs-toggle', 'reactionroles', 'autorole', 'automodrule', 
+            'setup', 'cute', 'fun-module', 'help', 'setup-audit',
+            'mod-logs-toggle', 'reactionroles', 'autorole', 'automodrule',
             'ticket', 'verification', 'leaderboard', 'rank', 'analytics', 'clearroles',
-            'selfvoice', 'autoresponder', 'capabilities'
+            'selfvoice', 'autoresponder', 'capabilities',
+            // new modules
+            'starboard', 'suggestions', 'giveaway', 'embed', 'birthdays', 'invites',
         ];
 
         if (!coreUtilityCommands.includes(commandName.toLowerCase())) {
-            // Checks if the module state was flipped off inside your settings mapping
-            if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false || currentGuildSettings.funModule === 'off') {
-                return interaction.reply({ 
-                    content: '❌ The complete **Fun Command Suite** has been globally disabled by a server administrator.', 
-                    flags: [MessageFlags.Ephemeral] 
+            if (
+                currentGuildSettings.funModule === 'disabled' ||
+                currentGuildSettings.funModule === false ||
+                currentGuildSettings.funModule === 'off'
+            ) {
+                return interaction.reply({
+                    content: '❌ The complete **Fun Command Suite** has been globally disabled by a server administrator.',
+                    flags: [MessageFlags.Ephemeral],
                 }).catch(() => null);
             }
         }
 
         try {
-            // ========================================================
-            // 📡 DYNAMIC SLASH ROUTER ADAPTER MAPS
-            // ========================================================
             if (typeof command.executeSlash === 'function') {
                 await command.executeSlash(interaction, activeClient);
             } else if (typeof command.execute === 'function') {
@@ -150,11 +188,10 @@ module.exports = {
             }
         } catch (error) {
             console.error(`❌ Slash Command Error [/${commandName}]:`, error);
-            const errorPayload = { 
-                content: '❌ There was an internal error executing this command!', 
-                flags: [MessageFlags.Ephemeral] 
+            const errorPayload = {
+                content: '❌ There was an internal error executing this command!',
+                flags: [MessageFlags.Ephemeral],
             };
-            
             if (interaction.replied || interaction.deferred) {
                 await interaction.followUp(errorPayload).catch(() => null);
             } else {

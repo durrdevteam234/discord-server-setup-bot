@@ -1,219 +1,213 @@
-if (typeof globalThis.ReadableStream === 'undefined') {
-  try {
-      const { ReadableStream } = require('node:stream/web');
-      globalThis.ReadableStream = ReadableStream;
-      console.log('🚀 [POLYFILL] Successfully injected ReadableStream for seamless Node environment compatibility!');
-  } catch (e) {}
-}
+// node v17 ReadableStream polyfill (Render compatibility)
+const { ReadableStream } = require('stream/web');
+if (!globalThis.ReadableStream) globalThis.ReadableStream = ReadableStream;
+
+const { Client, Collection, GatewayIntentBits, Partials, REST, Routes } = require('discord.js');
+const mongoose = require('mongoose');
 const fs = require('fs');
 const path = require('path');
-const { Client, Collection, GatewayIntentBits } = require('discord.js');
-const mongoose = require('mongoose');
 const express = require('express');
-const cors = require('cors'); 
-require('dotenv').config();
 
-// ==========================================
-// 1. DISCORD BOT CLIENT INITIALIZATION 🤖
-// ==========================================
-console.log('⚡ Initializing Discord Client with full cached intent layers...');
+// ============================================================
+// CLIENT
+// ============================================================
 const client = new Client({
-intents: [
-  GatewayIntentBits.Guilds,
-  GatewayIntentBits.GuildMessages,
-  GatewayIntentBits.MessageContent, 
-  GatewayIntentBits.GuildMembers, // Crucial for blazing-fast, precise user calculations!
-  GatewayIntentBits.GuildVoiceStates // Required for the Self Voice module (temp VC lifecycle tracking)
-]
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.GuildMessageReactions,
+        GatewayIntentBits.GuildModeration,
+        GatewayIntentBits.DirectMessages,
+        GatewayIntentBits.GuildInvites,   // required for invite tracking
+    ],
+    partials: [
+        Partials.Channel,
+        Partials.Message,
+        Partials.Reaction,
+        Partials.GuildMember,
+        Partials.User,
+    ],
 });
+
 client.commands = new Collection();
-client.prefix = process.env.PREFIX || '|';
 
-// 🔥 CRASH-PROOF RADAR: Catching WebSocket slips before they touch the engine!
-client.on('error', (error) => {
-    console.error('⚠️ [DISCORD GATEWAY ERROR ALERT]:', error.message);
-});
-
-client.on('warn', (info) => {
-    console.warn('⚠️ [DISCORD GATEWAY WARNING]:', info);
-});
-
-// 🛡️ UNBREAKABLE SHIELD: Absolute top-level process catches to lock down Render 24/7!
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('🛑 [CRASH PREVENTED] Unhandled Rejection intercepted safely at:', promise, 'Reason:', reason);
-});
-
-process.on('uncaughtException', (error) => {
-    console.error('🛑 [CRASH PREVENTED] Critical Uncaught Exception neutralized! Stack:', error.stack || error);
-});
-
-// ==========================================
-// 2. LOAD COMMANDS DYNAMICALLY (SLASH & PREFIX) 📂
-// ==========================================
-const commandsPath = path.join(__dirname, 'commands');
+// ============================================================
+// COMMANDS LOADER
+// ============================================================
+const commandsPath = path.join(__dirname, '..', 'commands');
 if (fs.existsSync(commandsPath)) {
-console.log('📂 Scanning local modules for active bot commands...');
-const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
-for (const file of commandFiles) {
-  try {
-    const filePath = path.join(commandsPath, file);
-    const command = require(filePath);
-    
-    let commandKey = null;
-    if (command.data && command.data.name) {
-      commandKey = command.data.name.toLowerCase();
-    } else if (command.name) {
-      commandKey = command.name.toLowerCase();
-    } else {
-      commandKey = file.split('.')[0].toLowerCase();
-    }
-    
-    if (commandKey) {
-      client.commands.set(commandKey, command);
-      console.log(`✅ [COMMAND REGISTERED]: "${commandKey}"`);
-    }
-  } catch (cmdErr) {
-    console.error('❌ [STARTUP ERROR] Failed to load command file ' + file + ':', cmdErr.message);
-  }
-}
-}
-
-// ==========================================
-// 3. LOAD EVENT HANDLERS DYNAMICALLY 📡
-// ==========================================
-const eventsPath = path.join(__dirname, 'events');
-if (fs.existsSync(eventsPath)) {
-console.log('📂 Scanning system events pipeline...');
-const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
-for (const file of eventFiles) {
-  const filePath = path.join(eventsPath, file);
-  try {
-    const event = require(filePath);
-    if (event.once) {
-      client.once(event.name, (...args) => event.execute(...args, client));
-    } else {
-      client.on(event.name, (...args) => event.execute(...args, client));
-    }
-    console.log(`⚡ [EVENT ATTACHED]: "${event.name}"`);
-  } catch (eventErr) {
-    console.error('❌ [STARTUP ERROR] CRITICAL ERROR IN FILE "' + file + '":', eventErr.stack);
-  }
-}
-}
-
-// ==========================================
-// 4. MONGODB ATLAS CONNECTION 💾
-// ==========================================
-if (!process.env.MONGODB_URI) {
-console.error('🚨 [CRITICAL ERROR] MONGODB_URI environment variable is missing from your deployment setup!');
-} else {
-console.log('💾 Initializing database pipeline...');
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('✅ [DATABASE CONNECTED] Bound to MongoDB Atlas instance flawlessly!'))
-  .catch(err => console.error('❌ [DATABASE ERROR] Connection handshake failed:', err));
-}
-
-// ==========================================
-// 5. EXPRESS API SERVER 🌐
-// ==========================================
-const app = express();
-const port = process.env.PORT || 10000;
-
-app.use(cors());
-app.use(express.static(path.join(__dirname, 'assets')));
-
-// Dashboard confirmation screen
-app.get('/', (req, res) => {
-res.status(200).send('⚡ ServerMiser Dashboard API backend is active, hyper-optimized, and streaming live metrics! 🚀');
-});
-
-// Keep-awake route to completely bypass Render\'s free-tier sleep cycles!
-app.get('/ping', (req, res) => {
-res.status(200).send('⚡ Core operating framework status: FULLY AWAKE!');
-});
-
-app.get('/api/stats', async (req, res) => {
-try {
-  if (mongoose.connection.readyState !== 1) {
-    return res.status(503).json({ status: "offline", error: "Database offline" });
-  }
-
-  const databaseModel = require('./utils/database'); 
-  const totalServers = client?.guilds?.cache?.size ?? 0;
-  const totalUsers = client?.guilds?.cache?.reduce((acc, g) => acc + g.memberCount, 0) ?? 0;
-  const botPing = client?.ws?.ping !== -1 ? Math.round(client?.ws?.ping ?? 0) : 0;
-  const totalSeconds = (client?.uptime ?? 0) / 1000;
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = Math.floor(totalSeconds % 60);
-  const uptimeString = client?.readyAt ? `${hours}h ${minutes}m ${seconds}s` : "0h 0m 0s";
-
-  let totalXp = 0; let leveledUsers = 0; let totalTickets = 0;
-  
-  try {
-    const allGuildDocs = await databaseModel.find({}).catch(() => []);
-    
-    for (const doc of allGuildDocs) {
-      if (doc.levelsData) {
-        for (const userData of Object.values(doc.levelsData)) {
-          totalXp += userData.xp || 0; 
-          leveledUsers++;
+    const commandFiles = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
+    for (const file of commandFiles) {
+        const command = require(path.join(commandsPath, file));
+        const name = command.name || command.data?.name;
+        if (name) {
+            client.commands.set(name.toLowerCase(), command);
         }
-      }
-      if (doc.reactionRolePanels) {
-        totalTickets += doc.reactionRolePanels.length; 
-      }
     }
-  } catch (_) {}
+}
 
-  res.json({
-    status: client?.readyAt ? "online" : "offline",
-    totalServers, totalUsers, botPing, uptimeString, leveledUsers, totalXp, totalTickets,
-    uptimeSeconds: Math.floor(process.uptime()),
-  });
-} catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.get('/api/leaderboard', async (req, res) => {
-try {
-  if (mongoose.connection.readyState !== 1) return res.status(503).json([]);
-  
-  const databaseModel = require('./utils/database');
-  const allGuildDocs = await databaseModel.find({}).catch(() => []);
-  const serverTotals = [];
-
-  for (const doc of allGuildDocs) {
-    if (doc.levelsData && doc.guildId) {
-      let xp = 0;
-      for (const userData of Object.values(doc.levelsData)) {
-        xp += (userData.xp || 0) + (userData.level || 0) * 100;
-      }
-      const guild = client?.guilds?.cache?.get(doc.guildId) || await client?.guilds?.fetch(doc.guildId).catch(() => null);
-      serverTotals.push({ name: guild?.name || `Server (${doc.guildId})`, totalXp: xp });
+// ============================================================
+// EVENTS LOADER
+// ============================================================
+const eventsPath = path.join(__dirname, '..', 'events');
+if (fs.existsSync(eventsPath)) {
+    const eventFiles = fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'));
+    for (const file of eventFiles) {
+        const event = require(path.join(eventsPath, file));
+        if (event.once) {
+            client.once(event.name, (...args) => event.execute(...args, client));
+        } else {
+            client.on(event.name, (...args) => event.execute(...args, client));
+        }
     }
-  }
-  
-  serverTotals.sort((a, b) => b.totalXp - a.totalXp);
-  res.json(serverTotals.slice(0, 10));
-} catch (err) { res.status(500).json({ error: err.message }); }
+}
+
+// ============================================================
+// READY EVENT
+// FIX: deploys slash commands globally on startup and starts the selfvoice janitor.
+// Global slash commands can take up to 1 hour to propagate on first deployment —
+// after that updates are much faster. Change to applicationGuildCommands for instant
+// testing in a specific guild.
+// ============================================================
+client.once('ready', async () => {
+    console.log(`✅ [BOT ONLINE] ${client.user.tag} is live.`);
+
+    // Deploy slash commands
+    try {
+        const commandPayloads = [];
+        for (const cmd of client.commands.values()) {
+            if (cmd.data && typeof cmd.data.toJSON === 'function') {
+                commandPayloads.push(cmd.data.toJSON());
+            }
+        }
+
+        const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+        await rest.put(
+            Routes.applicationCommands(client.user.id),
+            { body: commandPayloads }
+        );
+        console.log(`✅ [SLASH COMMANDS] Deployed ${commandPayloads.length} global command(s).`);
+    } catch (err) {
+        console.error('❌ [SLASH COMMANDS] Deployment failed:', err.message);
+    }
+
+    // Start Self Voice janitor sweep
+    const selfVoice = client.commands.get('selfvoice');
+    if (selfVoice?.startJanitor) {
+        selfVoice.startJanitor(client);
+    }
+
+    // Start Giveaway scheduler (auto-ends giveaways on time)
+    const giveawayCmd = client.commands.get('giveaway');
+    if (giveawayCmd?.startScheduler) {
+        giveawayCmd.startScheduler(client);
+    }
+
+    // Start Birthday scheduler (daily announcements)
+    const birthdaysCmd = client.commands.get('birthdays');
+    if (birthdaysCmd?.startScheduler) {
+        birthdaysCmd.startScheduler(client);
+    }
+
+    // Populate invite cache for all guilds (invite tracking)
+    const invitesCmd = client.commands.get('invites');
+    if (invitesCmd?.inviteCache != null) {
+        for (const guild of client.guilds.cache.values()) {
+            guild.invites.fetch().then(invites => {
+                const guildMap = new Map();
+                for (const invite of invites.values()) {
+                    guildMap.set(invite.code, {
+                        uses: invite.uses,
+                        inviterId: invite.inviter?.id || null,
+                        maxUses: invite.maxUses,
+                        expiresAt: invite.expiresAt,
+                    });
+                }
+                invitesCmd.inviteCache.set(guild.id, guildMap);
+            }).catch(() => null);
+        }
+    }
+
 });
 
-app.get('/api/commands', (req, res) => {
-try {
-  const cmds = [...(client?.commands?.values() || [])].map(c => ({
-    name: c.data?.name || c.name || "unknown",
-    description: c.data?.description || "Prefix-only command",
-  }));
-  res.json(cmds);
-} catch (err) { res.status(500).json({ error: err.message }); }
+// ============================================================
+// MONGODB
+// ============================================================
+const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
+if (MONGO_URI) {
+    mongoose.connect(MONGO_URI).then(() => {
+        console.log('✅ [DATABASE] MongoDB connected.');
+    }).catch(err => {
+        console.error('❌ [DATABASE] MongoDB connection failed:', err.message);
+    });
+} else {
+    console.warn('⚠️  [DATABASE] No MONGO_URI / MONGODB_URI environment variable found.');
+}
+
+// ============================================================
+// KEEP-ALIVE (Render free tier needs an HTTP port to stay up)
+// ============================================================
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get('/', (_req, res) => res.json({ status: 'online', tag: client.user?.tag || 'starting' }));
+
+app.get('/api/stats', async (_req, res) => {
+    res.json({
+        guilds: client.guilds.cache.size,
+        users: client.users.cache.size,
+        commands: client.commands.size,
+        uptime: Math.floor(process.uptime()),
+        ping: client.ws.ping,
+    });
 });
 
-// ==========================================
-// 6. ENGINE IGNITION 🔥
-// ==========================================
-app.listen(port, () => {
-console.log(`🌐 [EXPRESS LIVE] Performance metrics broadcast channel humming on port ${port}!`);
+app.listen(PORT, () => {
+    console.log(`✅ [WEB] Keep-alive server running on port ${PORT}.`);
 });
 
-console.log('🔑 Authenticating client keys via Discord Gateway network...');
-client.login(process.env.DISCORD_TOKEN);
+// ============================================================
+// GUILD JOIN — populate invite cache for newly joined guilds
+// ============================================================
+client.on('guildCreate', (guild) => {
+    const invitesCmd = client.commands.get('invites');
+    if (!invitesCmd?.inviteCache) return;
+    guild.invites.fetch().then(invites => {
+        const guildMap = new Map();
+        for (const invite of invites.values()) {
+            guildMap.set(invite.code, {
+                uses: invite.uses,
+                inviterId: invite.inviter?.id || null,
+                maxUses: invite.maxUses,
+                expiresAt: invite.expiresAt,
+            });
+        }
+        invitesCmd.inviteCache.set(guild.id, guildMap);
+    }).catch(() => null);
+});
+
+// ============================================================
+// ERROR GUARD
+// ============================================================
+process.on('unhandledRejection', (err) => {
+    console.error('❌ [UNHANDLED REJECTION]', err);
+});
+process.on('uncaughtException', (err) => {
+    console.error('❌ [UNCAUGHT EXCEPTION]', err);
+});
+
+// ============================================================
+// LOGIN
+// ============================================================
+const TOKEN = process.env.DISCORD_TOKEN || process.env.TOKEN;
+if (!TOKEN) {
+    console.error('❌ [FATAL] DISCORD_TOKEN / TOKEN environment variable is not set.');
+    process.exit(1);
+}
+client.login(TOKEN).catch(err => {
+    console.error('❌ [FATAL] Login failed:', err.message);
+    process.exit(1);
+});
