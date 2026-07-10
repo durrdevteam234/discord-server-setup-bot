@@ -1,4 +1,4 @@
-import {
+const {
     SlashCommandBuilder,
     PermissionFlagsBits,
     ModalBuilder,
@@ -9,7 +9,7 @@ import {
     ButtonStyle,
     EmbedBuilder,
     ComponentType,
-  } from 'discord.js';
+  } = require('discord.js');
   import mongoose from 'mongoose';
   
   // ─── Helpers ─────────────────────────────────────────────────────────────────
