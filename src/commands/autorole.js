@@ -119,9 +119,9 @@ module.exports = {
         .setName('autorole')
         .setDescription('Manage automated member role configurations on join.')
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
-        .addSubcommand(sub => sub.setName('all').setDescription('Apply role to everyone').addRoleOption(opt => opt.setName('role').setDescription('Target role name, mention or ID').setRequired(true)))
-        .addSubcommand(sub => sub.setName('humans').setDescription('Apply role to humans only').addRoleOption(opt => opt.setName('role').setDescription('Target role name, mention or ID').setRequired(true)))
-        .addSubcommand(sub => sub.setName('bots').setDescription('Apply role to bots only').addRoleOption(opt => opt.setName('role').setDescription('Target role name, mention or ID').setRequired(true)))
+        .addSubcommand(sub => sub.setName('all').setDescription('Apply role to everyone').addRoleOption(opt => opt.setName('role').setDescription('Target role').setRequired(true)))
+        .addSubcommand(sub => sub.setName('humans').setDescription('Apply role to humans only').addRoleOption(opt => opt.setName('role').setDescription('Target role').setRequired(true)))
+        .addSubcommand(sub => sub.setName('bots').setDescription('Apply role to bots only').addRoleOption(opt => opt.setName('role').setDescription('Target role').setRequired(true)))
         .addSubcommand(sub => sub.setName('ongoing').setDescription('Inspect current active configurations'))
         .addSubcommand(sub => sub.setName('delete').setDescription('Purge all ongoing configs for everyone, bots, and humans')),
 
@@ -140,10 +140,11 @@ module.exports = {
         await runSubcommand(message, subCommand, roleInput, false);
     },
 
-    // Handles app slash deployment operations
     async executeSlash(interaction) {
         await interaction.deferReply();
         const subCommand = interaction.options.getSubcommand();
+        
+        // Fix: Safely extract the ID string directly so targetRoleID doesn't fail on Slash selections
         const roleOption = interaction.options.getRole('role');
         const roleInput = roleOption ? roleOption.id : null;
 
