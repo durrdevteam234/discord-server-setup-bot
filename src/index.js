@@ -35,9 +35,9 @@ const client = new Client({
 client.commands = new Collection();
 
 // ============================================================
-// COMMANDS LOADER
+// COMMANDS LOADER (FIXED PATH: Targets src/commands folder directly)
 // ============================================================
-const commandsPath = path.join(__dirname, '..', 'commands');
+const commandsPath = path.join(__dirname, 'commands'); 
 if (fs.existsSync(commandsPath)) {
     const commandFiles = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
     for (const file of commandFiles) {
@@ -47,16 +47,22 @@ if (fs.existsSync(commandsPath)) {
             client.commands.set(name.toLowerCase(), command);
         }
     }
+} else {
+    console.error(`❌ [LOADER ERROR] Commands path not found at: ${commandsPath}`);
 }
 
 // ============================================================
-// EVENTS LOADER
+// EVENTS LOADER (FIXED PATH: Targets src/events folder directly)
 // ============================================================
-const eventsPath = path.join(__dirname, '..', 'events');
+const eventsPath = path.join(__dirname, 'events');
 if (fs.existsSync(eventsPath)) {
     const eventFiles = fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'));
     for (const file of eventFiles) {
         const event = require(path.join(eventsPath, file));
+        
+        // Skip your dedicated ready.js event here to prevent duplicate bindings 
+        if (event.name === 'ready' || event.name === 'clientReady') continue;
+
         if (event.once) {
             client.once(event.name, (...args) => event.execute(...args, client));
         } else {
@@ -66,16 +72,12 @@ if (fs.existsSync(eventsPath)) {
 }
 
 // ============================================================
-// READY EVENT
-// FIX: deploys slash commands globally on startup and starts the selfvoice janitor.
-// Global slash commands can take up to 1 hour to propagate on first deployment —
-// after that updates are much faster. Change to applicationGuildCommands for instant
-// testing in a specific guild.
+// READY EVENT (Executed on successful Discord handshake)
 // ============================================================
 client.once('ready', async () => {
     console.log(`✅ [BOT ONLINE] ${client.user.tag} is live.`);
 
-    // Deploy slash commands
+    // Deploy slash commands safely
     try {
         const commandPayloads = [];
         for (const cmd of client.commands.values()) {
@@ -130,7 +132,6 @@ client.once('ready', async () => {
             }).catch(() => null);
         }
     }
-
 });
 
 // ============================================================
