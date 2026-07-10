@@ -10,7 +10,8 @@ const {
     EmbedBuilder,
     ComponentType,
   } = require('discord.js');
-  import mongoose from 'mongoose';
+  const mongoose = require('mongoose');
+
   
   // ─── Helpers ─────────────────────────────────────────────────────────────────
   
