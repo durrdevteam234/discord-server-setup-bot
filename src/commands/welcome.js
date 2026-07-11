@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
-const database = require('../utils/database'); // Updated to use your live MongoDB layout connection
+const { readData, writeData } = require('../utils/database');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -24,24 +24,12 @@ module.exports = {
     }
 
     try {
-      let targetChannel, isEnabled, joinMessage, leaveMessage, useEmbed;
-
-      if (isInteraction) {
-        targetChannel = interaction.options.getChannel('channel');
-        isEnabled = interaction.options.getBoolean('enabled');
-        joinMessage = interaction.options.getString('join_message') || null;
-        leaveMessage = interaction.options.getString('leave_message') || null;
-        useEmbed = interaction.options.getBoolean('embed');
-        if (useEmbed === null) useEmbed = true;
-      } else {
-        // Reads from emulated option properties passed dynamically by messageCreate.js
-        targetChannel = interaction.options.getChannel('channel');
-        isEnabled = interaction.options.getBoolean('enabled');
-        joinMessage = interaction.options.getString('join_message') || null;
-        leaveMessage = interaction.options.getString('leave_message') || null;
-        useEmbed = interaction.options.getBoolean('embed');
-        if (useEmbed === null) useEmbed = true;
-      }
+      const targetChannel = interaction.options.getChannel('channel');
+      const isEnabled = interaction.options.getBoolean('enabled');
+      const joinMessage = interaction.options.getString('join_message') || null;
+      const leaveMessage = interaction.options.getString('leave_message') || null;
+      let useEmbed = interaction.options.getBoolean('embed');
+      if (useEmbed === null) useEmbed = true;
 
       if (!targetChannel || isEnabled === null) {
         const msg = '❌ Invalid Syntax! Use: `|welcome <#channel> <true/false> [join message] [leave message]`\n**Variables:** `{user}` `{server}` `{memberCount}`';
@@ -49,24 +37,31 @@ module.exports = {
       }
 
       // ========================================================
-      // NEW: ATOMIC MONGO-DB DOCUMENT CONFIGURATION PATCHING
+      // Persist via the same settings.json-backed store that
+      // guildMemberAdd.js / guildMemberRemove.js actually read from.
+      // (database.js has no findOneAndUpdate — readData/writeData
+      // is the real, working API.)
       // ========================================================
-      const updateFields = {
+      const settings = (await readData('settings.json')) || {};
+      const existing = settings[guildId] || {};
+
+      const updated = {
+        ...existing,
         welcomeChannelId: targetChannel.id,
         welcomeEnabled: isEnabled,
-        welcomeEmbed: useEmbed
+        welcomeEmbed: useEmbed,
       };
 
-      if (joinMessage) updateFields.joinMessage = joinMessage;
-      if (leaveMessage) updateFields.leaveMessage = leaveMessage;
+      // Only overwrite messages when the user actually supplied one,
+      // otherwise keep whatever custom message was set previously.
+      if (joinMessage) updated.joinMessage = joinMessage;
+      if (leaveMessage) updated.leaveMessage = leaveMessage;
 
-      const updatedConfig = await database.findOneAndUpdate(
-        { guildId: guildId },
-        { $set: updateFields },
-        { upsert: true, new: true }
-      ).catch(() => null) || {};
-      const savedJoin = updatedConfig.joinMessage || 'Default: ✨ Welcome to {server}, {user}! We are glad to have you here. ✨';
-      const savedLeave = updatedConfig.leaveMessage || 'Default: 👋 Goodbye {user}... We will miss you!';
+      settings[guildId] = updated;
+      await writeData('settings.json', settings);
+
+      const savedJoin = updated.joinMessage || 'Default: ✨ Welcome to {server}, {user}! We are glad to have you here. ✨';
+      const savedLeave = updated.leaveMessage || 'Default: 👋 Goodbye {user}... We will miss you!';
 
       const embed = new EmbedBuilder()
         .setColor('#00FF00')
@@ -110,10 +105,11 @@ module.exports = {
       guildId: message.guild.id,
       member: message.member,
       user: message.author,
+      isCommand: () => false,
       options: {
         getChannel: (name) => targetChannel,
-        getBoolean: (name) => isEnabled,
-        getString: (name) => name === 'join_message' ? joinMessage : null
+        getBoolean: (name) => (name === 'embed' ? null : isEnabled),
+        getString: (name) => (name === 'join_message' ? joinMessage : null),
       },
       reply: async (options) => message.reply(options)
     };

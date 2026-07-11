@@ -45,7 +45,11 @@ module.exports = {
       if (serverSettings.welcomeEnabled !== false) {
         const channelId = serverSettings.welcomeChannelId;
         if (channelId) {
-          const targetChannel = guild.channels.cache.get(channelId);
+          // Cache first, fall back to a live fetch (cache can be empty
+          // right after a Render restart / cold start).
+          const targetChannel =
+            guild.channels.cache.get(channelId) ||
+            (await guild.channels.fetch(channelId).catch(() => null));
           if (targetChannel) {
             const template = serverSettings.joinMessage || '✨ Welcome to {server}, {user}! We are glad to have you here. ✨';
             const finalMessage = resolveMessage(template, member, guild);
@@ -61,6 +65,8 @@ module.exports = {
             } else {
               await targetChannel.send(finalMessage).catch(() => null);
             }
+          } else {
+            console.warn(`[GuildMemberAdd] Configured welcome channel ${channelId} not found in guild ${guild.id}`);
           }
         }
       }
