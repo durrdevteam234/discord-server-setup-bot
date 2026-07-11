@@ -44,14 +44,23 @@ if (fs.existsSync(commandsPath)) {
         const filePath = path.join(commandsPath, file);
         const command = require(filePath);
         
-        // Safe optional chaining optimization to bypass prototype array export issues
-        if (command?.data?.toJSON && typeof command?.execute === 'function') {
+        // Explicitly skip mydata.js completely
+        if (file === 'mydata.js') {
+            console.log(`[SKIPPED] Expressly bypassing registration loop for: ${file}`);
+            continue;
+        }
+    
+        // Fix: Allow commands that use execute OR executeSlash (like autorole.js)
+        const hasValidExecutor = typeof command?.execute === 'function' || 
+                                 typeof command?.executeSlash === 'function';
+    
+        if (command?.data?.toJSON && hasValidExecutor) {
             commands.push(command.data.toJSON());
             console.log(`Loaded command: /${command.data.name}`);
         } else {
             console.log(`[WARNING] The command at ${file} was skipped. (Ensure it has a valid SlashCommandBuilder setup)`);
         }
-    }
+    }    
 } else {
     console.error(`❌ ERROR: The commands directory does not exist at path: ${commandsPath}`);
     process.exit(1);

@@ -68,5 +68,64 @@ module.exports = {
 
     // ⏰ Routine Sync: Keep charts flawless with an updated backend push every 30 minutes
     setInterval(sendStatsUpdate, 30 * 60 * 1000); 
+
+
+    // ==========================================
+    // NEW: CUSTOM WEBSITE DASHBOARD TELEMETRY SYNC 💻
+    // ==========================================
+    console.log('💻 Launching internal metrics loop for your web dashboard...');
+    
+    const url = process.env.DASHBOARD_URL || 'https://onrender.com';
+    const apiKey = process.env.STATS_API_KEY;
+
+    async function pushDashboardStats() {
+      if (!apiKey) {
+        console.warn('[Dashboard] Missing STATS_API_KEY in your .env file. Skipping dashboard sync.');
+        return;
+      }
+
+      try {
+        const totalGuilds = client.guilds.cache.size;
+        const totalMembers = client.guilds.cache.reduce((acc, g) => acc + (g.memberCount || 0), 0);
+        const wsPing = client.ws.ping;
+        const uptime = client.uptime || 0;
+
+        // Collect engine hardware footprints
+        const memoryUsage = process.memoryUsage();
+        const ramUsage = Math.round(memoryUsage.heapUsed / 1024 / 1024); // Bytes to MB
+
+        const payload = {
+          totalGuilds,
+          totalMembers,
+          wsPing,
+          uptime,
+          ramUsage,
+          timestamp: new Date().toISOString()
+        };
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          throw new Error(`Dashboard API rejected request with status: ${response.status}`);
+        }
+
+        console.log('[Dashboard] Performance metrics successfully posted to your website.');
+      } catch (error) {
+        console.error('[Dashboard Error] Failed to push data to website:', error.message);
+      }
+    }
+
+    // Push right away when the bot loads
+    pushDashboardStats();
+
+    // Repeat every 5 minutes to keep charts updated
+    setInterval(pushDashboardStats, 5 * 60 * 1000);
   },
 };

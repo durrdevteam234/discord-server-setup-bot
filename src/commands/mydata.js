@@ -1,19 +1,13 @@
-const { SlashCommandBuilder, AttachmentBuilder } = require('discord.js');
+const { AttachmentBuilder } = require('discord.js');
 const mongoose = require('mongoose');
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('mydata')
-    .setDescription('Developer Only: Download raw saved MongoDB data as JSON files')
-    .addStringOption(option =>
-      option.setName('collection')
-        .setDescription('The specific database collection to download')
-        .setRequired(false)
-    ),
+  // ⚙️ Name used strictly by your internal prefix handler loop (|mydata)
   name: 'mydata',
 
+  // 🔒 This block is now private and cannot be seen or called as a / slash command
   async execute(interaction, client) {
-    const isInteraction = interaction.isCommand ? interaction.isCommand() : false;
+    const isInteraction = false; // Forced false since slash interface is stripped
     const authorId = interaction.user ? interaction.user.id : interaction.author.id;
 
     // 🔒 SECURITY GATE: Preserved your owner ID safely
@@ -33,18 +27,12 @@ module.exports = {
 
       const db = mongoose.connection.db;
 
-      // 2. Parse command arguments to find out what target collection the user wants
-      let targetCollection = '';
-      if (isInteraction) {
-        targetCollection = interaction.options.getString('collection') || '';
-      } else {
-        targetCollection = typeof interaction.options.getString === 'function'
-          ? interaction.options.getString('collection') || ''
-          : interaction.options.getString || '';
-      }
+      // 2. Parse command arguments from prefix wrapper strings
+      let targetCollection = interaction.options.getString || '';
 
       let dataPayload = {};
       let downloadFileName = 'all_database_collections.json';
+      
       // 3. If a specific collection is named, fetch only that collection. Otherwise, fetch everything.
       if (targetCollection) {
         targetCollection = targetCollection.toLowerCase();
@@ -76,7 +64,7 @@ module.exports = {
     }
   },
 
-  // Prefix translation pipeline routing back to main execute framework
+  // Handles text prefix operations (|mydata [collection])
   async executePrefix(message, argsArray, client) {
     // 🔒 Owner Permission Check right at the prefix level
     const OWNER_ID = '889540845269823559';

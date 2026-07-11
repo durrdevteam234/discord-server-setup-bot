@@ -9,9 +9,10 @@
     "deploy": "node src/deploy-commands.js"
   },
   "dependencies": {
+    "axios": "^1.18.1",
     "cors": "^2.8.6",
     "discord.js": "^14.14.0",
-    "dotenv": "^16.3.1",
+    "dotenv": "^16.6.1",
     "express": "^5.2.1",
     "mongoose": "^9.7.3"
   },

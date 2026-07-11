@@ -1,7 +1,5 @@
-const { starboard } = require('../commands/starboard');
-
 module.exports = {
-    name: 'messageReactionAdd',
+    name: 'messageReactionRemove',
     async execute(reaction, user) {
         try {
             // Handle partial states safely
@@ -14,13 +12,14 @@ module.exports = {
 
         // Add a safety check to ensure commands collection exists before reading it
         if (!botClient.commands) {
-            console.warn('[Warning] client.commands collection is not initialized.');
+            console.warn('[Warning] client.commands collection is not initialized during reaction remove.');
             return;
         }
 
         const starboardCmd = botClient.commands.get('starboard');
         if (starboardCmd && typeof starboardCmd.handleReaction === 'function') {
-            await starboardCmd.handleReaction(reaction, user, true, botClient).catch(() => null);
+            // Notice we pass false here since it's a reaction removal event
+            await starboardCmd.handleReaction(reaction, user, false, botClient).catch(() => null);
         }
     },
 };
