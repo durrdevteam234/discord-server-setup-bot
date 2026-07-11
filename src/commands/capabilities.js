@@ -98,7 +98,6 @@ const CATEGORIES = [
       { name: '`/analytics`', value: 'Live auto-updating stat channels — member count, human/bot counts, boost count, or role count.' },
       { name: '`/suggestions`', value: 'A suggestion box with upvote/downvote buttons and a staff approval workflow.' },
       { name: '`/giveaway`', value: 'Run timed giveaways with an entry button and automatic winner selection.' },
-      { name: '`/mydata`', value: 'View or manage the data the bot stores about you.' },
     ],
   },
   {
