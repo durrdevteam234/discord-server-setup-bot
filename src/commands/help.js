@@ -26,7 +26,6 @@ const PAGES = [
       '`/purpose` - Learn about the bot and view its profile.\n' +
       '`/rank` - Check your level and XP progress.\n' +
       '`/leaderboard` - View the top 10 ranked members.\n' +
-      '`/mydata` - View or manage the data stored about you.\n' +
       '`/analytics` - View server activity and growth stats.',
   },
   {
