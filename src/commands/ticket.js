@@ -229,6 +229,10 @@ module.exports = {
         await ticketChannel.send({ content: `${user}`, embeds: [controlEmbed], components: [closeRow] });
         try { await logAction(guild, 'Ticket Opened', user, `Channel: ${ticketChannel.name}`); } catch (e) {}
 
+        // Track the lifetime ticket count for the analytics dashboard —
+        // this persists even after the ticket is later closed/deleted.
+        try { await database.incrementCounter('totalTickets'); } catch (e) {}
+
         return interaction.editReply({ content: `✅ **Ticket Generated:** Click here to access your tunnel: ${ticketChannel}` });
 
       } catch (err) {

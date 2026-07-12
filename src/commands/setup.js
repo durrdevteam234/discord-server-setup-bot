@@ -338,6 +338,12 @@ module.exports = {
 
       try { await logAction(guild, 'Server Setup', callerUser, `Template: ${template}, Style: ${cuteStyle}, Clear: ${clear}`); } catch(e){}
 
+      // Track lifetime setup counts for the analytics dashboard
+      try {
+        await database.incrementCounter('totalSetups');
+        await database.incrementCounter('successfulSetups');
+      } catch (e) {}
+
       const embed = new EmbedBuilder()
         .setColor(isCuteActive ? '#FF69B4' : '#00FF00')
         .setTitle(isCuteActive ? '✨ Server Setup Complete! ✨' : '✅ Server Setup Complete!')
@@ -363,6 +369,12 @@ module.exports = {
 
     } catch (error) {
       console.error('Setup failed:', error);
+
+      // Track lifetime setup counts even on failure, so success rate is accurate
+      try {
+        await database.incrementCounter('totalSetups');
+      } catch (e) {}
+
       if (isInteraction) {
         await interaction.editReply(`❌ Setup failed: ${error.message}`).catch(() => null);
       } else {
