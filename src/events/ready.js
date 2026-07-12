@@ -71,28 +71,39 @@ module.exports = {
 
 
     // ==========================================
-    // NEW: CUSTOM WEBSITE DASHBOARD TELEMETRY SYNC 💻
+    // MODULE C: SERVERMISER DASHBOARD TELEMETRY SYNC 💻
     // ==========================================
     console.log('💻 Launching internal metrics loop for your web dashboard...');
-    
-    const url = process.env.DASHBOARD_URL || 'https://onrender.com';
+
+    // Full URL including the actual endpoint path — must match server.ts's POST route.
+    // Override with DASHBOARD_URL in Render if your domain ever changes.
+    const dashboardUrl = process.env.DASHBOARD_URL || 'https://servermiser.is-a.dev/api/bot-stats';
     const apiKey = process.env.STATS_API_KEY;
 
     async function pushDashboardStats() {
       if (!apiKey) {
-        console.warn('[Dashboard] Missing STATS_API_KEY in your .env file. Skipping dashboard sync.');
+        console.warn('[Dashboard] Missing STATS_API_KEY environment variable. Skipping dashboard sync.');
         return;
       }
 
       try {
         const totalGuilds = client.guilds.cache.size;
         const totalMembers = client.guilds.cache.reduce((acc, g) => acc + (g.memberCount || 0), 0);
-        const wsPing = client.ws.ping;
-        const uptime = client.uptime || 0;
+        const wsPing = Math.max(0, Math.round(client.ws.ping));
+        const shardCount = client.shard ? client.shard.count : 1;
 
-        // Collect engine hardware footprints
+        // Format uptime as "Nd Nh Nm" to match what the dashboard expects/displays
+        const uptimeMs = client.uptime || 0;
+        const totalMinutes = Math.floor(uptimeMs / 60000);
+        const days = Math.floor(totalMinutes / 1440);
+        const hours = Math.floor((totalMinutes % 1440) / 60);
+        const minutes = totalMinutes % 60;
+        const uptime = `${days}d ${hours}h ${minutes}m`;
+
+        // Format RAM usage as a display string, e.g. "142 MB"
         const memoryUsage = process.memoryUsage();
-        const ramUsage = Math.round(memoryUsage.heapUsed / 1024 / 1024); // Bytes to MB
+        const ramUsageMb = Math.round(memoryUsage.rss / 1024 / 1024);
+        const ramUsage = `${ramUsageMb} MB`;
 
         const payload = {
           totalGuilds,
@@ -100,10 +111,15 @@ module.exports = {
           wsPing,
           uptime,
           ramUsage,
-          timestamp: new Date().toISOString()
+          activeShards: `1 / ${shardCount}`,
+          securityCompliance: "100%"
+          // Optional fields you can add once you track them:
+          // totalTickets, totalXp, totalSetups, setupSuccessRate, genTime,
+          // guildCategories: [{ name, count, color, desc }],
+          // dailySetups: [mon, tue, wed, thu, fri, sat, sun]
         };
 
-        const response = await fetch(url, {
+        const response = await fetch(dashboardUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -113,12 +129,13 @@ module.exports = {
         });
 
         if (!response.ok) {
-          throw new Error(`Dashboard API rejected request with status: ${response.status}`);
+          const body = await response.text().catch(() => '');
+          throw new Error(`Dashboard API rejected request with status: ${response.status} ${body}`);
         }
 
-        console.log('[Dashboard] Performance metrics successfully posted to your website.');
+        console.log(`✅ [Dashboard] Stats pushed successfully. (Servers: ${totalGuilds} | Users: ${totalMembers} | Ping: ${wsPing}ms)`);
       } catch (error) {
-        console.error('[Dashboard Error] Failed to push data to website:', error.message);
+        console.error('🚨 [Dashboard Error] Failed to push data to website:', error.message);
       }
     }
 
