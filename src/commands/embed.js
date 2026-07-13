@@ -77,7 +77,7 @@ function buildCreateModal() {
     .setTitle('Create Embed')
     .addComponents(
       new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('embed_title').setLabel('Title').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(256)),
-      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('embed_description').setLabel('Description').setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(4096)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('embed_description').setLabel('Description').setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(4000)),
       new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('embed_color').setLabel('Color (hex)').setStyle(TextInputStyle.Short).setRequired(false).setPlaceholder('#5865F2').setMaxLength(7)),
       new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('embed_footer').setLabel('Footer Text').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(2048)),
       new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('embed_author').setLabel('Author Name').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(256))
