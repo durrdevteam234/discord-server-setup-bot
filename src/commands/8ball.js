@@ -80,7 +80,7 @@ module.exports = {
     const crystalBallEmbed = new EmbedBuilder()
       .setTitle('🎱 The Magic 8-Ball Proves An Answer')
       .setColor('#2F3136') // Dark aesthetic to match typical Discord UI
-      .setThumbnail('https://imgur.com') // Dynamically maps ServerMiser branding or default icon strings
+      .setThumbnail('https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNXV3bzdiaHU4Nmdza2l5OG9kYXh2dGdxb2l1djVsYWtpOTEzN3ViOCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/26xBJp4dcSdGxv2Zq/giphy.gif') // Dynamically maps ServerMiser branding or default icon strings
       .addFields(
         { name: '🔮 Asked Question', value: `\`\`\`text\n${question.slice(0, 250)}\n\`\`\``, inline: false },
         { name: '🌌 Cosmic Decree', value: `> **${cosmicAnswerText}**`, inline: false }

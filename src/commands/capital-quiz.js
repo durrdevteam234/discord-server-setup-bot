@@ -3,6 +3,8 @@ const db = require('../utils/database.js');
 
 // Expanded pool to 40 unique geographic entries
 const capitalPool = [
+    { country: "UAE", capital: "Abu Dhabi" },
+    { country: "Pakistan", capital: "Islamabad" },
     { country: "Japan", capital: "Tokyo" },
     { country: "France", capital: "Paris" },
     { country: "Canada", capital: "Ottawa" },
