@@ -13,7 +13,7 @@ const {
 } = require('discord.js');
 const mongoose = require('mongoose');
 
-// ─── Schema ────────────────────────────────────────────────────────────────
+// ─── Database Schema Definition ─────────────────────────────────────────────
 
 const embedTemplateSchema = new mongoose.Schema({
   guildId:   { type: String, required: true },
@@ -30,7 +30,7 @@ const EmbedTemplate =
   mongoose.models.EmbedTemplate ||
   mongoose.model('EmbedTemplate', embedTemplateSchema);
 
-// ─── In-memory session store ────────────────────────────────────────────────
+// ─── In-Memory Session Cache Matrix ─────────────────────────────────────────
 
 const sessions = new Map();
 
@@ -60,7 +60,80 @@ setInterval(() => {
     if (now - lastActive > ttl) sessions.delete(key);
   }
 }, 5 * 60 * 1000);
-// ─── Helpers ────────────────────────────────────────────────────────────────
+
+// ─── Visual Component Framework UI Modals ───────────────────────────────────
+
+function previewActionRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('embed_preview_field').setLabel('📝 Edit Fields').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('embed_preview_send').setLabel('📤 Send').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('embed_preview_clear').setLabel('🗑️ Clear').setStyle(ButtonStyle.Danger),
+  );
+}
+
+function buildCreateModal() {
+  return new ModalBuilder()
+    .setCustomId('embed_modal_create')
+    .setTitle('Create Embed')
+    .addComponents(
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('embed_title').setLabel('Title').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(256)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('embed_description').setLabel('Description').setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(4096)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('embed_color').setLabel('Color (hex)').setStyle(TextInputStyle.Short).setRequired(false).setPlaceholder('#5865F2').setMaxLength(7)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('embed_footer').setLabel('Footer Text').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(2048)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('embed_author').setLabel('Author Name').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(256))
+    );
+}
+
+function buildFieldAddModal() {
+  return new ModalBuilder()
+    .setCustomId('embed_modal_field_add')
+    .setTitle('Add Field')
+    .addComponents(
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('field_name').setLabel('Field Name').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(256)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('field_value').setLabel('Field Value').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(1024)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('field_inline').setLabel('Inline?').setStyle(TextInputStyle.Short).setRequired(false).setPlaceholder('yes/no'))
+    );
+}
+
+function buildSendConfirmModal() {
+  return new ModalBuilder()
+    .setCustomId('embed_modal_send_confirm')
+    .setTitle('Send Embed')
+    .addComponents(
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('send_channel').setLabel('Channel ID or mention').setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder('#general or 123456789012345678'))
+    );
+}
+
+// ─── Core Slash Command Definition Payload Registry ────────────────────────
+
+const data = new SlashCommandBuilder()
+  .setName('embed')
+  .setDescription('Build and manage rich embeds')
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+  .setDMPermission(false)
+  .addSubcommand(sub => sub.setName('create').setDescription('Open a modal to build a new embed'))
+  .addSubcommand(sub => sub.setName('edit').setDescription('Load an existing bot embed into your session for editing').addStringOption(opt => opt.setName('message_id').setDescription('ID of the bot message to edit').setRequired(true)))
+  .addSubcommand(sub => sub.setName('send').setDescription('Send your in-progress embed to a channel').addChannelOption(opt => opt.setName('channel').setDescription('Target channel').setRequired(true)))
+  .addSubcommandGroup(group =>
+    group.setName('field').setDescription('Manage embed fields')
+      .addSubcommand(sub => sub.setName('add').setDescription('Open a modal to add a field to your embed'))
+      .addSubcommand(sub => sub.setName('remove').setDescription('Remove a field from your embed by index').addIntegerOption(opt => opt.setName('index').setDescription('Field index (1–25)').setRequired(true).setMinValue(1).setMaxValue(25)))
+  )
+  .addSubcommand(sub => sub.setName('image').setDescription('Set the large image URL on your embed').addStringOption(opt => opt.setName('url').setDescription('Image URL').setRequired(true)))
+  .addSubcommand(sub => sub.setName('thumbnail').setDescription('Set the thumbnail URL on your embed').addStringOption(opt => opt.setName('url').setDescription('Thumbnail URL').setRequired(true)))
+  .addSubcommand(sub => sub.setName('color').setDescription('Set the embed color').addStringOption(opt => opt.setName('hex').setDescription('Hex color e.g. #FF0000').setRequired(true)))
+  .addSubcommand(sub => sub.setName('footer').setDescription('Set the embed footer').addStringOption(opt => opt.setName('text').setDescription('Footer text').setRequired(true).setMaxLength(2048)).addStringOption(opt => opt.setName('icon_url').setDescription('Footer icon URL').setRequired(false)))
+  .addSubcommand(sub => sub.setName('author').setDescription('Set the embed author').addStringOption(opt => opt.setName('name').setDescription('Author name').setRequired(true).setMaxLength(256)).addStringOption(opt => opt.setName('icon_url').setDescription('Author icon URL').setRequired(false)).addStringOption(opt => opt.setName('url').setDescription('Author URL').setRequired(false)))
+  .addSubcommand(sub => sub.setName('preview').setDescription('Preview your current in-progress embed'))
+  .addSubcommand(sub => sub.setName('clear').setDescription('Clear your in-progress embed session'))
+  .addSubcommandGroup(group =>
+    group.setName('template').setDescription('Manage embed templates')
+      .addSubcommand(sub => sub.setName('save').setDescription('Save current embed as a named template').addStringOption(opt => opt.setName('name').setDescription('Template name').setRequired(true)))
+      .addSubcommand(sub => sub.setName('load').setDescription('Load a saved template into your session').addStringOption(opt => opt.setName('name').setDescription('Template name').setRequired(true)))
+      .addSubcommand(sub => sub.setName('list').setDescription('List all saved templates for this server'))
+      .addSubcommand(sub => sub.setName('delete').setDescription('Delete a saved template').addStringOption(opt => opt.setName('name').setDescription('Template name').setRequired(true)))
+  );
+// ─── Helpers & Utilities ────────────────────────────────────────────────────
 
 function getField(interaction, id) {
   try {
@@ -146,23 +219,6 @@ function loadDataIntoSession(session, data) {
   session.fields       = data.fields       || [];
 }
 
-function previewActionRow() {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('embed_preview_field')
-      .setLabel('📝 Edit Fields')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('embed_preview_send')
-      .setLabel('📤 Send')
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('embed_preview_clear')
-      .setLabel('🗑️ Clear')
-      .setStyle(ButtonStyle.Danger),
-  );
-}
-
 async function requireManageMessages(interaction) {
   if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageMessages)) {
     await interaction.reply({
@@ -185,105 +241,24 @@ async function requireManageGuild(interaction) {
   return true;
 }
 
-// ─── Modals ──────────────────────────────────────────────────────────────────
-
-function buildCreateModal() {
-  return new ModalBuilder()
-    .setCustomId('embed_modal_create')
-    .setTitle('Create Embed')
-    .addComponents(
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('embed_title')
-          .setLabel('Title')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(false)
-          .setMaxLength(256),
-      ),
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('embed_description')
-          .setLabel('Description')
-          .setStyle(TextInputStyle.Paragraph)
-          .setRequired(false)
-          .setMaxLength(4096),
-      ),
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('embed_color')
-          .setLabel('Color (hex)')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(false)
-          .setPlaceholder('#5865F2')
-          .setMaxLength(7),
-      ),
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('embed_footer')
-          .setLabel('Footer Text')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(false)
-          .setMaxLength(2048),
-      ),
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('embed_author')
-          .setLabel('Author Name')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(false)
-          .setMaxLength(256),
-      ),
-    );
+function isPrefixMode(interaction) {
+  return typeof interaction.isChatInputCommand === 'function' && interaction.isChatInputCommand() === false;
 }
 
-function buildFieldAddModal() {
-  return new ModalBuilder()
-    .setCustomId('embed_modal_field_add')
-    .setTitle('Add Field')
-    .addComponents(
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('field_name')
-          .setLabel('Field Name')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true)
-          .setMaxLength(256),
-      ),
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('field_value')
-          .setLabel('Field Value')
-          .setStyle(TextInputStyle.Paragraph)
-          .setRequired(true)
-          .setMaxLength(1024),
-      ),
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('field_inline')
-          .setLabel('Inline?')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(false)
-          .setPlaceholder('yes/no'),
-      ),
-    );
-}
+function parsePrefixArgs(interaction) {
+  const raw = String(interaction.content || '');
+  const tokens = raw.trim().split(/\s+/);
+  const sub = tokens[1] ? tokens[1].toLowerCase() : null;
+  const rawArgs = tokens.slice(2).join(' ').trim();
 
-function buildSendConfirmModal() {
-  return new ModalBuilder()
-    .setCustomId('embed_modal_send_confirm')
-    .setTitle('Send Embed')
-    .addComponents(
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('send_channel')
-          .setLabel('Channel ID or mention')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true)
-          .setPlaceholder('#general or 123456789012345678'),
-      ),
-    );
+  let targetChannel = interaction.channel;
+  if (interaction.mentions?.channels?.size > 0) {
+    targetChannel = interaction.mentions.channels.first();
+  }
+
+  return { sub, rawArgs, targetChannel };
 }
-// ─── Subcommand handlers ──────────────────────────────────────────────────────
+// ─── Subcommand Handlers ─────────────────────────────────────────────────────
 
 async function handleCreate(interaction) {
   if (!await requireManageMessages(interaction)) return;
@@ -299,17 +274,14 @@ async function handleEdit(interaction) {
   if (!await requireManageMessages(interaction)) return;
 
   const messageId = isPrefixMode(interaction) 
-    ? parsePrefixArgs(interaction).rawArgs.split(/\s+/)[0] 
+    ? parsePrefixArgs(interaction).rawArgs.trim() 
     : interaction.options.getString('message_id');
 
   if (!messageId) {
-    return interaction.reply({ content: '❌ Please provide a valid target message ID containing the template layout.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
+    return interaction.reply({ content: '❌ Please provide a valid target message ID.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
   }
 
-  const message = await interaction.channel.messages
-    .fetch(messageId)
-    .catch(() => null);
-
+  const message = await interaction.channel.messages.fetch(messageId).catch(() => null);
   if (!message) {
     return interaction.reply({ content: '❌ Message not found in this channel.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
   }
@@ -329,37 +301,20 @@ async function handleEdit(interaction) {
   session.color        = existing.color       ?? null;
   session.imageUrl     = existing.image?.url  || null;
   session.thumbnailUrl = existing.thumbnail?.url || null;
-  session.footer       = existing.footer
-    ? { text: existing.footer.text, iconUrl: existing.footer.iconURL || null }
-    : null;
-  session.author       = existing.author
-    ? { name: existing.author.name, iconUrl: existing.author.iconURL || null, url: existing.author.url || null }
-    : null;
-  session.fields       = (existing.fields || []).map(f => ({
-    name:   f.name,
-    value:  f.value,
-    inline: f.inline,
-  }));
+  session.footer       = existing.footer ? { text: existing.footer.text, iconUrl: existing.footer.iconURL || null } : null;
+  session.author       = existing.author ? { name: existing.author.name, iconUrl: existing.author.iconURL || null, url: existing.author.url || null } : null;
+  session.fields       = (existing.fields || []).map(f => ({ name: f.name, value: f.value, inline: f.inline }));
   session.editMessageId  = messageId;
   session.editChannelId  = interaction.channel.id;
   session._lastActive    = Date.now();
 
-  await interaction.reply({
-    content: '✅ Embed loaded into your session. Use `/embed send` or `|embed send` to update it.',
-    flags: [MessageFlags.Ephemeral],
-  }).catch(() => null);
+  await interaction.reply({ content: '✅ Embed loaded into your session. Use `/embed send` to update it.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
 }
 
 async function handleSend(interaction) {
   if (!await requireManageMessages(interaction)) return;
 
-  let targetChannel;
-  if (isPrefixMode(interaction)) {
-    targetChannel = parsePrefixArgs(interaction).targetChannel;
-  } else {
-    targetChannel = interaction.options.getChannel('channel');
-  }
-
+  const targetChannel = isPrefixMode(interaction) ? parsePrefixArgs(interaction).targetChannel : interaction.options.getChannel('channel');
   const session = getSession(interaction.user.id, interaction.guildId);
 
   if (!hasSessionContent(session)) {
@@ -369,37 +324,25 @@ async function handleSend(interaction) {
   const embed = buildEmbedFromSession(session);
 
   if (session.editMessageId && session.editChannelId) {
-    const editChannel = await interaction.client.channels
-      .fetch(session.editChannelId)
-      .catch(() => null);
-    const editMessage = await editChannel?.messages
-      .fetch(session.editMessageId)
-      .catch(() => null);
+    const editChannel = await interaction.client.channels.fetch(session.editChannelId).catch(() => null);
+    const editMessage = await editChannel?.messages.fetch(session.editMessageId).catch(() => null);
 
     if (editMessage) {
       await editMessage.edit({ embeds: [embed] }).catch(() => null);
       delete session.editMessageId;
       delete session.editChannelId;
-      return interaction.reply({
-        content: `✅ Embed updated in <#${editChannel.id}>.`,
-        flags: [MessageFlags.Ephemeral],
-      }).catch(() => null);
+      return interaction.reply({ content: `✅ Embed updated in <#${editChannel.id}>.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
     }
   }
 
   await targetChannel.send({ embeds: [embed] }).catch(() => null);
-  await interaction.reply({
-    content: `✅ Embed sent to <#${targetChannel.id}>.`,
-    flags: [MessageFlags.Ephemeral],
-  }).catch(() => null);
+  await interaction.reply({ content: `✅ Embed sent to <#${targetChannel.id}>.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
 }
 
 async function handleFieldAdd(interaction) {
   if (!await requireManageMessages(interaction)) return;
   if (isPrefixMode(interaction)) {
-    return interaction.reply({
-      content: '❌ Visual UI Modals cannot be loaded via text prefix commands. Please run this command as a native Slash Command (`/embed field add`) to append new fields.',
-    }).catch(() => null);
+    return interaction.reply({ content: '❌ Visual UI Modals cannot be loaded via text prefix commands. Please run `/embed field add`.' }).catch(() => null);
   }
   await interaction.showModal(buildFieldAddModal()).catch(() => null);
 }
@@ -407,10 +350,7 @@ async function handleFieldAdd(interaction) {
 async function handleFieldRemove(interaction) {
   if (!await requireManageMessages(interaction)) return;
 
-  const index = isPrefixMode(interaction)
-    ? parseInt(parsePrefixArgs(interaction).rawArgs, 10)
-    : interaction.options.getInteger('index');
-
+  const index = isPrefixMode(interaction) ? parseInt(parsePrefixArgs(interaction).rawArgs, 10) : interaction.options.getInteger('index');
   const session = getSession(interaction.user.id, interaction.guildId);
 
   if (!Array.isArray(session.fields) || session.fields.length === 0) {
@@ -418,27 +358,16 @@ async function handleFieldRemove(interaction) {
   }
 
   if (isNaN(index) || index < 1 || index > session.fields.length) {
-    return interaction.reply({
-      content: `❌ Invalid index. Your embed has ${session.fields.length} field(s).`,
-      flags: [MessageFlags.Ephemeral],
-    }).catch(() => null);
+    return interaction.reply({ content: `❌ Invalid index. Your embed has ${session.fields.length} field(s).`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
   }
 
   session.fields.splice(index - 1, 1);
-  await interaction.reply({
-    content: `✅ Field #${index} removed. Your embed now has ${session.fields.length} field(s).`,
-    flags: [MessageFlags.Ephemeral],
-  }).catch(() => null);
+  await interaction.reply({ content: `✅ Field #${index} removed. Your embed now has ${session.fields.length} field(s).`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
 }
 
 async function handleImage(interaction) {
   if (!await requireManageMessages(interaction)) return;
   const url = isPrefixMode(interaction) ? parsePrefixArgs(interaction).rawArgs.trim() : interaction.options.getString('url');
-  
-  if (!url || !url.startsWith('http')) {
-    return interaction.reply({ content: '❌ Please provide a valid absolute media URL.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
-  }
-
   const session = getSession(interaction.user.id, interaction.guildId);
   session.imageUrl = url;
   await interaction.reply({ content: `✅ Image URL set.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
@@ -447,11 +376,6 @@ async function handleImage(interaction) {
 async function handleThumbnail(interaction) {
   if (!await requireManageMessages(interaction)) return;
   const url = isPrefixMode(interaction) ? parsePrefixArgs(interaction).rawArgs.trim() : interaction.options.getString('url');
-  
-  if (!url || !url.startsWith('http')) {
-    return interaction.reply({ content: '❌ Please provide a valid absolute thumbnail URL.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
-  }
-
   const session = getSession(interaction.user.id, interaction.guildId);
   session.thumbnailUrl = url;
   await interaction.reply({ content: `✅ Thumbnail URL set.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
@@ -529,22 +453,19 @@ async function handlePreview(interaction) {
 async function handleClear(interaction) {
   if (!await requireManageMessages(interaction)) return;
   clearSession(interaction.user.id, interaction.guildId);
-  await interaction.reply({ content: '✅ Session canvas wiped.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
+  await interaction.reply({ content: '✅ Session cleared.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
 }
 
 async function handleTemplateSave(interaction) {
   if (!await requireManageGuild(interaction)) return;
   
-  const name = isPrefixMode(interaction) 
-    ? parsePrefixArgs(interaction).rawArgs.trim().split(/\s+/)[0] 
-    : interaction.options.getString('name');
+  const name = isPrefixMode(interaction) ? parsePrefixArgs(interaction).rawArgs.trim() : interaction.options.getString('name');
 
   if (!name) {
     return interaction.reply({ content: '❌ Please specify a unique identifier name for this template preset.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
   }
 
   const session = getSession(interaction.user.id, interaction.guildId);
-
   if (!hasSessionContent(session)) {
     return interaction.reply({ content: '❌ Your session is empty. Nothing to save.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
   }
@@ -569,19 +490,13 @@ async function handleTemplateSave(interaction) {
 async function handleTemplateLoad(interaction) {
   if (!await requireManageGuild(interaction)) return;
   
-  const name = isPrefixMode(interaction) 
-    ? parsePrefixArgs(interaction).rawArgs.trim().split(/\s+/)[0] 
-    : interaction.options.getString('name');
+  const name = isPrefixMode(interaction) ? parsePrefixArgs(interaction).rawArgs.trim() : interaction.options.getString('name');
 
   if (!name) {
     return interaction.reply({ content: '❌ Please specify a template name to recall from storage.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
   }
 
-  const template = await EmbedTemplate.findOne({
-    guildId: interaction.guildId,
-    name,
-  }).catch(() => null);
-
+  const template = await EmbedTemplate.findOne({ guildId: interaction.guildId, name }).catch(() => null);
   if (!template) {
     return interaction.reply({ content: `❌ No template named **${name}** found.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
   }
@@ -590,7 +505,7 @@ async function handleTemplateLoad(interaction) {
   loadDataIntoSession(session, template.data);
 
   await interaction.reply({
-    content: `✅ Template **${name}** loaded! Use \`/embed preview\` or \`|embed preview\` to check it.`,
+    content: `✅ Template **${name}** loaded! Use \`/embed preview\` to check it.`,
     flags: [MessageFlags.Ephemeral],
   }).catch(() => null);
 }
@@ -598,10 +513,7 @@ async function handleTemplateLoad(interaction) {
 async function handleTemplateList(interaction) {
   if (!await requireManageMessages(interaction)) return;
 
-  const templates = await EmbedTemplate.find({ guildId: interaction.guildId })
-    .sort({ name: 1 })
-    .catch(() => null);
-
+  const templates = await EmbedTemplate.find({ guildId: interaction.guildId }).sort({ name: 1 }).catch(() => null);
   if (!templates?.length) {
     return interaction.reply({ content: '❌ No templates saved for this server.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
   }
@@ -623,26 +535,20 @@ async function handleTemplateList(interaction) {
 async function handleTemplateDelete(interaction) {
   if (!await requireManageGuild(interaction)) return;
   
-  const name = isPrefixMode(interaction) 
-    ? parsePrefixArgs(interaction).rawArgs.trim().split(/\s+/)[0] 
-    : interaction.options.getString('name');
+  const name = isPrefixMode(interaction) ? parsePrefixArgs(interaction).rawArgs.trim() : interaction.options.getString('name');
 
   if (!name) {
     return interaction.reply({ content: '❌ Please provide a template name to permanently wipe.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
   }
 
-  const result = await EmbedTemplate.findOneAndDelete({
-    guildId: interaction.guildId,
-    name,
-  }).catch(() => null);
-
+  const result = await EmbedTemplate.findOneAndDelete({ guildId: interaction.guildId, name }).catch(() => null);
   if (!result) {
     return interaction.reply({ content: `❌ No template named **${name}** found.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
   }
 
-  await interaction.reply({ content: `✅ Template **${name}** has been deleted from your database storage pools.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
+  await interaction.reply({ content: `✅ Template **${name}** has been deleted from your database.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
 }
-// ─── Interaction handler ──────────────────────────────────────────────────────
+// ─── Interaction Handler ──────────────────────────────────────────────────────
 
 async function handleInteraction(interaction) {
   const { customId, user, guildId } = interaction;
@@ -673,12 +579,7 @@ async function handleInteraction(interaction) {
     }
 
     const embed = buildEmbedFromSession(session);
-    await interaction.reply({
-      content: '**Preview:**',
-      embeds: [embed],
-      components: [previewActionRow()],
-      flags: [MessageFlags.Ephemeral],
-    }).catch(() => null);
+    await interaction.reply({ content: '**Preview:**', embeds: [embed], components: [previewActionRow()], flags: [MessageFlags.Ephemeral] }).catch(() => null);
     return;
   }
 
@@ -702,10 +603,7 @@ async function handleInteraction(interaction) {
     session.fields.push({ name, value, inline });
     session._lastActive = Date.now();
 
-    await interaction.reply({
-      content: `✅ Field added! Your embed now has **${session.fields.length}** field(s).`,
-      flags: [MessageFlags.Ephemeral],
-    }).catch(() => null);
+    await interaction.reply({ content: `✅ Field added! Your embed now has **${session.fields.length}** field(s).`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
     return;
   }
 
@@ -716,11 +614,9 @@ async function handleInteraction(interaction) {
 
   if (customId === 'embed_modal_send_confirm') {
     const raw = getField(interaction, 'send_channel');
-    if (!raw) {
-      return interaction.reply({ content: '❌ Channel is required.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
-    }
+    if (!raw) return interaction.reply({ content: '❌ Channel is required.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
+    
     const channelId = raw.trim().replace(/[<#>]/g, '');
-
     const targetChannel = await interaction.client.channels.fetch(channelId).catch(() => null);
     if (!targetChannel?.isTextBased()) {
       return interaction.reply({ content: '❌ Could not find that channel.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
@@ -741,19 +637,13 @@ async function handleInteraction(interaction) {
         await editMessage.edit({ embeds: [embed] }).catch(() => null);
         delete session.editMessageId;
         delete session.editChannelId;
-        await interaction.reply({
-          content: `✅ Embed layout updated in <#${editChannel.id}>.`,
-          flags: [MessageFlags.Ephemeral],
-        }).catch(() => null);
+        await interaction.reply({ content: `✅ Embed layout updated in <#${editChannel.id}>.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
         return;
       }
     }
 
     await targetChannel.send({ embeds: [embed] }).catch(() => null);
-    await interaction.reply({
-      content: `✅ Embed successfully sent to <#${targetChannel.id}>.`,
-      flags: [MessageFlags.Ephemeral],
-    }).catch(() => null);
+    await interaction.reply({ content: `✅ Embed successfully sent to <#${targetChannel.id}>.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
     return;
   }
 
@@ -769,7 +659,7 @@ async function handleInteraction(interaction) {
   }
 }
 
-// ─── execute router ───────────────────────────────────────────────────────────
+// ─── Execute Router ───────────────────────────────────────────────────────────
 
 async function execute(interaction) {
   let group, sub;
@@ -778,13 +668,12 @@ async function execute(interaction) {
     const parsed = parsePrefixArgs(interaction);
     const tokens = String(interaction.content || '').trim().split(/\s+/);
     
-    // Evaluate prefix grouping chains (e.g. |embed field add)
     if (parsed.sub === 'field') {
       group = 'field';
-      sub = tokens[3]?.toLowerCase();
+      sub = tokens[2] ? tokens[2].toLowerCase() : null;
     } else if (parsed.sub === 'template') {
       group = 'template';
-      sub = tokens[3]?.toLowerCase();
+      sub = tokens[2] ? tokens[2].toLowerCase() : null;
     } else {
       sub = parsed.sub;
     }
