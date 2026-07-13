@@ -55,6 +55,7 @@ const GuildSettingsSchema = new Schema({
 
 const Poll = models.Poll || model('Poll', PollSchema);
 const GuildSettings = models.GuildSettings || model('GuildSettings', GuildSettingsSchema);
+
 // ─────────────────────────────────────────────────────────────
 // Rendering helpers
 // ─────────────────────────────────────────────────────────────
@@ -215,7 +216,7 @@ async function canCreatePoll(member) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Slash command definition
+// Slash command definition (Fixed Order Validation)
 // ─────────────────────────────────────────────────────────────
 
 const data = new SlashCommandBuilder()
@@ -223,6 +224,8 @@ const data = new SlashCommandBuilder()
   .setDescription('Create and manage polls')
   .addSubcommand((sub) => {
     sub.setName('create').setDescription('Create a poll with vote buttons');
+    
+    // 1. ALL REQUIRED OPTIONS PLACED FIRST
     sub.addStringOption((opt) =>
       opt.setName('question').setDescription('The poll question').setRequired(true)
     );
@@ -232,23 +235,17 @@ const data = new SlashCommandBuilder()
     sub.addStringOption((opt) =>
       opt.setName('option2').setDescription('Option 2 (Required)').setRequired(true)
     );
+    sub.addIntegerOption((opt) =>
+      opt
+        .setName('minutes').setDescription('Auto-close the poll after this many minutes').setMinValue(1).setMaxValue(60 * 24 * 7).setRequired(true)
+    );
     
-    // Options 3-10 dynamically added as non-required
+    // 2. ALL OPTIONAL FIELDS APPENDED LAST
     for (let i = 3; i <= MAX_SLASH_OPTIONS; i++) {
       sub.addStringOption((opt) =>
         opt.setName(`option${i}`).setDescription(`Option ${i} (Optional)`).setRequired(false)
       );
     }
-    
-    // Minutes option made strictly required
-    sub.addIntegerOption((opt) =>
-      opt
-        .setName('minutes')
-        .setDescription('Auto-close the poll after this many minutes')
-        .setMinValue(1)
-        .setMaxValue(60 * 24 * 7)
-        .setRequired(true)
-    );
     return sub;
   })
   .addSubcommand((sub) =>
@@ -257,9 +254,7 @@ const data = new SlashCommandBuilder()
       .setDescription('Configure who can create polls in this server (admin only)')
       .addBooleanOption((opt) =>
         opt
-          .setName('allow_members')
-          .setDescription('Should ordinary members be able to create polls?')
-          .setRequired(true)
+          .setName('allow_members').setDescription('Should ordinary members be able to create polls?').setRequired(true)
       )
   );
 // ─────────────────────────────────────────────────────────────
@@ -278,7 +273,7 @@ function parsePrefixCreateArgs(interaction) {
   const minutes = timeMatch ? parseInt(timeMatch[1], 10) : null;
   const withoutFlag = afterCommand.replace(/--time=\d+/i, '').trim();
 
-  const quoted = [...withoutFlag.matchAll(/"([^"]+)"/g)].map((m) => m[1].trim());
+  const quoted = [...withoutFlag.matchAll(/"([^"]+)"/g)].map((m) => m.trim());
   const [question, ...options] = quoted;
 
   return { question: question || null, options, minutes };
@@ -478,7 +473,7 @@ module.exports = {
     }
 
     if (interaction.isStringSelectMenu() && cid.startsWith('poll_vote_select:')) {
-      const messageId = cid.split(':')[1];
+      const messageId = cid.split(':');
       const optionIndex = parseInt(interaction.values[0], 10);
       return castVote(interaction, messageId, optionIndex);
     }
