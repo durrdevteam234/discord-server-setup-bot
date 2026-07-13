@@ -8,6 +8,7 @@ const {
   ButtonBuilder,
   ButtonStyle,
   StringSelectMenuBuilder,
+  ChannelSelectMenuBuilder,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
@@ -361,13 +362,6 @@ async function handleSetup(interaction) {
   }
 
   // Wizard — step 1: pick submission channel
-  const channels = interaction.guild.channels.cache
-    .filter(c => c.type === ChannelType.GuildText)
-    .first(24);
-
-  if (!channels.length)
-    return interaction.reply({ content: '❌ No text channels found.', ephemeral: true });
-
   setupWizard.set(`${interaction.user.id}_${interaction.guildId}`, { step: 1 });
 
   const embed = new EmbedBuilder()
@@ -376,10 +370,10 @@ async function handleSetup(interaction) {
     .setDescription('Select the **channel** where members will submit suggestions.\n\nTip: run `/suggestions setup #channel` to skip this wizard.');
 
   const row = new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
+    new ChannelSelectMenuBuilder()
       .setCustomId('suggestions_wizard_ch')
       .setPlaceholder('Choose the suggestions channel...')
-      .addOptions(channels.map(c => ({ label: `#${c.name}`.slice(0, 90), value: c.id, description: (c.topic || 'Text channel').slice(0, 90) })))
+      .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
   );
 
   return interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
@@ -637,6 +631,36 @@ async function execute(interaction) {
 
 // ─── handleInteraction ───────────────────────────────────────────────────────
 
+// ─── Wizard step 2 → 3 helper (shared by channel-select and skip button) ────
+
+async function advanceToStep3(interaction, key, staffChannelId) {
+  const session = setupWizard.get(key) || {};
+  session.staffChannelId = staffChannelId;
+  session.step = 3;
+  setupWizard.set(key, session);
+
+  const embed = new EmbedBuilder()
+    .setTitle('💡 Suggestions Setup — Step 3 / 4')
+    .setColor('#5865F2')
+    .setDescription(`Submission: <#${session.channelId}>\n${session.staffChannelId ? `Staff: <#${session.staffChannelId}>` : 'Staff: None'}\n\nSet the **per-user cooldown** (how long between submissions).`);
+
+  const row = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('suggestions_wizard_cooldown')
+      .setPlaceholder('Choose a cooldown...')
+      .addOptions([
+        { label: 'No cooldown',   value: '0'    },
+        { label: '5 minutes',     value: '5'    },
+        { label: '15 minutes',    value: '15'   },
+        { label: '30 minutes',    value: '30'   },
+        { label: '1 hour',        value: '60'   },
+        { label: '6 hours',       value: '360'  },
+        { label: '24 hours',      value: '1440' },
+      ])
+  );
+  return interaction.update({ embeds: [embed], components: [row] }).catch(() => null);
+}
+
 async function handleInteraction(interaction) {
   const id  = interaction.customId;
   const key = `${interaction.user.id}_${interaction.guildId}`;
@@ -649,53 +673,32 @@ async function handleInteraction(interaction) {
     session.step      = 2;
     setupWizard.set(key, session);
 
-    const channels = interaction.guild.channels.cache
-      .filter(c => c.type === ChannelType.GuildText)
-      .first(24);
-
     const embed = new EmbedBuilder()
       .setTitle('💡 Suggestions Setup — Step 2 / 4')
       .setColor('#5865F2')
-      .setDescription(`Submission channel: <#${channelId}>\n\nSelect a **staff review channel** where approvals/denials are announced, or choose **Skip**.`);
+      .setDescription(`Submission channel: <#${channelId}>\n\nSelect a **staff review channel** where approvals/denials are announced, or press **Skip**.`);
 
-    const options = [{ label: '⏩ Skip (no staff channel)', value: 'skip' }];
-    for (const c of channels) options.push({ label: `#${c.name}`.slice(0, 90), value: c.id });
-
-    const row = new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
+    const selectRow = new ActionRowBuilder().addComponents(
+      new ChannelSelectMenuBuilder()
         .setCustomId('suggestions_wizard_staff')
-        .setPlaceholder('Choose a staff channel or skip...')
-        .addOptions(options)
+        .setPlaceholder('Choose a staff channel...')
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
     );
-    return interaction.update({ embeds: [embed], components: [row] }).catch(() => null);
+    const skipRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('suggestions_wizard_staff_skip')
+        .setLabel('⏩ Skip (no staff channel)')
+        .setStyle(ButtonStyle.Secondary)
+    );
+    return interaction.update({ embeds: [embed], components: [selectRow, skipRow] }).catch(() => null);
   }
 
   if (id === 'suggestions_wizard_staff') {
-    const session = setupWizard.get(key) || {};
-    session.staffChannelId = interaction.values[0] === 'skip' ? null : interaction.values[0];
-    session.step = 3;
-    setupWizard.set(key, session);
+    return advanceToStep3(interaction, key, interaction.values[0]);
+  }
 
-    const embed = new EmbedBuilder()
-      .setTitle('💡 Suggestions Setup — Step 3 / 4')
-      .setColor('#5865F2')
-      .setDescription(`Submission: <#${session.channelId}>\n${session.staffChannelId ? `Staff: <#${session.staffChannelId}>` : 'Staff: None'}\n\nSet the **per-user cooldown** (how long between submissions).`);
-
-    const row = new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId('suggestions_wizard_cooldown')
-        .setPlaceholder('Choose a cooldown...')
-        .addOptions([
-          { label: 'No cooldown',    value: '0'   },
-          { label: '5 minutes',     value: '5'   },
-          { label: '15 minutes',    value: '15'  },
-          { label: '30 minutes',    value: '30'  },
-          { label: '1 hour',        value: '60'  },
-          { label: '6 hours',       value: '360' },
-          { label: '24 hours',      value: '1440'},
-        ])
-    );
-    return interaction.update({ embeds: [embed], components: [row] }).catch(() => null);
+  if (id === 'suggestions_wizard_staff_skip') {
+    return advanceToStep3(interaction, key, null);
   }
 
   if (id === 'suggestions_wizard_cooldown') {

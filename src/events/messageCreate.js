@@ -211,7 +211,7 @@ module.exports = {
                     'mod-logs-toggle', 'reactionroles', 'autorole', 'automodrule',
                     'ticket', 'verification', 'leaderboard', 'rank', 'analytics', 'clearroles',
                     'selfvoice', 'autoresponder', 'capabilities',
-                    'starboard', 'suggestions', 'giveaway', 'embed', 'birthdays', 'invites',
+                    'starboard', 'suggestions', 'giveaway', 'embed', 'birthdays', 'invites','poll',
                 ];
 
                 if (!coreUtilityCommands.includes(commandName)) {

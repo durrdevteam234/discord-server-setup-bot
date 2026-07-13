@@ -104,6 +104,16 @@ function buildEmbedFromSession(session) {
   return embed;
 }
 
+// Discord rejects embeds with no populated fields at all — this checks every
+// property buildEmbedFromSession actually renders, not just title/description.
+function hasSessionContent(session) {
+  return !!(
+    session.title || session.description || session.imageUrl ||
+    session.thumbnailUrl || session.footer?.text || session.author?.name ||
+    (Array.isArray(session.fields) && session.fields.length > 0)
+  );
+}
+
 function sessionToData(session) {
   return {
     title:        session.title        || null,
@@ -325,7 +335,7 @@ async function handleSend(interaction) {
   const targetChannel = interaction.options.getChannel('channel');
   const session = getSession(interaction.user.id, interaction.guildId);
 
-  if (!session.title && !session.description && !(session.fields?.length)) {
+  if (!hasSessionContent(session)) {
     return interaction.reply({ content: '❌ Your session is empty. Use `/embed create` first.', ephemeral: true }).catch(() => null);
   }
 
@@ -437,7 +447,7 @@ async function handlePreview(interaction) {
   if (!await requireManageMessages(interaction)) return;
   const session = getSession(interaction.user.id, interaction.guildId);
 
-  if (!session.title && !session.description && !(session.fields?.length)) {
+  if (!hasSessionContent(session)) {
     return interaction.reply({ content: '❌ Your session is empty. Use `/embed create` first.', ephemeral: true }).catch(() => null);
   }
 
@@ -461,7 +471,7 @@ async function handleTemplateSave(interaction) {
   const name = interaction.options.getString('name');
   const session = getSession(interaction.user.id, interaction.guildId);
 
-  if (!session.title && !session.description && !(session.fields?.length)) {
+  if (!hasSessionContent(session)) {
     return interaction.reply({ content: '❌ Your session is empty. Nothing to save.', ephemeral: true }).catch(() => null);
   }
 
@@ -567,6 +577,13 @@ async function handleInteraction(interaction) {
     if (authorName)  session.author  = { ...(session.author || {}), name: authorName };
     session._lastActive = Date.now();
 
+    if (!hasSessionContent(session)) {
+      return interaction.reply({
+        content: '❌ Your embed is empty — fill in at least a title, description, or another field before previewing.',
+        ephemeral: true,
+      }).catch(() => null);
+    }
+
     const embed = buildEmbedFromSession(session);
     await interaction.reply({
       content: '**Preview:**',
@@ -615,7 +632,7 @@ async function handleInteraction(interaction) {
     }
 
     const session = getSession(user.id, guildId);
-    if (!session.title && !session.description && !(session.fields?.length)) {
+    if (!hasSessionContent(session)) {
       return interaction.reply({ content: '❌ Your session is empty.', ephemeral: true }).catch(() => null);
     }
 

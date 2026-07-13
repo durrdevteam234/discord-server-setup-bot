@@ -98,6 +98,15 @@ module.exports = {
         }
 
         // ========================================================
+        // I2. POLLS (vote buttons/select + close button)
+        // ========================================================
+        if (cid.startsWith('poll_')) {
+            const cmd = activeClient.commands.get('poll');
+            if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
+            return interaction.deferUpdate().catch(() => null);
+        }
+
+        // ========================================================
         // J. BIRTHDAY WIZARD
         // ========================================================
         if (cid.startsWith('birthday_wizard_')) {
@@ -164,7 +173,7 @@ module.exports = {
             'ticket', 'verification', 'leaderboard', 'rank', 'analytics', 'clearroles',
             'selfvoice', 'autoresponder', 'capabilities',
             // new modules
-            'starboard', 'suggestions', 'giveaway', 'embed', 'birthdays', 'invites',
+            'starboard', 'suggestions', 'giveaway', 'embed', 'birthdays', 'invites', 'poll',
         ];
 
         if (!coreUtilityCommands.includes(commandName.toLowerCase())) {
