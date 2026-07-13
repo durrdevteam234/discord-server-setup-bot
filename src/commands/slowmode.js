@@ -17,12 +17,129 @@ const {
   const SlowmodeSettingsSchema = new Schema({
     channelId: { type: String, required: true, unique: true },
     guildId: { type: String, required: true },
-    slowmodeDuration: { type: Number, required: true }, // in seconds
-    enforcedBy: { type: String, required: true },       // staff user ID
+    slowmodeDuration: { type: Number, required: true }, 
+    enforcedBy: { type: String, required: true },       
     createdAt: { type: Date, default: Date.now }
   });
   
   const SlowmodeSettings = models.SlowmodeSettings || model('SlowmodeSettings', SlowmodeSettingsSchema);
+  
+  // ─────────────────────────────────────────────────────────────
+  // Slash Command Definition
+  // ─────────────────────────────────────────────────────────────
+  
+  const data = new SlashCommandBuilder()
+    .setName('slowmode')
+    .setDescription('Manage channel slowmode intervals')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages | PermissionFlagsBits.ManageChannels | PermissionFlagsBits.Administrator)
+    .setDMPermission(false)
+    .addSubcommand((sub) =>
+      sub
+        .setName('create')
+        .setDescription('Establish a slowmode restriction on a channel')
+        .addIntegerOption((opt) =>
+          opt
+            .setName('seconds')
+            .setDescription('Cooldown duration in seconds')
+            .setRequired(true)
+            .setMinValue(1)
+            .setMaxValue(MAX_SLOWMODE_SECONDS)
+        )
+        .addChannelOption((opt) =>
+          opt
+            .setName('channel')
+            .setDescription('The channel to restrict (defaults to current)')
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+            .setRequired(false)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('edit')
+        .setDescription('Modify an existing channel slowmode interval')
+        .addIntegerOption((opt) =>
+          opt
+            .setName('seconds')
+            .setDescription('New cooldown duration in seconds')
+            .setRequired(true)
+            .setMinValue(1)
+            .setMaxValue(MAX_SLOWMODE_SECONDS)
+        )
+        .addChannelOption((opt) =>
+          opt
+            .setName('channel')
+            .setDescription('The channel to edit (defaults to current)')
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+            .setRequired(false)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('remove')
+        .setDescription('Completely remove slowmode restrictions from a channel')
+        .addChannelOption((opt) =>
+          opt
+            .setName('channel')
+            .setDescription('The channel to clear (defaults to current)')
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+            .setRequired(false)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('exempt')
+        .setDescription('Audit who bypasses the slowmode rule inside a channel')
+        .addChannelOption((opt) =>
+          opt
+            .setName('channel')
+            .setDescription('The channel to evaluate (defaults to current)')
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+            .setRequired(false)
+        )
+    );
+  
+  // ─────────────────────────────────────────────────────────────
+  // Compatibility Parsing Helpers
+  // ─────────────────────────────────────────────────────────────
+  
+  function isPrefixMode(interaction) {
+    return typeof interaction.isChatInputCommand === 'function' && interaction.isChatInputCommand() === false;
+  }
+  
+  function parsePrefixArgs(interaction) {
+    const raw = String(interaction.content || '');
+    const tokens = raw.trim().split(/\s+/);
+    
+    const sub = tokens[1] ? tokens[1].toLowerCase() : null;
+    
+    let seconds = null;
+    let targetChannel = interaction.channel;
+  
+    for (let i = 2; i < tokens.length; i++) {
+      const val = parseInt(tokens[i], 10);
+      if (!isNaN(val)) {
+        seconds = val;
+        break;
+      }
+    }
+  
+    if (interaction.mentions?.channels?.size > 0) {
+      targetChannel = interaction.mentions.channels.first();
+    }
+  
+    return { sub, seconds, targetChannel };
+  }
+  
+  async function verifyPermissions(interaction) {
+    const member = interaction.member;
+    if (!member) return false;
+  
+    return (
+      member.permissions.has(PermissionFlagsBits.ManageMessages) ||
+      member.permissions.has(PermissionFlagsBits.ManageChannels) ||
+      member.permissions.has(PermissionFlagsBits.Administrator)
+    );
+  }
 // ─────────────────────────────────────────────────────────────
 // Subcommand Handlers
 // ─────────────────────────────────────────────────────────────
