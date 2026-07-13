@@ -18,7 +18,7 @@ module.exports = {
             const prefix = client?.prefix || '|';
 
             // ==========================================
-            // 🛡️ BACKGROUND AUTOMOD CRITERIA MESSAGE SCANNER (FULL 20-PARAM EXECUTOR)
+            // 🛡️ BACKGROUND AUTOMOD CRITERIA MESSAGE SCANNER
             // ==========================================
             try {
                 const AutoModModel = mongoose.models.AutoModRule;
@@ -211,9 +211,9 @@ module.exports = {
                     'mod-logs-toggle', 'reactionroles', 'autorole', 'automodrule',
                     'ticket', 'verification', 'leaderboard', 'rank', 'analytics', 'clearroles',
                     'selfvoice', 'autoresponder', 'capabilities',
-                    'starboard', 'suggestions', 'giveaway', 'embed', 'birthdays', 'invites','poll',
+                    'starboard', 'suggestions', 'giveaway', 'embed', 'birthdays', 'invites', 'poll',
+                    'slowmode', 'purge', 'lockdown', 'automessage', 'autodelete'
                 ];
-
                 if (!coreUtilityCommands.includes(commandName)) {
                     if (
                         currentGuildSettings.funModule === 'disabled' ||
@@ -255,16 +255,6 @@ module.exports = {
                     const resolvedTargetMember = message.mentions.members.first() || message.member;
                     let activeBotResponse = null;
 
-                    // ============================================================
-                    // ENHANCED MOCK INTERACTION
-                    // - getSubcommand() returns first arg string (not whole array)
-                    // - Exposes both `user` (slash-compat) and `author` (message-compat)
-                    // - Exposes `content` so prefix commands can parse subcommands
-                    // - Adds getNumber, getBoolean, getFocused, showModal, fetchReply
-                    // - Adds isButton/isStringSelectMenu/isModalSubmit/isChatInputCommand/isRepliable
-                    // - Strips flags/ephemeral/fetchReply from reply payloads
-                    // - Blends mention-based resolution for user/member/channel/role
-                    // ============================================================
                     const mockInteraction = {
                         id: message.id,
                         commandName: commandName,
@@ -286,7 +276,10 @@ module.exports = {
                                     name === 'subcommand' ||
                                     name === 'status' ||
                                     name === 'role' ||
-                                    name === 'channel'
+                                    name === 'channel' ||
+                                    name === 'keyword' ||
+                                    name === 'text' ||
+                                    name === 'id'
                                 ) {
                                     return rawArgsString.length > 0 ? rawArgsString : null;
                                 }
@@ -375,7 +368,6 @@ module.exports = {
                                 const { flags: _f, ephemeral: _e, fetchReply: _fr, ...rest } = options || {};
                                 return activeBotResponse.edit(rest).catch(() => null);
                             }
-                            // fall back to a fresh reply if nothing was sent yet
                             if (typeof options === 'string') {
                                 activeBotResponse = await message.reply({ content: options }).catch(() => null);
                             } else {
@@ -456,13 +448,13 @@ module.exports = {
             if (!levelsData[guildId][message.author.id]) {
                 levelsData[guildId][message.author.id] = { xp: 0, level: 0 };
             }
-
             const userProfile = levelsData[guildId][message.author.id];
-            // XP per message: 5-10 (was 15-25) — smaller per-message gain
+            
+            // XP per message: 5-10 — smaller per-message gain
             const xpGained = Math.floor(Math.random() * 6) + 5;
             userProfile.xp += xpGained;
-            // XP needed scales more steeply: 300 per level (was 100)
-            // Level 1 = 300 XP (~30-60 messages), Level 2 = 600 XP, Level 3 = 900 XP, ...
+            
+            // XP needed scales more steeply: 300 per level
             const xpNeeded = (userProfile.level + 1) * 300;
 
             if (userProfile.xp >= xpNeeded) {
@@ -512,6 +504,18 @@ module.exports = {
             }
 
             await db.writeData('levels.json', levelsData);
+
+            // ==========================================
+            // 🔄 BACKGROUND AUTOMATION INTEGRATION LOOPS
+            // ==========================================
+            try {
+                const autoDeleteModule = client.commands.get('autodelete') || require('./commands/moderation/autodelete.js');
+                if (autoDeleteModule && typeof autoDeleteModule.trackAndQueueDeletion === 'function') {
+                    await autoDeleteModule.trackAndQueueDeletion(message);
+                }
+            } catch (automationErr) {
+                console.error('[Automation Background Integration Loop Error]:', automationErr.message);
+            }
 
         } catch (globalError) {
             console.error('XP Global Catch Error:', globalError);

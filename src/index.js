@@ -165,7 +165,7 @@ client.once('ready', async () => {
             { text: 'hide and seek with rule breakers', type: ActivityType.Playing },
             { text: 'to the tickets rolling in', type: ActivityType.Listening },
             { text: 'r/wallstreetbets but for XP', type: ActivityType.Watching },
-            { text: '| use /setup, I dare you', type: ActivityType.Competing },
+            { text: 'use /setup, I dare you', type: ActivityType.Competing },
             { text: 'imaginary friend to lonely servers', type: ActivityType.Playing },
         ];
     };
