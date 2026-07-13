@@ -60,6 +60,16 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
+// Safely retrieve a modal text input — returns null when the field is absent
+// or empty instead of throwing like getTextInputValue does.
+function getField(interaction, id) {
+  try {
+    return interaction.fields.getTextInputValue(id) || null;
+  } catch {
+    return null;
+  }
+}
+
 function parseHex(raw) {
   if (!raw) return null;
   const cleaned = raw.trim().replace(/^#/, '');
@@ -560,11 +570,11 @@ async function handleInteraction(interaction) {
   const { customId, user, guildId } = interaction;
 
   if (customId === 'embed_modal_create') {
-    const title       = interaction.fields.getTextInputValue('embed_title')       || null;
-    const description = interaction.fields.getTextInputValue('embed_description') || null;
-    const colorRaw    = interaction.fields.getTextInputValue('embed_color')       || null;
-    const footerText  = interaction.fields.getTextInputValue('embed_footer')      || null;
-    const authorName  = interaction.fields.getTextInputValue('embed_author')      || null;
+    const title       = getField(interaction, 'embed_title');
+    const description = getField(interaction, 'embed_description');
+    const colorRaw    = getField(interaction, 'embed_color');
+    const footerText  = getField(interaction, 'embed_footer');
+    const authorName  = getField(interaction, 'embed_author');
 
     const session = getSession(user.id, guildId);
     if (title)       session.title       = title;
@@ -595,10 +605,14 @@ async function handleInteraction(interaction) {
   }
 
   if (customId === 'embed_modal_field_add') {
-    const name    = interaction.fields.getTextInputValue('field_name');
-    const value   = interaction.fields.getTextInputValue('field_value');
-    const inlineRaw = interaction.fields.getTextInputValue('field_inline') || '';
+    const name    = getField(interaction, 'field_name');
+    const value   = getField(interaction, 'field_value');
+    const inlineRaw = getField(interaction, 'field_inline') || '';
     const inline  = inlineRaw.trim().toLowerCase() === 'yes';
+
+    if (!name || !value) {
+      return interaction.reply({ content: '❌ Field name and value are required.', ephemeral: true }).catch(() => null);
+    }
 
     const session = getSession(user.id, guildId);
     if (!Array.isArray(session.fields)) session.fields = [];
@@ -623,8 +637,11 @@ async function handleInteraction(interaction) {
   }
 
   if (customId === 'embed_modal_send_confirm') {
-    const raw = interaction.fields.getTextInputValue('send_channel').trim();
-    const channelId = raw.replace(/[<#>]/g, '');
+    const raw = getField(interaction, 'send_channel');
+    if (!raw) {
+      return interaction.reply({ content: '❌ Channel is required.', ephemeral: true }).catch(() => null);
+    }
+    const channelId = raw.trim().replace(/[<#>]/g, '');
 
     const targetChannel = await interaction.client.channels.fetch(channelId).catch(() => null);
     if (!targetChannel?.isTextBased()) {
