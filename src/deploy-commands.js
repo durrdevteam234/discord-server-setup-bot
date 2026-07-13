@@ -36,6 +36,9 @@ if (!TOKEN || !CLIENT_ID) {
 const commands = [];
 const commandsPath = path.join(__dirname, 'commands');
 
+// 📊 Conflict Validation Tracking Map
+const loadedCommandNames = new Map(); 
+
 if (fs.existsSync(commandsPath)) {
     // Read all JavaScript files inside the commands folder
     const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
@@ -55,8 +58,25 @@ if (fs.existsSync(commandsPath)) {
                                  typeof command?.executeSlash === 'function';
     
         if (command?.data?.toJSON && hasValidExecutor) {
+            const internalName = command.data.name;
+
+            // 🔍 Conflict Check: Verify if another file already registered this exact slash command name
+            if (loadedCommandNames.has(internalName)) {
+                console.error('\n' + '='.repeat(50));
+                console.error(`🚨 [DUPLICATE DETECTED] Conflict found in your registry mapping arrays!`);
+                console.error(`• Conflict Slash Trigger: "/${internalName}"`);
+                console.error(`• Existing Loaded File:  "${loadedCommandNames.get(internalName)}"`);
+                console.error(`• New Conflicting File:  "${file}"`);
+                console.error('='.repeat(50) + '\n');
+                console.error("❌ DEPLOYMENT HALTED: Fix the internal duplicated .setName() property or rename the file before reloading.");
+                process.exit(1);
+            }
+
+            // Track this unique payload map slot string handle reference
+            loadedCommandNames.set(internalName, file);
+
             commands.push(command.data.toJSON());
-            console.log(`Loaded command: /${command.data.name}`);
+            console.log(`Loaded command: /${internalName} (from ${file})`);
         } else {
             console.log(`[WARNING] The command at ${file} was skipped. (Ensure it has a valid SlashCommandBuilder setup)`);
         }
