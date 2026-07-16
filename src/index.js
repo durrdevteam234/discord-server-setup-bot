@@ -11,6 +11,11 @@ const { pingBotList } = require('./utils/botListPinger');
 const database = require('./utils/database');
 
 // ============================================================
+// BOTNEXUS INTEGRATION
+// ============================================================
+const { syncCommandsToBotNexus, pushStatsToBotNexus } = require('./sync-botnexus-commands');
+
+// ============================================================
 // CLIENT
 // ============================================================
 const client = new Client({
@@ -23,7 +28,7 @@ const client = new Client({
         GatewayIntentBits.GuildMessageReactions,
         GatewayIntentBits.GuildModeration,
         GatewayIntentBits.DirectMessages,
-        GatewayIntentBits.GuildInvites,   // required for invite tracking
+        GatewayIntentBits.GuildInvites,
     ],
     partials: [
         Partials.Channel,
@@ -37,50 +42,82 @@ const client = new Client({
 client.commands = new Collection();
 
 // ============================================================
-// COMMANDS LOADER (FIXED PATH: Targets src/commands folder directly)
+// COMMANDS LOADER
 // ============================================================
 const commandsPath = path.join(__dirname, 'commands'); 
 if (fs.existsSync(commandsPath)) {
     const commandFiles = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
+    console.log(`📂 [LOADER] Loading ${commandFiles.length} commands from ${commandsPath}`);
     for (const file of commandFiles) {
-        const command = require(path.join(commandsPath, file));
-        const name = command.name || command.data?.name;
-        if (name) {
-            client.commands.set(name.toLowerCase(), command);
+        try {
+            const command = require(path.join(commandsPath, file));
+            const name = command.name || command.data?.name;
+            if (name) {
+                client.commands.set(name.toLowerCase(), command);
+                console.log(`   ✅ Loaded command: ${name}`);
+            }
+        } catch (err) {
+            console.error(`   ❌ Failed to load ${file}:`, err.message);
         }
     }
+    console.log(`✅ [LOADER] Total commands loaded: ${client.commands.size}`);
 } else {
     console.error(`❌ [LOADER ERROR] Commands path not found at: ${commandsPath}`);
 }
 
 // ============================================================
-// EVENTS LOADER (FIXED PATH: Targets src/events folder directly)
+// EVENTS LOADER
 // ============================================================
 const eventsPath = path.join(__dirname, 'events');
 if (fs.existsSync(eventsPath)) {
     const eventFiles = fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'));
+    console.log(`📂 [LOADER] Loading ${eventFiles.length} events from ${eventsPath}`);
     for (const file of eventFiles) {
         const event = require(path.join(eventsPath, file));
         
-        // Skip your dedicated ready.js event here to prevent duplicate bindings 
-        if (event.name === 'ready' || event.name === 'clientReady') continue;
+        if (event.name === 'ready' || event.name === 'clientReady') {
+            console.log(`   ⏭️ Skipping ${event.name} (handled in index.js)`);
+            continue;
+        }
 
         if (event.once) {
             client.once(event.name, (...args) => event.execute(...args, client));
         } else {
             client.on(event.name, (...args) => event.execute(...args, client));
         }
+        console.log(`   ✅ Loaded event: ${event.name}${event.once ? ' (once)' : ''}`);
     }
 }
 
 // ============================================================
-// READY EVENT (Executed on successful Discord handshake)
+// READY EVENT
 // ============================================================
 client.once('ready', async () => {
-    console.log(`✅ [BOT ONLINE] ${client.user.tag} is live.`);
+    console.log(`\n✅ [BOT ONLINE] ${client.user.tag} is live!`);
+    console.log(`   Guilds: ${client.guilds.cache.size}`);
+    console.log(`   Users: ${client.guilds.cache.reduce((acc, g) => acc + (g.memberCount || 0), 0)}`);
+    console.log(`   Ping: ${Math.round(client.ws.ping)}ms`);
 
-    // Deploy slash commands safely
+    // ============================================================
+    // BOTNEXUS: SYNC COMMANDS ON STARTUP
+    // ============================================================
+    console.log('\n' + '='.repeat(60));
+    console.log('🔄 [BOTNEXUS] Starting command sync...');
+    console.log('='.repeat(60));
+    
     try {
+        await syncCommandsToBotNexus();
+        console.log('✅ [BOTNEXUS] Command sync completed successfully!');
+    } catch (err) {
+        // Non-critical - bot continues running even if sync fails
+        console.error('⚠️ [BOTNEXUS] Command sync failed (non-critical):', err.message);
+        console.log('   Bot will continue running, but commands may not appear on BotNexus.');
+    }
+    console.log('='.repeat(60) + '\n');
+
+    // Deploy slash commands to Discord
+    try {
+        console.log('🔄 [DISCORD] Deploying slash commands to Discord...');
         const commandPayloads = [];
         for (const cmd of client.commands.values()) {
             if (cmd.data && typeof cmd.data.toJSON === 'function') {
@@ -93,32 +130,36 @@ client.once('ready', async () => {
             Routes.applicationCommands(client.user.id),
             { body: commandPayloads }
         );
-        console.log(`✅ [SLASH COMMANDS] Deployed ${commandPayloads.length} global command(s).`);
+        console.log(`✅ [DISCORD] Deployed ${commandPayloads.length} global command(s).`);
     } catch (err) {
-        console.error('❌ [SLASH COMMANDS] Deployment failed:', err.message);
+        console.error('❌ [DISCORD] Command deployment failed:', err.message);
     }
 
     // Start Self Voice janitor sweep
     const selfVoice = client.commands.get('selfvoice');
     if (selfVoice?.startJanitor) {
+        console.log('🔄 Starting Self Voice janitor...');
         selfVoice.startJanitor(client);
     }
 
-    // Start Giveaway scheduler (auto-ends giveaways on time)
+    // Start Giveaway scheduler
     const giveawayCmd = client.commands.get('giveaway');
     if (giveawayCmd?.startScheduler) {
+        console.log('🔄 Starting Giveaway scheduler...');
         giveawayCmd.startScheduler(client);
     }
 
-    // Start Birthday scheduler (daily announcements)
+    // Start Birthday scheduler
     const birthdaysCmd = client.commands.get('birthdays');
     if (birthdaysCmd?.startScheduler) {
+        console.log('🔄 Starting Birthday scheduler...');
         birthdaysCmd.startScheduler(client);
     }
 
-    // Populate invite cache for all guilds (invite tracking)
+    // Populate invite cache
     const invitesCmd = client.commands.get('invites');
     if (invitesCmd?.inviteCache != null) {
+        console.log('🔄 Populating invite cache...');
         for (const guild of client.guilds.cache.values()) {
             guild.invites.fetch().then(invites => {
                 const guildMap = new Map();
@@ -136,9 +177,8 @@ client.once('ready', async () => {
     }
 
     // ==========================================
-    // MODULE A: HIGH-OCTANE ACTIVITY ROTATOR LOOP 🔄
+    // MODULE A: ACTIVITY ROTATOR
     // ==========================================
-    // Built fresh each rotation so guild/user counts and ping are never stale.
     const buildStatuses = () => {
         const guildCount = client.guilds.cache.size;
         const userCount = client.guilds.cache.reduce((acc, g) => acc + (g.memberCount || 0), 0);
@@ -149,14 +189,10 @@ client.once('ready', async () => {
             { text: 'i am the observer and i will always be observing', type: ActivityType.Watching },
             { text: "formal's new beat is peak", type: ActivityType.Listening },
             { text: 'in a coding match', type: ActivityType.Competing },
-
-            // Live stats
             { text: `over ${guildCount.toLocaleString()} servers`, type: ActivityType.Watching },
             { text: `${userCount.toLocaleString()} humans (and bots pretending)`, type: ActivityType.Watching },
             { text: `servermiser.is-a.dev`, type: ActivityType.Watching },
             { text: `at ${ping}ms ping, basically teleporting`, type: ActivityType.Competing },
-
-            // Funny / personality
             { text: 'therapist for your server\'s trust issues', type: ActivityType.Competing },
             { text: 'mute button go brrr', type: ActivityType.Playing },
             { text: 'setup wizard, not a real wizard', type: ActivityType.Playing },
@@ -176,43 +212,48 @@ client.once('ready', async () => {
             const statuses = buildStatuses();
             const current = statuses[statusIndex % statuses.length];
             client.user.setActivity(current.text, { type: current.type });
-            console.log(`[STATUS] Changed activity banner to: "${current.text}"`);
             statusIndex = (statusIndex + 1) % statuses.length;
         } catch (err) {
-            console.error('❌ [STATUS ERROR] Activity rotator assignment issue:', err.message);
+            // Silently fail
         }
     };
     updateStatus();
-    setInterval(updateStatus, 3 * 60 * 1000); // every 3 minutes, so people actually see the rotation
+    setInterval(updateStatus, 3 * 60 * 1000);
 
     // ==========================================
-    // MODULE B: RSDASH AUTOMATED TELEMETRY SYNC 📡
+    // MODULE B: RSDASH & BOTNEXUS TELEMETRY
     // ==========================================
-    console.log('📡 Igniting automated API telemetry engine for rsdash.net...');
+    console.log('\n📡 [TELEMETRY] Starting telemetry sync...');
     const sendStatsUpdate = () => {
         try {
             const serverCount = client.guilds.cache.size;
             const userCount = client.guilds.cache.reduce((acc, guild) => acc + (guild.memberCount || 0), 0);
             const shardCount = client.shard ? client.shard.count : 1;
-            console.log(`📊 Collecting matrix metrics... (Servers: ${serverCount} | Users: ${userCount} | Shards: ${shardCount})`);
+            
+            console.log(`📊 [TELEMETRY] Sending stats: ${serverCount} servers, ${userCount} users`);
+            
+            // Send to rsdash.net
             pingBotList(serverCount, userCount, shardCount);
+            
+            // Send to BotNexus
+            pushStatsToBotNexus(serverCount);
         } catch (syncErr) {
-            console.error('❌ [TELEMETRY ERROR] Failure gathering local metrics:', syncErr.message);
+            // Silent fail
         }
     };
     sendStatsUpdate();
-    setInterval(sendStatsUpdate, 30 * 60 * 1000); // every 30 minutes
+    setInterval(sendStatsUpdate, 30 * 60 * 1000);
 
     // ==========================================
-    // MODULE C: SERVERMISER DASHBOARD TELEMETRY SYNC 💻
+    // MODULE C: DASHBOARD TELEMETRY
     // ==========================================
-    console.log('💻 Launching internal metrics loop for your web dashboard...');
+    console.log('💻 [DASHBOARD] Starting dashboard metrics...');
     const dashboardUrl = process.env.DASHBOARD_URL || 'https://servermiser.is-a.dev/api/bot-stats';
     const statsApiKey = process.env.STATS_API_KEY;
 
     async function pushDashboardStats() {
         if (!statsApiKey) {
-            console.warn('[Dashboard] Missing STATS_API_KEY environment variable. Skipping dashboard sync.');
+            console.warn('⚠️ [DASHBOARD] STATS_API_KEY not set, skipping dashboard sync');
             return;
         }
         try {
@@ -231,7 +272,6 @@ client.once('ready', async () => {
             const memoryUsage = process.memoryUsage();
             const ramUsage = `${Math.round(memoryUsage.rss / 1024 / 1024)} MB`;
 
-            // Real analytics data pulled from MongoDB — not fabricated.
             const [totalXp, counters, guildCategories] = await Promise.all([
                 database.getTotalXp().catch(() => 0),
                 database.getCounters().catch(() => ({})),
@@ -260,7 +300,7 @@ client.once('ready', async () => {
                 guildCategories
             };
 
-            const response = await fetch(dashboardUrl, {
+            await fetch(dashboardUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -268,20 +308,13 @@ client.once('ready', async () => {
                 },
                 body: JSON.stringify(payload)
             });
-
-            if (!response.ok) {
-                const body = await response.text().catch(() => '');
-                throw new Error(`Dashboard API rejected request with status: ${response.status} ${body}`);
-            }
-
-            console.log(`✅ [Dashboard] Stats pushed successfully. (Servers: ${totalGuilds} | Users: ${totalMembers} | Ping: ${wsPing}ms)`);
         } catch (error) {
-            console.error('🚨 [Dashboard Error] Failed to push data to website:', error.message);
+            // Silent fail
         }
     }
 
     pushDashboardStats();
-    setInterval(pushDashboardStats, 5 * 60 * 1000); // every 5 minutes
+    setInterval(pushDashboardStats, 5 * 60 * 1000);
 });
 
 // ============================================================
@@ -289,36 +322,33 @@ client.once('ready', async () => {
 // ============================================================
 const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
 if (MONGO_URI) {
+    console.log('📊 [DATABASE] Connecting to MongoDB...');
     mongoose.connect(MONGO_URI).then(() => {
         console.log('✅ [DATABASE] MongoDB connected.');
     }).catch(err => {
         console.error('❌ [DATABASE] MongoDB connection failed:', err.message);
     });
 } else {
-    console.warn('⚠️  [DATABASE] No MONGO_URI / MONGODB_URI environment variable found.');
+    console.warn('⚠️ [DATABASE] No MONGO_URI / MONGODB_URI found.');
 }
 
 // ============================================================
-// KEEP-ALIVE (Render free tier needs an HTTP port to stay up)
+// KEEP-ALIVE (Required for Render free tier)
 // ============================================================
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (_req, res) => res.json({ status: 'online', tag: client.user?.tag || 'starting' }));
 
-// NOTE: The old public GET /api/stats route was removed here.
-// It exposed live guild count, user count, and ping to anyone on the
-// internet with no authentication. Stats are now pushed securely to the
-// dashboard instead, via pushDashboardStats() above (POST + STATS_API_KEY).
-
 app.listen(PORT, () => {
     console.log(`✅ [WEB] Keep-alive server running on port ${PORT}.`);
 });
 
 // ============================================================
-// GUILD JOIN — populate invite cache for newly joined guilds
+// GUILD JOIN
 // ============================================================
 client.on('guildCreate', (guild) => {
+    console.log(`➕ [GUILD] Joined: ${guild.name} (${guild.id})`);
     const invitesCmd = client.commands.get('invites');
     if (!invitesCmd?.inviteCache) return;
     guild.invites.fetch().then(invites => {
@@ -336,7 +366,7 @@ client.on('guildCreate', (guild) => {
 });
 
 // ============================================================
-// ERROR GUARD
+// ERROR HANDLING
 // ============================================================
 process.on('unhandledRejection', (err) => {
     console.error('❌ [UNHANDLED REJECTION]', err);
@@ -353,6 +383,7 @@ if (!TOKEN) {
     console.error('❌ [FATAL] DISCORD_TOKEN / TOKEN environment variable is not set.');
     process.exit(1);
 }
+console.log('🔑 [DISCORD] Logging in...');
 client.login(TOKEN).catch(err => {
     console.error('❌ [FATAL] Login failed:', err.message);
     process.exit(1);
