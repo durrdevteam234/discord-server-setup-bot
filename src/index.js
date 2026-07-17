@@ -185,6 +185,10 @@ client.once('ready', async () => {
         const ping = Math.max(0, Math.round(client.ws.ping));
 
         return [
+            { text: 'how can a server with 30 memebers have 239 cases.', type: ActivityType.Streaming},
+            { text: 'yo uh, why is the moon blue..', type: ActivityType.Watching},
+            { text: 'psst, hey you want some candy..', type: ActivityType.Listening},
+            { text: 'your chats are so stupid man.', type: ActivityType.Watching},
             { text: '|help for noobs.', type: ActivityType.Playing },
             { text: 'i am the observer and i will always be observing', type: ActivityType.Watching },
             { text: "formal's new beat is peak", type: ActivityType.Listening },
