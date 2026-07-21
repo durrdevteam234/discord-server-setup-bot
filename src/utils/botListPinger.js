@@ -4,7 +4,7 @@ const https = require('https');
  * Pings the BotNexus (rsdash) API with the owner's exact specifications!
  */
 async function pingBotList(serverCount, userCount, shardCount) {
-    const botId = '5130a2c5-63f8-4cdc-9c77-797ba44c39f7'; 
+    const botId = 'BN-5130A2C5'; 
     const apiKey = process.env.BOT_LIST_API_KEY;
 
     if (!apiKey) {
