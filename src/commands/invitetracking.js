@@ -1,37 +1,24 @@
-const {
-  SlashCommandBuilder,
-  PermissionFlagsBits,
-  EmbedBuilder,
-  ActionRowBuilder,
-  StringSelectMenuBuilder,
-  ChannelType,
-} = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ChannelType } = require('discord.js');
 const mongoose = require('mongoose');
 
-const inviteWizard = new Map();
-
-// ─── Schemas ─────────────────────────────────────────────────────────────────
-
-const InviteConfigSchema = new mongoose.Schema({
+const inviteConfigSchema = new mongoose.Schema({
   guildId: { type: String, unique: true, required: true },
   channelId: { type: String, default: null },
   enabled: { type: Boolean, default: true },
   fakeThreshold: { type: Number, default: 7 },
 });
 
-const InviteRecordSchema = new mongoose.Schema({
+const inviteRecordSchema = new mongoose.Schema({
   guildId: { type: String, required: true },
   inviterId: { type: String, required: true },
-  inviteCode: { type: String, default: null },
   joins: { type: Number, default: 0 },
   leaves: { type: Number, default: 0 },
   fake: { type: Number, default: 0 },
   bonusInvites: { type: Number, default: 0 },
 });
+inviteRecordSchema.index({ guildId: 1, inviterId: 1 }, { unique: true });
 
-InviteRecordSchema.index({ guildId: 1, inviterId: 1 }, { unique: true });
-
-const InviteJoinSchema = new mongoose.Schema({
+const inviteJoinSchema = new mongoose.Schema({
   guildId: { type: String, required: true },
   userId: { type: String, required: true },
   inviterId: { type: String, default: null },
@@ -41,38 +28,15 @@ const InviteJoinSchema = new mongoose.Schema({
   isFake: { type: Boolean, default: false },
 });
 
-const InviteConfig =
-  mongoose.models.InviteConfig || mongoose.model('InviteConfig', InviteConfigSchema);
-const InviteRecord =
-  mongoose.models.InviteRecord || mongoose.model('InviteRecord', InviteRecordSchema);
-const InviteJoin =
-  mongoose.models.InviteJoin || mongoose.model('InviteJoin', InviteJoinSchema);
-
-// ─── Invite Cache ─────────────────────────────────────────────────────────────
-// Map<guildId, Map<inviteCode, { uses, inviterId, maxUses, expiresAt }>>
+const InviteConfig = mongoose.models.InviteConfig || mongoose.model('InviteConfig', inviteConfigSchema);
+const InviteRecord = mongoose.models.InviteRecord || mongoose.model('InviteRecord', inviteRecordSchema);
+const InviteJoin = mongoose.models.InviteJoin || mongoose.model('InviteJoin', inviteJoinSchema);
 
 const inviteCache = new Map();
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+const inviteWizard = new Map();
 
 function netInvites(record) {
   return (record.joins || 0) - (record.leaves || 0) - (record.fake || 0) + (record.bonusInvites || 0);
-}
-
-async function refreshCacheForGuild(guild) {
-  const invites = await guild.invites.fetch().catch(() => null);
-  if (!invites) return;
-
-  const guildMap = new Map();
-  for (const invite of invites.values()) {
-    guildMap.set(invite.code, {
-      uses: invite.uses ?? 0,
-      inviterId: invite.inviter?.id ?? null,
-      maxUses: invite.maxUses ?? 0,
-      expiresAt: invite.expiresAt ?? null,
-    });
-  }
-  inviteCache.set(guild.id, guildMap);
 }
 
 async function postLogEmbed(guild, channelId, embed) {
@@ -82,7 +46,6 @@ async function postLogEmbed(guild, channelId, embed) {
   await channel.send({ embeds: [embed] }).catch(() => null);
 }
 
-// Safely edit a deferred reply — falls back to followUp if needed.
 async function safeEditReply(interaction, payload) {
   try {
     if (interaction.deferred || interaction.replied) {
@@ -90,11 +53,11 @@ async function safeEditReply(interaction, payload) {
     }
     return await interaction.reply(payload);
   } catch {
-    try { await interaction.followUp(payload).catch(() => null); } catch {}
+    try {
+      await interaction.followUp(payload).catch(() => null);
+    } catch {}
   }
 }
-
-// ─── Event Handlers ──────────────────────────────────────────────────────────
 
 async function handleMemberJoin(member, client) {
   const { guild } = member;
@@ -122,7 +85,6 @@ async function handleMemberJoin(member, client) {
     }
   }
 
-  // Update cache
   const newGuildMap = new Map();
   for (const invite of freshInvites.values()) {
     newGuildMap.set(invite.code, {
@@ -141,13 +103,7 @@ async function handleMemberJoin(member, client) {
   if (inviterId) {
     await InviteRecord.findOneAndUpdate(
       { guildId: guild.id, inviterId },
-      {
-        $inc: {
-          joins: 1,
-          fake: isFake ? 1 : 0,
-        },
-        $set: { inviteCode: usedCode },
-      },
+      { $inc: { joins: 1, fake: isFake ? 1 : 0 }, $set: { inviteCode: usedCode } },
       { upsert: true, new: true }
     ).catch(() => null);
   }
@@ -162,7 +118,6 @@ async function handleMemberJoin(member, client) {
 
   const inviterMention = inviterId ? `<@${inviterId}>` : 'Unknown';
   const codeStr = usedCode ?? 'Unknown';
-
   const usedInvite = usedCode ? newGuildMap.get(usedCode) : null;
   const totalUses = usedInvite ? usedInvite.uses : '?';
 
@@ -199,7 +154,7 @@ async function handleMemberLeave(member, client) {
   }
 
   const inviterMention = joinRecord?.inviterId ? `<@${joinRecord.inviterId}>` : 'Unknown';
-
+  
   const embed = new EmbedBuilder()
     .setColor(0x99aab5)
     .setTitle('👋 Member Left')
@@ -213,7 +168,7 @@ async function handleMemberLeave(member, client) {
 function handleInviteCreate(invite) {
   const { guild, code, inviter, uses, maxUses, expiresAt } = invite;
   if (!guild) return;
-
+  
   if (!inviteCache.has(guild.id)) inviteCache.set(guild.id, new Map());
   inviteCache.get(guild.id).set(code, {
     uses: uses ?? 0,
@@ -229,98 +184,54 @@ function handleInviteDelete(invite) {
   inviteCache.get(guild.id)?.delete(code);
 }
 
-// ─── Command Definition ───────────────────────────────────────────────────────
-
 const data = new SlashCommandBuilder()
   .setName('invites')
-  .setDescription('Invite tracking')
-  // check
-  .addSubcommand((sub) =>
-    sub
-      .setName('check')
-      .setDescription('Check invite stats for a user')
-      .addUserOption((o) =>
-        o.setName('user').setDescription('User to check (defaults to yourself)').setRequired(false)
-      )
+  .setDescription('Advanced invite tracking system')
+  .addSubcommand((sub) => sub
+    .setName('check')
+    .setDescription('Check invite stats for a user')
+    .addUserOption((o) => o.setName('user').setDescription('User to check (defaults to yourself)').setRequired(false))
   )
-  // leaderboard
-  .addSubcommand((sub) =>
-    sub.setName('leaderboard').setDescription('Top 10 inviters by net invites')
+  .addSubcommand((sub) => sub.setName('leaderboard').setDescription('Top 10 inviters by net invites'))
+  .addSubcommand((sub) => sub
+    .setName('reset')
+    .setDescription('Reset invite counts (staff only)')
+    .addUserOption((o) => o.setName('user').setDescription('User to reset (omit to reset all)').setRequired(false))
   )
-  // reset
-  .addSubcommand((sub) =>
-    sub
-      .setName('reset')
-      .setDescription('Reset invite counts (staff only)')
-      .addUserOption((o) =>
-        o.setName('user').setDescription('User to reset (omit to reset all)').setRequired(false)
-      )
+  .addSubcommand((sub) => sub
+    .setName('config')
+    .setDescription('Set the invite log channel (staff only)')
+    .addChannelOption((o) => o.setName('channel').setDescription('Channel for join logs (omit for setup wizard)').addChannelTypes(ChannelType.GuildText).setRequired(false))
   )
-  // config
-  .addSubcommand((sub) =>
-    sub
-      .setName('config')
-      .setDescription('Set the invite log channel (staff only)')
-      .addChannelOption((o) =>
-        o.setName('channel').setDescription('Channel for join logs (omit for setup wizard)').setRequired(false)
-      )
+  .addSubcommand((sub) => sub
+    .setName('add')
+    .setDescription('Add bonus invites to a user (staff only)')
+    .addUserOption((o) => o.setName('user').setDescription('Target user').setRequired(true))
+    .addIntegerOption((o) => o.setName('count').setDescription('Number of bonus invites to add').setRequired(true).setMinValue(1))
   )
-  // add
-  .addSubcommand((sub) =>
-    sub
-      .setName('add')
-      .setDescription('Add bonus invites to a user (staff only)')
-      .addUserOption((o) =>
-        o.setName('user').setDescription('Target user').setRequired(true)
-      )
-      .addIntegerOption((o) =>
-        o.setName('count').setDescription('Number of bonus invites to add').setRequired(true).setMinValue(1)
-      )
+  .addSubcommand((sub) => sub
+    .setName('remove')
+    .setDescription('Remove invites from a user (staff only)')
+    .addUserOption((o) => o.setName('user').setDescription('Target user').setRequired(true))
+    .addIntegerOption((o) => o.setName('count').setDescription('Number of invites to remove').setRequired(true).setMinValue(1))
   )
-  // remove
-  .addSubcommand((sub) =>
-    sub
-      .setName('remove')
-      .setDescription('Remove invites from a user (staff only)')
-      .addUserOption((o) =>
-        o.setName('user').setDescription('Target user').setRequired(true)
-      )
-      .addIntegerOption((o) =>
-        o.setName('count').setDescription('Number of invites to remove').setRequired(true).setMinValue(1)
-      )
+  .addSubcommand((sub) => sub.setName('toggle').setDescription('Enable or disable invite tracking (staff only)'))
+  .addSubcommand((sub) => sub.setName('stats').setDescription('Server-wide invite statistics (staff only)'))
+  .addSubcommand((sub) => sub
+    .setName('code')
+    .setDescription('Look up a specific invite code (staff only)')
+    .addStringOption((o) => o.setName('code').setDescription('The invite code').setRequired(true))
   )
-  // toggle
-  .addSubcommand((sub) =>
-    sub.setName('toggle').setDescription('Enable or disable invite tracking (staff only)')
-  )
-  // stats
-  .addSubcommand((sub) =>
-    sub.setName('stats').setDescription('Server-wide invite statistics (staff only)')
-  )
-  // code
-  .addSubcommand((sub) =>
-    sub
-      .setName('code')
-      .setDescription('Look up a specific invite code (staff only)')
-      .addStringOption((o) =>
-        o.setName('code').setDescription('The invite code').setRequired(true)
-      )
-  )
-  // fake-threshold
-  .addSubcommand((sub) =>
-    sub
-      .setName('fake-threshold')
-      .setDescription('Set the account age (days) for "fake" detection (staff only)')
-      .addIntegerOption((o) =>
-        o
-          .setName('threshold')
-          .setDescription('Minimum account age in days (default 7)')
-          .setRequired(true)
-          .setMinValue(0)
-      )
+  .addSubcommand((sub) => sub
+    .setName('fake-threshold')
+    .setDescription('Set the account age (days) for "fake" detection (staff only)')
+    .addIntegerOption((o) => o
+      .setName('threshold')
+      .setDescription('Minimum account age in days (default 7)')
+      .setRequired(true)
+      .setMinValue(0)
+    )
   );
-
-// ─── Execute ──────────────────────────────────────────────────────────────────
 
 async function execute(interaction) {
   const sub = interaction.options.getSubcommand();
@@ -329,20 +240,16 @@ async function execute(interaction) {
 
   const staffOnly = ['reset', 'config', 'add', 'remove', 'toggle', 'stats', 'code', 'fake-threshold'];
   if (staffOnly.includes(sub) && !isStaff) {
-    return interaction.reply({
-      content: '❌ You need the **Manage Server** permission to use this subcommand.',
-      ephemeral: true,
-    }).catch(() => null);
+    return interaction.reply({ content: '❌ You need the **Manage Server** permission to use this subcommand.', ephemeral: true }).catch(() => null);
   }
 
   const ephemeralSubs = ['reset', 'config', 'add', 'remove', 'toggle', 'fake-threshold'];
   await interaction.deferReply({ ephemeral: ephemeralSubs.includes(sub) }).catch(() => null);
 
   try {
-    // ── check ─────────────────────────────────────────────────────────────────
     if (sub === 'check') {
       const targetUser = interaction.options.getUser('user') ?? user;
-
+      
       if (targetUser.id !== user.id && !isStaff) {
         return safeEditReply(interaction, { content: '❌ You need **Manage Server** to check another user\'s stats.' });
       }
@@ -369,10 +276,9 @@ async function execute(interaction) {
       return safeEditReply(interaction, { embeds: [embed] });
     }
 
-    // ── leaderboard ───────────────────────────────────────────────────────────
     if (sub === 'leaderboard') {
       const records = await InviteRecord.find({ guildId: guild.id }).catch(() => null);
-
+      
       if (!records || !records.length) {
         return safeEditReply(interaction, { content: 'No invite data for this server yet.' });
       }
@@ -383,7 +289,7 @@ async function execute(interaction) {
         .slice(0, 10);
 
       const lines = sorted.map((r, i) => `**${i + 1}.** <@${r.inviterId}> — **${r.net}** net invite${r.net === 1 ? '' : 's'} (${r.joins} joins, ${r.leaves} left, ${r.fake} fake)`);
-
+      
       const embed = new EmbedBuilder()
         .setColor(0xfaa61a)
         .setTitle('🏆 Invite Leaderboard')
@@ -392,10 +298,9 @@ async function execute(interaction) {
       return safeEditReply(interaction, { embeds: [embed] });
     }
 
-    // ── reset ─────────────────────────────────────────────────────────────────
     if (sub === 'reset') {
       const targetUser = interaction.options.getUser('user');
-
+      
       if (targetUser) {
         await InviteRecord.findOneAndUpdate(
           { guildId: guild.id, inviterId: targetUser.id },
@@ -408,7 +313,6 @@ async function execute(interaction) {
       }
     }
 
-    // ── config ────────────────────────────────────────────────────────────────
     if (sub === 'config') {
       const direct = interaction.options?.getChannel?.('channel');
       if (direct) {
@@ -420,32 +324,32 @@ async function execute(interaction) {
         return safeEditReply(interaction, { content: `✅ Invite join logs will be posted in ${direct}.` });
       }
 
-      // Wizard — step 1: pick log channel
       const channels = guild.channels.cache.filter(c => c.type === ChannelType.GuildText).first(24);
-      if (!channels.length)
-        return safeEditReply(interaction, { content: '❌ No text channels found.' });
+      if (!channels.length) return safeEditReply(interaction, { content: '❌ No text channels found.' });
 
       inviteWizard.set(`${interaction.user.id}_${guild.id}`, {});
-
       const embed = new EmbedBuilder()
         .setTitle('📨 Invite Tracking Setup — Step 1 / 2')
         .setColor('#3498DB')
         .setDescription('Select the **log channel** where join/leave events will be posted.\n\nTip: `/invites config #channel` to skip this wizard.');
-
+      
       const row = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId('invites_wizard_ch')
           .setPlaceholder('Choose a log channel...')
-          .addOptions(channels.map(c => ({ label: `#${c.name}`.slice(0, 90), value: c.id, description: (c.topic || 'Text channel').slice(0, 90) })))
+          .addOptions(channels.map(c => ({ 
+            label: `#${c.name}`.slice(0, 90), 
+            value: c.id, 
+            description: (c.topic || 'Text channel').slice(0, 90) 
+          })))
       );
       return safeEditReply(interaction, { embeds: [embed], components: [row] });
     }
 
-    // ── add ───────────────────────────────────────────────────────────────────
     if (sub === 'add') {
       const targetUser = interaction.options.getUser('user');
       const count = interaction.options.getInteger('count');
-
+      
       const record = await InviteRecord.findOneAndUpdate(
         { guildId: guild.id, inviterId: targetUser.id },
         { $inc: { bonusInvites: count } },
@@ -456,11 +360,10 @@ async function execute(interaction) {
       return safeEditReply(interaction, { content: `✅ Added **${count}** bonus invite${count === 1 ? '' : 's'} to ${targetUser.username}. They now have **${netInvites(record)}** net invites.` });
     }
 
-    // ── remove ────────────────────────────────────────────────────────────────
     if (sub === 'remove') {
       const targetUser = interaction.options.getUser('user');
       const count = interaction.options.getInteger('count');
-
+      
       const record = await InviteRecord.findOneAndUpdate(
         { guildId: guild.id, inviterId: targetUser.id },
         { $inc: { bonusInvites: -count } },
@@ -471,11 +374,10 @@ async function execute(interaction) {
       return safeEditReply(interaction, { content: `✅ Removed **${count}** invite${count === 1 ? '' : 's'} from ${targetUser.username}. They now have **${netInvites(record)}** net invites.` });
     }
 
-    // ── toggle ────────────────────────────────────────────────────────────────
     if (sub === 'toggle') {
       const existing = await InviteConfig.findOne({ guildId: guild.id }).catch(() => null);
       const newState = existing ? !existing.enabled : true;
-
+      
       await InviteConfig.findOneAndUpdate(
         { guildId: guild.id },
         { enabled: newState },
@@ -485,7 +387,6 @@ async function execute(interaction) {
       return safeEditReply(interaction, { content: `✅ Invite tracking is now **${newState ? 'enabled' : 'disabled'}**.` });
     }
 
-    // ── stats ─────────────────────────────────────────────────────────────────
     if (sub === 'stats') {
       const records = await InviteRecord.find({ guildId: guild.id }).catch(() => null);
       const safeRecords = records || [];
@@ -505,23 +406,20 @@ async function execute(interaction) {
           { name: 'Bonus Invites Given', value: String(totalBonus), inline: true },
           { name: 'Unique Inviters', value: String(uniqueInviters), inline: true }
         );
-
       return safeEditReply(interaction, { embeds: [embed] });
     }
 
-    // ── code ──────────────────────────────────────────────────────────────────
     if (sub === 'code') {
       const code = interaction.options.getString('code');
       const guildMap = inviteCache.get(guild.id);
       const cached = guildMap?.get(code);
-
+      
       let liveInvite = null;
       try {
         liveInvite = await guild.invites.fetch(code).catch(() => null);
       } catch {}
-
+      
       const inviteData = liveInvite ?? cached;
-
       if (!inviteData) {
         return safeEditReply(interaction, { content: `❌ No data found for invite code \`${code}\`.` });
       }
@@ -540,36 +438,29 @@ async function execute(interaction) {
           { name: 'Max Uses', value: String(maxUses || '∞'), inline: true },
           { name: 'Expires', value: expiresAt ? `<t:${Math.floor(new Date(expiresAt).getTime() / 1000)}:R>` : 'Never', inline: true }
         );
-
       return safeEditReply(interaction, { embeds: [embed] });
     }
 
-    // ── fake-threshold ────────────────────────────────────────────────────────
     if (sub === 'fake-threshold') {
       const threshold = interaction.options.getInteger('threshold');
-
       await InviteConfig.findOneAndUpdate(
         { guildId: guild.id },
         { fakeThreshold: threshold },
         { upsert: true, new: true }
       ).catch(() => null);
-
+      
       return safeEditReply(interaction, { content: `✅ Fake invite threshold set to **${threshold} day${threshold === 1 ? '' : 's'}**. Accounts newer than this are flagged as fake.` });
     }
 
-    // If no subcommand matched
     return safeEditReply(interaction, { content: '❌ Unknown subcommand.' });
-
   } catch (err) {
     console.error('[invites] execute error:', err);
     return safeEditReply(interaction, { content: '❌ An error occurred while processing your request.' });
   }
 }
 
-// ─── Wizard Interaction Handler ──────────────────────────────────────────────
-
 async function handleInteraction(interaction, client) {
-  const id  = interaction.customId;
+  const id = interaction.customId;
   const key = `${interaction.user.id}_${interaction.guildId}`;
 
   try {
@@ -581,17 +472,17 @@ async function handleInteraction(interaction, client) {
         .setTitle('📨 Invite Tracking Setup — Step 2 / 2')
         .setColor('#3498DB')
         .setDescription(`Log channel: <#${channelId}>\n\nChoose the **fake invite threshold** — accounts younger than this many days are flagged as fake joins.`);
-
+      
       const row = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId('invites_wizard_threshold')
           .setPlaceholder('Choose a fake-detection threshold...')
           .addOptions([
-            { label: 'Disabled (no fake detection)', value: '0'  },
-            { label: '3 days',                       value: '3'  },
-            { label: '7 days (recommended)',          value: '7'  },
-            { label: '14 days',                       value: '14' },
-            { label: '30 days',                       value: '30' },
+            { label: 'Disabled (no fake detection)', value: '0' },
+            { label: '3 days', value: '3' },
+            { label: '7 days (recommended)', value: '7' },
+            { label: '14 days', value: '14' },
+            { label: '30 days', value: '30' },
           ])
       );
       return interaction.update({ embeds: [embed], components: [row] }).catch(() => null);
@@ -613,9 +504,9 @@ async function handleInteraction(interaction, client) {
         .setColor('#3498DB')
         .setDescription('Invite tracking is now enabled. Every join and leave will be logged.')
         .addFields(
-          { name: 'Log Channel',       value: `<#${session.channelId}>`,                       inline: true },
-          { name: 'Fake Threshold',    value: threshold ? `${threshold} days` : 'Disabled',    inline: true },
-          { name: 'Next Steps',        value: '• `/invites leaderboard` — top inviters\n• `/invites check @user` — detailed stats\n• `/invites add @user 5` — bonus invites\n• `/invites toggle` — pause/resume' }
+          { name: 'Log Channel', value: `<#${session.channelId}>`, inline: true },
+          { name: 'Fake Threshold', value: threshold ? `${threshold} days` : 'Disabled', inline: true },
+          { name: 'Next Steps', value: '• `/invites leaderboard` — top inviters\n• `/invites check @user` — detailed stats\n• `/invites add @user 5` — bonus invites\n• `/invites toggle` — pause/resume' }
         );
       return interaction.update({ embeds: [embed], components: [] }).catch(() => null);
     }
@@ -626,8 +517,6 @@ async function handleInteraction(interaction, client) {
     }
   }
 }
-
-// ─── Export ───────────────────────────────────────────────────────────────────
 
 module.exports = {
   data,
@@ -640,4 +529,3 @@ module.exports = {
   handleInviteDelete,
   inviteCache,
 };
-

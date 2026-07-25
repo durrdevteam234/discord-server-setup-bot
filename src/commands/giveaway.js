@@ -1,22 +1,9 @@
-const {
-  SlashCommandBuilder,
-  PermissionFlagsBits,
-  MessageFlags,
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  ChannelType
-} = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
 const { Schema, model, models } = require('mongoose');
 
-// ─────────────────────────────────────────────────────────────
-// Database Config & Schema Definitions
-// ─────────────────────────────────────────────────────────────
-
-const ACCENT_COLOR_ACTIVE = 0x5865f2; // Blurple for open entries
-const ACCENT_COLOR_ENDED = 0x2b2d31;  // Dark grey for finalized logs
-const runningGiveaways = new Map();   // In-memory runtime recovery mapping trackers
+const ACCENT_COLOR_ACTIVE = 0x5865f2; 
+const ACCENT_COLOR_ENDED = 0x2b2d31; 
+const runningGiveaways = new Map(); 
 
 const GiveawaySchema = new Schema({
   messageId: { type: String, required: true, unique: true },
@@ -26,67 +13,41 @@ const GiveawaySchema = new Schema({
   prize: { type: String, required: true },
   winnerCount: { type: Number, default: 1 },
   endsAt: { type: Date, required: true },
-  participants: { type: [String], default: [] }, // Array of user IDs who entered
+  participants: { type: [String], default: [] },
   ended: { type: Boolean, default: false }
 });
 
 const Giveaway = models.Giveaway || model('Giveaway', GiveawaySchema);
-
-// ─────────────────────────────────────────────────────────────
-// Slash Command Definition (Restricted to Administrators)
-// ─────────────────────────────────────────────────────────────
 
 const data = new SlashCommandBuilder()
   .setName('giveaway')
   .setDescription('Establish and manage customizable item drops')
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .setDMPermission(false)
-  .addSubcommand((sub) =>
-    sub
-      .setName('start')
-      .setDescription('Launch a fresh background scheduled giveaway pool')
-      .addIntegerOption((opt) =>
-        opt.setName('minutes').setDescription('Timing block lifespan duration in minutes').setRequired(true).setMinValue(1)
-      )
-      .addStringOption((opt) =>
-        opt.setName('prize').setDescription('The title name of the item or reward pool drop').setRequired(true).setMaxLength(256)
-      )
-      .addIntegerOption((opt) =>
-        opt.setName('winners').setDescription('The target amount of lucky winners to fetch (defaults to 1)').setRequired(false).setMinValue(1).setMaxValue(20)
-      )
-      .addChannelOption((opt) =>
-        opt.setName('channel').setDescription('Output channel destination (defaults to current)').addChannelTypes(ChannelType.GuildText).setRequired(false)
-      )
+  .addSubcommand((sub) => sub
+    .setName('start')
+    .setDescription('Launch a fresh background scheduled giveaway pool')
+    .addIntegerOption((opt) => opt.setName('minutes').setDescription('Timing block lifespan duration in minutes').setRequired(true).setMinValue(1))
+    .addStringOption((opt) => opt.setName('prize').setDescription('The title name of the item or reward pool drop').setRequired(true).setMaxLength(256))
+    .addIntegerOption((opt) => opt.setName('winners').setDescription('The target amount of lucky winners to fetch (defaults to 1)').setRequired(false).setMinValue(1).setMaxValue(20))
+    .addChannelOption((opt) => opt.setName('channel').setDescription('Output channel destination (defaults to current)').addChannelTypes(ChannelType.GuildText).setRequired(false))
   )
-  .addSubcommand((sub) =>
-    sub
-      .setName('reroll')
-      .setDescription('Pick new winners from an existing ended giveaway database profile')
-      .addStringOption((opt) =>
-        opt.setName('message_id').setDescription('The target message ID of the giveaway announcement embed').setRequired(true)
-      )
+  .addSubcommand((sub) => sub
+    .setName('reroll')
+    .setDescription('Pick new winners from an existing ended giveaway database profile')
+    .addStringOption((opt) => opt.setName('message_id').setDescription('The target message ID of the giveaway announcement embed').setRequired(true))
   )
-  .addSubcommand((sub) =>
-    sub
-      .setName('end')
-      .setDescription('Forcefully end an active giveaway pool and draw winners immediately')
-      .addStringOption((opt) =>
-        opt.setName('message_id').setDescription('The target message ID of the giveaway announcement embed').setRequired(true)
-      )
+  .addSubcommand((sub) => sub
+    .setName('end')
+    .setDescription('Forcefully end an active giveaway pool and draw winners immediately')
+    .addStringOption((opt) => opt.setName('message_id').setDescription('The target message ID of the giveaway announcement embed').setRequired(true))
   );
-
-// ─────────────────────────────────────────────────────────────
-// Compatibility & Calculation Helpers
-// ─────────────────────────────────────────────────────────────
 
 function isPrefixMode(interaction) {
   return typeof interaction.isChatInputCommand === 'function' && interaction.isChatInputCommand() === false;
 }
 
 function parsePrefixArgs(interaction) {
-  // Examples: 
-  // |giveaway start 60 "Nitro Classic" #giveaways
-  // |giveaway end 123456789012345678
   const raw = String(interaction.content || '');
   const tokens = raw.trim().split(/\s+/);
   const sub = tokens ? tokens.toLowerCase() : null;
@@ -135,9 +96,6 @@ function buildGiveawayComponents(messageId) {
     )
   ];
 }
-// ─────────────────────────────────────────────────────────────
-// 🎲 Core Winner Selection Engine
-// ─────────────────────────────────────────────────────────────
 
 async function drawWinners(client, messageId, forceEnd = false) {
   const config = await Giveaway.findOne({ messageId });
@@ -151,7 +109,8 @@ async function drawWinners(client, messageId, forceEnd = false) {
     if (!channel) return null;
 
     const message = await channel.messages.fetch(config.messageId).catch(() => null);
-
+    
+    // FIX: Filter participants who are still in the guild
     const validPool = config.participants.filter(id => guild.members.cache.has(id) || id);
     const winners = [];
 
@@ -193,25 +152,18 @@ async function drawWinners(client, messageId, forceEnd = false) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// Subcommand Business Logic Route Engines
-// ─────────────────────────────────────────────────────────────
-
 async function handleStart(interaction, minutes, prize, targetChannel, winnersCount = 1) {
   const endsAt = new Date(Date.now() + minutes * 60 * 1000);
   const prefixMode = isPrefixMode(interaction);
 
   if (!targetChannel.permissionsFor(interaction.guild.members.me).has(PermissionFlagsBits.SendMessages)) {
-    return interaction.reply({
-      content: `❌ I lack the **Send Messages** permission block flag configurations within ${targetChannel}.`,
-      flags: [MessageFlags.Ephemeral]
-    });
+    return interaction.reply({ content: `❌ I lack the **Send Messages** permission block flag configurations within ${targetChannel}.`, flags: [MessageFlags.Ephemeral] });
   }
 
   if (!prefixMode) await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
   const placeholderMessage = prefixMode 
-    ? await targetChannel.send({ content: '⏳ Provisioning asset configuration data...' })
+    ? await targetChannel.send({ content: '⏳ Provisioning asset configuration data...' }) 
     : await interaction.followUp({ content: '⏳ Deploying giveaway container...', fetchReply: true });
 
   const config = await Giveaway.create({
@@ -264,9 +216,6 @@ async function handleReroll(interaction, messageId) {
   await interaction.reply({ content: '🎲 Re-evaluating lucky lottery entry points...', flags: [MessageFlags.Ephemeral] }).catch(() => null);
   await drawWinners(interaction.client, messageId, true);
 }
-// ─────────────────────────────────────────────────────────────
-// Interface Event Routers & Exports Mapping
-// ─────────────────────────────────────────────────────────────
 
 module.exports = {
   data,
@@ -301,7 +250,7 @@ module.exports = {
       const channel = interaction.options.getChannel('channel') || interaction.channel;
       return handleStart(interaction, mins, prize, channel, winners);
     }
-    
+
     const msgId = interaction.options.getString('message_id');
     if (sub === 'end') return handleForceEnd(interaction, msgId);
     if (sub === 'reroll') return handleReroll(interaction, msgId);

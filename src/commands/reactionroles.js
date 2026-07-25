@@ -6,10 +6,10 @@ const {
   ButtonBuilder, 
   ButtonStyle, 
   StringSelectMenuBuilder, 
-  StringSelectMenuOptionBuilder,
-  ChannelType
+  StringSelectMenuOptionBuilder, 
+  ChannelType 
 } = require('discord.js');
-const database = require('../utils/database'); // Points to your live MongoDB client model
+const database = require('../utils/database');
 const { logAction } = require('../utils/auditLog');
 
 module.exports = {
@@ -18,87 +18,87 @@ module.exports = {
     .setDescription('⚙️ Advanced self-assignable component role panel management')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
     .addSubcommand(sub => sub
-        .setName('create')
-        .setDescription('Build and deploy a custom role assignment panel')
-        .addChannelOption(opt => opt.setName('channel').setDescription('Where to post the role selection menu').addChannelTypes(ChannelType.GuildText).setRequired(true))
-        .addStringOption(opt => opt.setName('type').setDescription('The interactive format of the panel layout').setRequired(true)
-            .addChoices(
-                { name: 'Buttons (Modern Rows)', value: 'button' },
-                { name: 'Dropdown Menu (Select Node)', value: 'dropdown' },
-                { name: 'Classic Emojis (Reactions)', value: 'reaction' }
-            )
+      .setName('create')
+      .setDescription('Build and deploy a custom role assignment panel')
+      .addChannelOption(opt => opt.setName('channel').setDescription('Where to post the role selection menu').addChannelTypes(ChannelType.GuildText).setRequired(true))
+      .addStringOption(opt => opt.setName('type').setDescription('The interactive format of the panel layout').setRequired(true)
+        .addChoices(
+          { name: 'Buttons (Modern Rows)', value: 'button' },
+          { name: 'Dropdown Menu (Select Node)', value: 'dropdown' },
+          { name: 'Classic Emojis (Reactions)', value: 'reaction' }
         )
-        .addStringOption(opt => opt.setName('title').setDescription('The headline title for your embed selection panel card').setRequired(true))
-        .addStringOption(opt => opt.setName('roles_map').setDescription('Format: @Role1,emoji,Custom Label | @Role2,,Label2 (Emojis optional)').setRequired(true))
-        .addStringOption(opt => opt.setName('description').setDescription('Custom message description block details').setRequired(false))
+      )
+      .addStringOption(opt => opt.setName('title').setDescription('The headline title for your embed selection panel card').setRequired(true))
+      .addStringOption(opt => opt.setName('roles_map').setDescription('Format: @Role1,emoji,Custom Label | @Role2,,Label2 (Emojis optional)').setRequired(true))
+      .addStringOption(opt => opt.setName('description').setDescription('Custom message description block details').setRequired(false))
     )
     .addSubcommand(sub => sub
-        .setName('edit')
-        .setDescription('✏️ Update the title or description text fields of an existing deployed panel')
-        .addStringOption(opt => opt.setName('message_id').setDescription('The message ID of the deployed role panel').setRequired(true))
-        .addStringOption(opt => opt.setName('title').setDescription('The new headline title for the panel card').setRequired(false))
-        .addStringOption(opt => opt.setName('description').setDescription('The new description text block details').setRequired(false))
+      .setName('edit')
+      .setDescription('✏️ Update the title or description text fields of an existing deployed panel')
+      .addStringOption(opt => opt.setName('message_id').setDescription('The message ID of the deployed role panel').setRequired(true))
+      .addStringOption(opt => opt.setName('title').setDescription('The new headline title for the panel card').setRequired(false))
+      .addStringOption(opt => opt.setName('description').setDescription('The new description text block details').setRequired(false))
     )
     .addSubcommand(sub => sub
-        .setName('add-role')
-        .setDescription('➕ Add a new assignment choice node directly into an existing active panel')
-        .addStringOption(opt => opt.setName('message_id').setDescription('The message ID of the deployed role panel').setRequired(true))
-        .addRoleOption(opt => opt.setName('role').setDescription('The role target to append').setRequired(true))
-        .addStringOption(opt => opt.setName('label').setDescription('Custom visual text label name (Required for buttons/dropdowns)').setRequired(false))
-        .addStringOption(opt => opt.setName('emoji').setDescription('Optional custom emoji target name or character').setRequired(false))
+      .setName('add-role')
+      .setDescription('➕ Add a new assignment choice node directly into an existing active panel')
+      .addStringOption(opt => opt.setName('message_id').setDescription('The message ID of the deployed role panel').setRequired(true))
+      .addRoleOption(opt => opt.setName('role').setDescription('The role target to append').setRequired(true))
+      .addStringOption(opt => opt.setName('label').setDescription('Custom visual text label name (Required for buttons/dropdowns)').setRequired(false))
+      .addStringOption(opt => opt.setName('emoji').setDescription('Optional custom emoji target name or character').setRequired(false))
     )
     .addSubcommand(sub => sub
-        .setName('remove-role')
-        .setDescription('➖ Remove a specific role assignment node out of an active panel framework')
-        .addStringOption(opt => opt.setName('message_id').setDescription('The message ID of the deployed role panel').setRequired(true))
-        .addRoleOption(opt => opt.setName('role').setDescription('The role target to strip away from choices').setRequired(true))
+      .setName('remove-role')
+      .setDescription('➖ Remove a specific role assignment node out of an active panel framework')
+      .addStringOption(opt => opt.setName('message_id').setDescription('The message ID of the deployed role panel').setRequired(true))
+      .addRoleOption(opt => opt.setName('role').setDescription('The role target to strip away from choices').setRequired(true))
     )
     .addSubcommand(sub => sub
-        .setName('delete-panel')
-        .setDescription('🗑️ Wipe a role panel entirely out of active channel registries and database nodes')
-        .addStringOption(opt => opt.setName('message_id').setDescription('The message ID of the deployed role panel').setRequired(true))
+      .setName('delete-panel')
+      .setDescription('🗑️ Wipe a role panel entirely out of active channel registries and database nodes')
+      .addStringOption(opt => opt.setName('message_id').setDescription('The message ID of the deployed role panel').setRequired(true))
     )
     .addSubcommand(sub => sub
-        .setName('test')
-        .setDescription('🧪 Diagnostic Simulator: Test component menus safely in a private sandbox view')
-        .addStringOption(opt => opt.setName('type').setDescription('Layout component array format to verify').setRequired(true)
-            .addChoices(
-                { name: 'Buttons Layout Matrix', value: 'button' },
-                { name: 'Dropdown Menu Structure', value: 'dropdown' }
-            )
+      .setName('test')
+      .setDescription('🧪 Diagnostic Simulator: Test component menus safely in a private sandbox view')
+      .addStringOption(opt => opt.setName('type').setDescription('Layout component array format to verify').setRequired(true)
+        .addChoices(
+          { name: 'Buttons Layout Matrix', value: 'button' },
+          { name: 'Dropdown Menu Structure', value: 'dropdown' }
         )
-        .addStringOption(opt => opt.setName('roles_map').setDescription('Format: @Role1,emoji,Label | @Role2,,Label2').setRequired(true))
+      )
+      .addStringOption(opt => opt.setName('roles_map').setDescription('Format: @Role1,emoji,Label | @Role2,,Label2').setRequired(true))
     ),
+
   name: 'reactionroles',
 
-  // CORE INPUT REGEX STRUCTURAL MAP PARSER
   parseRolesInput(interaction, inputString) {
     const rawEntries = inputString.split('|');
     const processedMap = [];
 
     for (const rawEntry of rawEntries) {
-        const parts = rawEntry.split(',');
-        if (parts.length < 1) continue;
+      const parts = rawEntry.split(',');
+      if (parts.length < 1) continue;
 
-        const roleRaw = parts[0]?.trim();
-        const emojiRaw = parts[1] ? parts[1].trim() : null;
-        const labelRaw = parts[2] ? parts[2].trim() : null;
+      const roleRaw = parts[0]?.trim();
+      const emojiRaw = parts[1] ? parts[1].trim() : null;
+      const labelRaw = parts[2] ? parts[2].trim() : null;
 
-        const roleId = roleRaw ? roleRaw.replace(/[^0-9]/g, '') : '';
-        const verifiedRole = interaction.guild.roles.cache.get(roleId);
+      const roleId = roleRaw ? roleRaw.replace(/[^0-9]/g, '') : '';
+      const verifiedRole = interaction.guild.roles.cache.get(roleId);
 
-        if (!verifiedRole) continue;
+      if (!verifiedRole) continue;
 
-        processedMap.push({
-            roleId: verifiedRole.id,
-            roleName: verifiedRole.name,
-            emoji: emojiRaw || null,
-            label: labelRaw || verifiedRole.name
-        });
+      processedMap.push({
+        roleId: verifiedRole.id,
+        roleName: verifiedRole.name,
+        emoji: emojiRaw || null,
+        label: labelRaw || verifiedRole.name
+      });
     }
     return processedMap;
   },
-  // ⚙️ UNIVERSAL PANEL MATRIX BUILDER
+
   buildComponents(type, rolesMap) {
     if (type === 'button') {
       const rows = [];
@@ -145,7 +145,6 @@ module.exports = {
     return [];
   },
 
-  // 🏛️ MAIN SLASH ROUTER DISPATCHER
   async execute(interaction, client) {
     const isInteraction = interaction.isCommand ? interaction.isCommand() : false;
     const guild = interaction.guild;
@@ -155,9 +154,6 @@ module.exports = {
 
     if (!guild) return;
 
-    // ==========================================
-    // 🧪 SUBCOMMAND: TEST (SANDBOX SIMULATOR)
-    // ==========================================
     if (sub === 'test') {
       const type = interaction.options.getString('type');
       const rawMap = interaction.options.getString('roles_map');
@@ -176,9 +172,6 @@ module.exports = {
       return interaction.reply({ embeds: [testEmbed], components, ephemeral: true });
     }
 
-    // ==========================================
-    // 🚀 SUBCOMMAND: CREATE PANEL
-    // ==========================================
     if (sub === 'create') {
       const channel = interaction.options.getChannel('channel');
       const type = interaction.options.getString('type');
@@ -197,35 +190,21 @@ module.exports = {
         .setDescription(description);
 
       const components = this.buildComponents(type, parsedMap);
-      
-      // Dispatch the live interface message to the target channel text layers
+
       const panelMessage = await channel.send({ embeds: [panelEmbed], components }).catch(() => null);
       if (!panelMessage) {
         return interaction.reply({ content: '❌ I failed to send messages inside that channel. Check my permissions!', ephemeral: true });
       }
 
-      // If the configuration maps to retro emoji configurations, append structural anchors
       if (type === 'reaction') {
         for (const node of parsedMap) {
           if (node.emoji) await panelMessage.react(node.emoji).catch(() => null);
         }
       }
 
-      // Commit configuration mapping metrics straight into your live MongoDB document
       await database.findOneAndUpdate(
         { guildId: guildId },
-        {
-          $push: {
-            reactionRolePanels: {
-              messageId: panelMessage.id,
-              channelId: channel.id,
-              type: type,
-              title: title,
-              description: description,
-              roles: parsedMap
-            }
-          }
-        },
+        { $push: { reactionRolePanels: { messageId: panelMessage.id, channelId: channel.id, type: type, title: title, description: description, roles: parsedMap } } },
         { upsert: true }
       ).catch(() => null);
 
@@ -233,15 +212,12 @@ module.exports = {
 
       return interaction.reply({ content: `✅ Successfully deployed role layout configuration inside ${channel}! (Message ID: \`${panelMessage.id}\`)`, ephemeral: true });
     }
-    // ==========================================
-    // ✏️ SUBCOMMAND: EDIT TEXT DETAILS
-    // ==========================================
+
     if (sub === 'edit') {
       const messageId = interaction.options.getString('message_id').trim();
       const title = interaction.options.getString('title');
       const description = interaction.options.getString('description');
 
-      // 1. Locate the existing active panel records in MongoDB
       const guildConfig = await database.findOne({ guildId: guildId }).catch(() => null) || {};
       const panelIndex = guildConfig.reactionRolePanels?.findIndex(p => p.messageId === messageId);
 
@@ -256,7 +232,6 @@ module.exports = {
       const targetMessage = await targetChannel.messages.fetch(messageId).catch(() => null);
       if (!targetMessage) return interaction.reply({ content: '❌ The panel message has been deleted or cannot be found on Discord layers!', ephemeral: true });
 
-      // 2. Overwrite text details while maintaining historical nodes
       if (title) panelData.title = title;
       if (description) panelData.description = description;
 
@@ -266,7 +241,6 @@ module.exports = {
 
       await targetMessage.edit({ embeds: [updatedEmbed] }).catch(() => null);
 
-      // 3. Save structural changes to MongoDB
       await database.findOneAndUpdate(
         { guildId: guildId },
         { $set: { [`reactionRolePanels.${panelIndex}`]: panelData } }
@@ -276,9 +250,6 @@ module.exports = {
       return interaction.reply({ content: '✅ Role panel embedding fields successfully modified!', ephemeral: true });
     }
 
-    // ==========================================
-    // ➕ SUBCOMMAND: APPEND NEW ROLE
-    // ==========================================
     if (sub === 'add-role') {
       const messageId = interaction.options.getString('message_id').trim();
       const role = interaction.options.getRole('role');
@@ -301,11 +272,9 @@ module.exports = {
       const targetMessage = targetChannel ? await targetChannel.messages.fetch(messageId).catch(() => null) : null;
       if (!targetMessage) return interaction.reply({ content: '❌ Target interface component frame missing or inaccessible.', ephemeral: true });
 
-      // Append option entry map metrics
       const newNode = { roleId: role.id, roleName: role.name, emoji, label };
       panelData.roles.push(newNode);
 
-      // Recompile interactive arrays
       if (panelData.type === 'reaction' && emoji) {
         await targetMessage.react(emoji).catch(() => null);
       } else {
@@ -322,9 +291,6 @@ module.exports = {
       return interaction.reply({ content: `✅ Successfully appended **${role.name}** choice node directly into the live dashboard panel!`, ephemeral: true });
     }
 
-    // ==========================================
-    // ➖ SUBCOMMAND: STRIP SPECIFIC ROLE
-    // ==========================================
     if (sub === 'remove-role') {
       const messageId = interaction.options.getString('message_id').trim();
       const role = interaction.options.getRole('role');
@@ -344,10 +310,8 @@ module.exports = {
       const targetMessage = targetChannel ? await targetChannel.messages.fetch(messageId).catch(() => null) : null;
       if (!targetMessage) return interaction.reply({ content: '❌ Active network component cannot be found.', ephemeral: true });
 
-      // Strip node out of list configuration
       panelData.roles.splice(nodeIndex, 1);
 
-      // Rebuild and push structural alignment models
       const structuralRows = this.buildComponents(panelData.type, panelData.roles);
       await targetMessage.edit({ components: structuralRows }).catch(() => null);
 
@@ -359,9 +323,7 @@ module.exports = {
       try { await logAction(guild, 'Role Removed from Panel', callerUser, `Stripped ${role.name} from panel ${messageId}`); } catch(e){}
       return interaction.reply({ content: `✅ Successfully removed **${role.name}** out of choices!`, ephemeral: true });
     }
-    // ==========================================
-    // 🗑️ SUBCOMMAND: DELETE PANEL ENTIRELY
-    // ==========================================
+
     if (sub === 'delete-panel') {
       const messageId = interaction.options.getString('message_id').trim();
 
@@ -379,7 +341,6 @@ module.exports = {
         if (targetMessage) await targetMessage.delete().catch(() => null);
       }
 
-      // Pull document permanently out of MongoDB array collections
       await database.findOneAndUpdate(
         { guildId: guildId },
         { $pull: { reactionRolePanels: { messageId: messageId } } }
@@ -390,9 +351,6 @@ module.exports = {
     }
   },
 
-  // ========================================================
-  // ⚡ DYNAMIC MASTER PACKET LISTENER (Put this in interactionCreate handler)
-  // ========================================================
   async handleInteraction(interaction) {
     if (!interaction.guild || (!interaction.isButton() && !interaction.isStringSelectMenu())) return;
 
@@ -400,25 +358,21 @@ module.exports = {
     const member = interaction.member;
     const customId = interaction.customId;
 
-    // Sandbox Trace Diagnostic Simulator Router Check
     if (customId.startsWith('rr_') && interaction.message.embeds[0]?.title?.includes('Sandbox Simulator')) {
       const traceId = customId.replace('rr_', '');
       return interaction.reply({ content: `🧪 [Trace Simulator Log] Parsed custom action node ID: \`${traceId}\`. Simulation successful!`, ephemeral: true });
     }
 
-    // 1. Fetch matching active entry data out of MongoDB documents
     const guildConfig = await database.findOne({ guildId: guildId }).catch(() => null) || {};
     const panel = guildConfig.reactionRolePanels?.find(p => p.messageId === interaction.message.id);
     if (!panel) return;
 
     let targetRoleIds = [];
 
-    // Parse button execution arrays
     if (interaction.isButton() && customId.startsWith('rr_')) {
       targetRoleIds.push(customId.replace('rr_', ''));
     }
 
-    // Parse select menu choice payloads
     if (interaction.isStringSelectMenu() && customId === 'rr_dropdown_select') {
       targetRoleIds = interaction.values;
     }
@@ -443,7 +397,6 @@ module.exports = {
       }
     }
 
-    // Dynamic clean confirmation feedback building loops
     let replyText = '';
     if (addedRoles.length > 0) replyText += `✅ **Role Granted:** You now have the **${addedRoles.join(', ')}** role!\n`;
     if (removedRoles.length > 0) replyText += `🛑 **Role Revoked:** Removed the **${removedRoles.join(', ')}** role from your account.\n`;
@@ -452,7 +405,6 @@ module.exports = {
     return interaction.editReply({ content: replyText });
   },
 
-  // Prefix translation pipeline routing back to core subcommands
   async executePrefix(message, argsArray, client) {
     if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
       return message.reply('❌ Permissions required!').catch(() => null);
@@ -463,7 +415,6 @@ module.exports = {
       return message.reply('❌ Usage: `|reactionroles <create|test|edit|delete-panel> [options]`\n💡 Prefer Slash commands (`/reactionroles`) for complex setups!').catch(() => null);
     }
 
-    // Mock configuration map emulating context components seamlessly
     const mockInteraction = {
       guild: message.guild,
       guildId: message.guild.id,
@@ -482,4 +433,3 @@ module.exports = {
     await this.execute(mockInteraction, client).catch(err => console.error('Error handling interaction reaction role wrapper:', err));
   }
 };
-
