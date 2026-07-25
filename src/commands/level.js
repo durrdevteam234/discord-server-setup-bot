@@ -75,7 +75,6 @@ module.exports = {
         .addSubcommand(sub =>
             sub.setName('settings')
                 .setDescription('Configure leveling settings (Staff only)')
-                .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
         ),
 
     name: 'level',
