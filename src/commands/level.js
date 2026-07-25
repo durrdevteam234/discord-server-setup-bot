@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
 const database = require('../utils/database');
 const { createCanvas, loadImage } = require('canvas');
 
@@ -75,6 +75,7 @@ module.exports = {
         .addSubcommand(sub =>
             sub.setName('settings')
                 .setDescription('Configure leveling settings (Staff only)')
+                .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
         ),
 
     name: 'level',
@@ -206,8 +207,7 @@ module.exports = {
             return interaction.reply('⚙️ Please use the Slash Command `/level settings` to open the interactive settings menu!');
         }
 
-        await interaction.deferReply({ ephemeral: true });
-        
+        // DO NOT DEFER! Replying instantly prevents the timeout.
         const config = await database.findOne({ guildId: interaction.guild.id }).catch(() => null) || {};
         const levelConfig = config.levelConfig || {};
         
@@ -219,7 +219,7 @@ module.exports = {
                 { name: 'Status', value: levelConfig.enabled ? '✅ Enabled' : '❌ Disabled', inline: true },
                 { name: 'Announcement Channel', value: levelConfig.channelId ? `<#${levelConfig.channelId}>` : 'Not set', inline: true },
                 { name: 'Level-Up Style', value: levelConfig.cardStyle === 'card' ? '🎨 Visual Card' : '📝 Text Message', inline: true },
-                { name: 'Ping on Level-Up', value: levelConfig.pingUser ? '🔔 Yes' : '🔇 No', inline: true },
+                { name: 'Ping on Level-Up', value: levelConfig.pingUser ? '🔔 Yes' : '🔕 No', inline: true },
                 { name: 'Role Rewards', value: levelConfig.rewards?.length ? `${levelConfig.rewards.length} configured` : 'None configured', inline: true },
                 { name: 'Custom Level-Up Text', value: levelConfig.levelUpText ? `\`\`\`${levelConfig.levelUpText}\`\`\`` : 'Not set', inline: false }
             );
@@ -238,7 +238,7 @@ module.exports = {
                 ])
         );
 
-        return interaction.editReply({ embeds: [embed], components: [row] });
+        return interaction.reply({ embeds: [embed], components: [row] });
     },
 
     // --- Interaction Handler for Settings Wizard ---
@@ -476,7 +476,7 @@ module.exports = {
                         { name: 'Status', value: levelConfig.enabled ? '✅ Enabled' : '❌ Disabled', inline: true },
                         { name: 'Announcement Channel', value: levelConfig.channelId ? `<#${levelConfig.channelId}>` : 'Not set', inline: true },
                         { name: 'Level-Up Style', value: levelConfig.cardStyle === 'card' ? '🎨 Visual Card' : '📝 Text Message', inline: true },
-                        { name: 'Ping on Level-Up', value: levelConfig.pingUser ? '🔔 Yes' : '🔇 No', inline: true },
+                        { name: 'Ping on Level-Up', value: levelConfig.pingUser ? '🔔 Yes' : '🔕 No', inline: true },
                         { name: 'Role Rewards', value: levelConfig.rewards?.length ? `${levelConfig.rewards.length} configured` : 'None configured', inline: true },
                         { name: 'Custom Level-Up Text', value: levelConfig.levelUpText ? `\`\`\`${levelConfig.levelUpText}\`\`\`` : 'Not set', inline: false }
                     );
