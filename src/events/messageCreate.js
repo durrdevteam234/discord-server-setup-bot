@@ -450,8 +450,10 @@ module.exports = {
             }
             const userProfile = levelsData[guildId][message.author.id];
             
-            // XP per message: 5-10 — smaller per-message gain
-            const xpGained = Math.floor(Math.random() * 6) + 5;
+            // --- APPLY XP MULTIPLIER ---
+            const multiplier = levelConfig.multiplier || 1;
+            const baseXp = Math.floor(Math.random() * 6) + 5;
+            const xpGained = baseXp * multiplier;
             userProfile.xp += xpGained;
             
             // XP needed scales more steeply: 300 per level
@@ -460,6 +462,31 @@ module.exports = {
             if (userProfile.xp >= xpNeeded) {
                 userProfile.level += 1;
                 userProfile.xp = 0;
+
+                // --- HANDLE ROLE REWARDS ---
+                const rewards = levelConfig.rewards || [];
+                if (rewards.length > 0) {
+                    const member = await message.guild.members.fetch(message.author.id).catch(() => null);
+                    if (member) {
+                        for (const reward of rewards) {
+                            if (reward.level <= userProfile.level) {
+                                const role = message.guild.roles.cache.get(reward.roleId);
+                                if (role && !member.roles.cache.has(role.id)) {
+                                    await member.roles.add(role).catch(() => null);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // --- HANDLE CUSTOM LEVEL UP MESSAGE & PING ---
+                const pingUser = levelConfig.pingUser !== false; // Default to true
+                const pingContent = pingUser ? `${message.author}` : `🎉 ${message.author.username} just leveled up!`;
+                
+                let customText = levelConfig.levelUpText || `🎉 **Level Up!** ${message.author} has reached **Level ${userProfile.level}**! ✨`;
+                customText = customText.replace(/{user}/g, message.author.toString())
+                                       .replace(/{level}/g, userProfile.level)
+                                       .replace(/{oldlevel}/g, userProfile.level - 1);
 
                 let cuteStyle = 'off';
                 try {
@@ -471,11 +498,7 @@ module.exports = {
                 const embed = new discord.EmbedBuilder()
                     .setColor(isCuteActive ? '#FF69B4' : '#00FF00')
                     .setTitle(isCuteActive ? '✨ LEVEL UP! ✨' : '🎉 Level Up!')
-                    .setDescription(
-                        isCuteActive
-                            ? `GG **${message.author.username}**! You just reached level **${userProfile.level}**! 💕`
-                            : `GG **${message.author.tag}**, you have advanced to level **${userProfile.level}**!`
-                    )
+                    .setDescription(customText)
                     .setThumbnail(message.author.displayAvatarURL({ dynamic: true }));
 
                 let targetChannelId = null;
@@ -500,7 +523,7 @@ module.exports = {
                     }
                 }
 
-                await targetChannel.send({ embeds: [embed] }).catch(() => null);
+                await targetChannel.send({ content: pingContent, embeds: [embed] }).catch(() => null);
             }
 
             await db.writeData('levels.json', levelsData);
