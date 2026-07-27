@@ -50,6 +50,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('level')
         .setDescription('Leveling system commands')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild) // Applied to the main command
         
         // Public Commands
         .addSubcommand(sub =>
@@ -60,12 +61,12 @@ module.exports = {
         .addSubcommand(sub => sub.setName('leaderboard').setDescription('Show the top 10 users by XP'))
         
         // Admin Configuration
-        .addSubcommand(sub => sub.setName('settings').setDescription('Configure leveling settings (Staff only)').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild))
-        .addSubcommand(sub => sub.setName('multiplier').setDescription('Set a server-wide XP multiplier (e.g., 2 for Double XP)').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).addIntegerOption(opt => opt.setName('amount').setDescription('Multiplier amount (1-10)').setRequired(true).setMinValue(1).setMaxValue(10)))
+        .addSubcommand(sub => sub.setName('settings').setDescription('Configure leveling settings'))
+        .addSubcommand(sub => sub.setName('multiplier').setDescription('Set a server-wide XP multiplier (e.g., 2 for Double XP)').addIntegerOption(opt => opt.setName('amount').setDescription('Multiplier amount (1-10)').setRequired(true).setMinValue(1).setMaxValue(10)))
         
         // Admin XP Management Group
         .addSubcommandGroup(group =>
-            group.setName('xp').setDescription('Manage user XP').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+            group.setName('xp').setDescription('Manage user XP')
                 .addSubcommand(sub => sub.setName('add').setDescription('Add XP to a user').addUserOption(opt => opt.setName('user').setDescription('Target user').setRequired(true)).addIntegerOption(opt => opt.setName('amount').setDescription('Amount of XP').setRequired(true).setMinValue(1)))
                 .addSubcommand(sub => sub.setName('remove').setDescription('Remove XP from a user').addUserOption(opt => opt.setName('user').setDescription('Target user').setRequired(true)).addIntegerOption(opt => opt.setName('amount').setDescription('Amount of XP').setRequired(true).setMinValue(1)))
                 .addSubcommand(sub => sub.setName('set').setDescription('Set a user\'s exact XP').addUserOption(opt => opt.setName('user').setDescription('Target user').setRequired(true)).addIntegerOption(opt => opt.setName('amount').setDescription('Exact XP amount').setRequired(true).setMinValue(0)))
@@ -76,8 +77,17 @@ module.exports = {
     prefix: '|level',
 
     async execute(interaction, client) {
+        // Permission check for admin commands
         const subcommandGroup = interaction.options.getSubcommandGroup(false);
         const subcommand = interaction.options.getSubcommand();
+        const adminCommands = ['settings', 'multiplier', 'xp'];
+        
+        if (adminCommands.includes(subcommand) || adminCommands.includes(subcommandGroup)) {
+            if (!interaction.member?.permissions?.has(PermissionFlagsBits.ManageGuild)) {
+                return interaction.reply({ content: '❌ You need **Manage Server** permissions to use this command.', ephemeral: true }).catch(() => null);
+            }
+        }
+
         const { guild } = interaction;
 
         try {
