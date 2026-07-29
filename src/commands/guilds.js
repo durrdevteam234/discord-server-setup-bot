@@ -2,6 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 
 const OWNER_ID = process.env.OWNER_ID || 'YOUR_DISCORD_USER_ID';
 
+
 module.exports = {
   name: 'guilds',
   data: new SlashCommandBuilder()
@@ -10,6 +11,9 @@ module.exports = {
 
   async execute(interaction, client) {
     const userId = interaction.user?.id || interaction.author?.id;
+    console.log('userId  :', JSON.stringify(userId));
+    console.log('OWNER_ID:', JSON.stringify(OWNER_ID));
+    console.log('match   :', userId === OWNER_ID);
 
     if (userId !== OWNER_ID) {
       return interaction.reply({ content: "❌ You don't have permission to use this command." });
