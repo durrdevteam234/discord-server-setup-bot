@@ -171,7 +171,10 @@ client.once('ready', async () => {
     const ping = Math.max(0, Math.round(client.ws.ping));
 
     return [
-      { text: 'how can a server with 30 memebers have 239 cases.', type: ActivityType.Streaming},
+      { text: 'go buy ServerMiser Premium yo i need this', type: ActivityType.Watching },
+      ,{ text: '1.99 dollars per week is actually not bad lol', type: ActivityType.Watching },
+      { text: 'whop.com/servermiser/servermiser-premium work in progress don\'t blame me yo', type: ActivityType.Watching},
+      { text: 'how can a server with 30 members have 239 cases.', type: ActivityType.Streaming},
       { text: 'yo uh, why is the moon blue..', type: ActivityType.Watching},
       { text: 'psst, hey you want some candy..', type: ActivityType.Listening},
       { text: 'your chats are so stupid man.', type: ActivityType.Watching},
