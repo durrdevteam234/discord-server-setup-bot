@@ -255,6 +255,10 @@ module.exports = {
                     const resolvedTargetMember = message.mentions.members.first() || message.member;
                     let activeBotResponse = null;
 
+                    // If the command has an 'xp' subcommand group (like level.js),
+                    // argsArray[0] === 'xp' and the real subcommand is argsArray[1].
+                    const usesXpGroup = argsArray[0]?.toLowerCase() === 'xp';
+
                     const mockInteraction = {
                         id: message.id,
                         commandName: commandName,
@@ -269,7 +273,13 @@ module.exports = {
                         replied: false,
                         deferred: false,
                         options: {
-                            getSubcommand: () => argsArray[0] || null,
+                            getSubcommand: () => {
+                                if (usesXpGroup) return argsArray[1] || null;
+                                return argsArray[0] || null;
+                            },
+                            getSubcommandGroup: () => {
+                                return usesXpGroup ? 'xp' : null;
+                            },
                             getString: (name) => {
                                 if (
                                     name === 'template' ||
@@ -288,8 +298,13 @@ module.exports = {
                                 return rawArgsString.length > 0 ? rawArgsString : null;
                             },
                             getInteger: (name) => {
-                                const val = parseInt(rawArgsString, 10);
-                                return isNaN(val) ? null : val;
+                                // Skip past leading non-numeric args like 'xp', 'add', mentions, etc.
+                                for (const token of argsArray) {
+                                    const cleaned = token.replace(/[<@!>]/g, '');
+                                    const val = parseInt(cleaned, 10);
+                                    if (!isNaN(val)) return val;
+                                }
+                                return null;
                             },
                             getNumber: (name) => {
                                 const val = parseFloat(rawArgsString);
@@ -449,13 +464,13 @@ module.exports = {
                 levelsData[guildId][message.author.id] = { xp: 0, level: 0 };
             }
             const userProfile = levelsData[guildId][message.author.id];
-            
+
             // --- APPLY XP MULTIPLIER ---
             const multiplier = levelConfig.multiplier || 1;
             const baseXp = Math.floor(Math.random() * 6) + 5;
             const xpGained = baseXp * multiplier;
             userProfile.xp += xpGained;
-            
+
             // XP needed scales more steeply: 300 per level
             const xpNeeded = (userProfile.level + 1) * 300;
 
@@ -482,7 +497,7 @@ module.exports = {
                 // --- HANDLE CUSTOM LEVEL UP MESSAGE & PING ---
                 const pingUser = levelConfig.pingUser !== false; // Default to true
                 const pingContent = pingUser ? `${message.author}` : `🎉 ${message.author.username} just leveled up!`;
-                
+
                 let customText = levelConfig.levelUpText || `🎉 **Level Up!** ${message.author} has reached **Level ${userProfile.level}**! ✨`;
                 customText = customText.replace(/{user}/g, message.author.toString())
                                        .replace(/{level}/g, userProfile.level)
