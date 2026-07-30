@@ -1,17 +1,19 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const database = require('../utils/database');
 const UserLevel = require('../utils/models/UserLevel');
-const { createCanvas, loadImage, registerFont } = require('canvas');
+const { createCanvas, loadImage, GlobalFonts } = require('@napi-rs/canvas');
 const path = require('path');
 
-// Render (and most headless Linux hosts) ship with zero system fonts
-// installed. Without registering a font file explicitly, ctx.fillText()
-// silently draws nothing — the canvas package has no fallback font to
-// use. This registers a font bundled in the repo so text always renders
-// regardless of what fonts (if any) the host OS has installed.
+// @napi-rs/canvas bundles its own text-rendering engine, so unlike
+// node-canvas it doesn't depend on the host having Cairo/FreeType/
+// fontconfig installed or working correctly — this is what actually
+// fixes text silently failing to render on minimal hosts like Render.
 try {
-    registerFont(path.join(__dirname, '..', 'assets', 'fonts', 'LevelFont.ttf'), { family: 'LevelFont' });
-    console.log('[Leveling] Card font registered successfully.');
+    const registered = GlobalFonts.registerFromPath(
+        path.join(__dirname, '..', 'assets', 'fonts', 'LevelFont.ttf'),
+        'LevelFont'
+    );
+    console.log('[Leveling] Card font registered:', registered);
 } catch (fontError) {
     console.error('[Leveling] Failed to register card font — level-up card text may not render:', fontError.message);
 }

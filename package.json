@@ -10,8 +10,8 @@
     "sync-botnexus": "node src/sync-botnexus-commands.js"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.0.3",
     "axios": "^1.6.0",
-    "canvas": "^2.11.2",
     "cors": "^2.8.6",
     "discord.js": "^14.14.0",
     "dotenv": "^16.6.1",
