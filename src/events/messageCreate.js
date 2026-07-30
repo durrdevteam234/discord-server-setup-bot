@@ -1,10 +1,17 @@
 const discord = require('discord.js');
 const audit = require('../utils/auditLog');
 const db = require('../utils/database');
+const UserLevel = require('../utils/models/UserLevel');
 const formatter = require('../utils/textFormatter.js');
 const mongoose = require('mongoose');
 
 const xpCooldowns = new Map();
+
+// XP needed to go from `level` to `level + 1`. Must match level.js's
+// xpNeededForLevel() so /level rank and the live XP engine agree.
+function xpNeededForLevel(level) {
+    return (level + 1) * 300;
+}
 
 module.exports = {
     name: discord.Events.MessageCreate,
@@ -433,58 +440,62 @@ module.exports = {
             }
 
             // ==========================================
-            // PART B: BACKGROUND TRACKING XP ENGINE
+            // PART B: BACKGROUND XP ENGINE
+            // Uses the same UserLevel model and the same guild_config
+            // store (db.findOne/findOneAndUpdate) that /level settings
+            // actually reads and writes, so toggling leveling on/off,
+            // the multiplier, channel, and rewards here now take effect.
             // ==========================================
             const guildId = message.guild?.id;
             if (!guildId) return;
 
-            const mainSettingsLocal = (await db.readData('settings.json')) || {};
-            const guildSettingsLocal = mainSettingsLocal[guildId] || {};
+            const guildConfig = await db.findOne({ guildId }).catch(() => null) || {};
+            const levelConfig = guildConfig.levelConfig || {};
 
-            const levelingSettings = (await db.readData('leveling_settings.json')) || {};
-            const levelConfig = levelingSettings[guildId] || {};
-
-            const targetStatus = levelConfig.status || levelConfig._doc?.status || levelConfig.enabled || levelConfig._doc?.enabled;
-            const mainLevelingStatus = guildSettingsLocal.leveling || guildSettingsLocal._doc?.leveling;
-
-            const isLevelingActive =
-                (mainLevelingStatus === 'on' || mainLevelingStatus === true) ||
-                (targetStatus === 'on' || targetStatus === true);
-
-            if (!isLevelingActive) return;
+            if (!levelConfig.enabled) return;
 
             const cooldownKey = `${guildId}-${message.author.id}`;
             const now = Date.now();
             if (xpCooldowns.has(cooldownKey) && now < (xpCooldowns.get(cooldownKey) + 60000)) return;
             xpCooldowns.set(cooldownKey, now);
 
-            const levelsData = (await db.readData('levels.json')) || {};
-            if (!levelsData[guildId]) levelsData[guildId] = {};
-            if (!levelsData[guildId][message.author.id]) {
-                levelsData[guildId][message.author.id] = { xp: 0, level: 0 };
-            }
-            const userProfile = levelsData[guildId][message.author.id];
-
-            // --- APPLY XP MULTIPLIER ---
             const multiplier = levelConfig.multiplier || 1;
             const baseXp = Math.floor(Math.random() * 6) + 5;
             const xpGained = baseXp * multiplier;
-            userProfile.xp += xpGained;
 
-            // XP needed scales more steeply: 300 per level
-            const xpNeeded = (userProfile.level + 1) * 300;
+            const userRecord = await UserLevel.findOneAndUpdate(
+                { guildId, userId: message.author.id },
+                { $inc: { xp: xpGained } },
+                { upsert: true, new: true }
+            ).catch(() => null);
 
-            if (userProfile.xp >= xpNeeded) {
-                userProfile.level += 1;
-                userProfile.xp = 0;
+            if (!userRecord) return;
 
+            const oldLevel = userRecord.level || 0;
+            let newLevel = oldLevel;
+            let xp = userRecord.xp;
+
+            // Climb thresholds, resetting xp to the remainder each time
+            // (matches the original level-up-then-reset-to-0 behavior).
+            while (xp >= xpNeededForLevel(newLevel)) {
+                xp -= xpNeededForLevel(newLevel);
+                newLevel += 1;
+            }
+
+            if (newLevel !== oldLevel || xp !== userRecord.xp) {
+                userRecord.level = newLevel;
+                userRecord.xp = xp;
+                await userRecord.save().catch(() => null);
+            }
+
+            if (newLevel > oldLevel) {
                 // --- HANDLE ROLE REWARDS ---
                 const rewards = levelConfig.rewards || [];
                 if (rewards.length > 0) {
                     const member = await message.guild.members.fetch(message.author.id).catch(() => null);
                     if (member) {
                         for (const reward of rewards) {
-                            if (reward.level <= userProfile.level) {
+                            if (reward.level <= newLevel) {
                                 const role = message.guild.roles.cache.get(reward.roleId);
                                 if (role && !member.roles.cache.has(role.id)) {
                                     await member.roles.add(role).catch(() => null);
@@ -498,10 +509,10 @@ module.exports = {
                 const pingUser = levelConfig.pingUser !== false; // Default to true
                 const pingContent = pingUser ? `${message.author}` : `🎉 ${message.author.username} just leveled up!`;
 
-                let customText = levelConfig.levelUpText || `🎉 **Level Up!** ${message.author} has reached **Level ${userProfile.level}**! ✨`;
+                let customText = levelConfig.levelUpText || `🎉 **Level Up!** ${message.author} has reached **Level ${newLevel}**! ✨`;
                 customText = customText.replace(/{user}/g, message.author.toString())
-                                       .replace(/{level}/g, userProfile.level)
-                                       .replace(/{oldlevel}/g, userProfile.level - 1);
+                                       .replace(/{level}/g, newLevel)
+                                       .replace(/{oldlevel}/g, oldLevel);
 
                 let cuteStyle = 'off';
                 try {
@@ -516,19 +527,9 @@ module.exports = {
                     .setDescription(customText)
                     .setThumbnail(message.author.displayAvatarURL({ dynamic: true }));
 
-                let targetChannelId = null;
-                if (levelConfig) {
-                    targetChannelId = levelConfig.channelId ||
-                        levelConfig.settings?.channelId ||
-                        levelConfig._doc?.channelId;
-                }
-                if (!targetChannelId && guildSettingsLocal) {
-                    targetChannelId = guildSettingsLocal.channelId ||
-                        guildSettingsLocal._doc?.channelId;
-                }
-
+                let targetChannelId = levelConfig.channelId || null;
                 let targetChannel = message.channel;
-                if (targetChannelId && typeof targetChannelId === 'string') {
+                if (targetChannelId) {
                     try {
                         targetChannel = message.guild.channels.cache.get(targetChannelId) ||
                             await message.guild.channels.fetch(targetChannelId) ||
@@ -540,8 +541,6 @@ module.exports = {
 
                 await targetChannel.send({ content: pingContent, embeds: [embed] }).catch(() => null);
             }
-
-            await db.writeData('levels.json', levelsData);
 
             // ==========================================
             // 🔄 BACKGROUND AUTOMATION INTEGRATION LOOPS

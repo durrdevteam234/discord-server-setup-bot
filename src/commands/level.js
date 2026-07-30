@@ -1,6 +1,13 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const database = require('../utils/database');
+const UserLevel = require('../utils/models/UserLevel');
 const { createCanvas, loadImage } = require('canvas');
+
+// XP needed to go from `level` to `level + 1`. Matches the linear
+// scaling used by the background XP engine in messageCreate.js.
+function xpNeededForLevel(level) {
+    return (level + 1) * 300;
+}
 
 // --- Helper: Generate Level Up Card ---
 async function generateLevelUpCard(user, oldLevel, newLevel) {
@@ -107,24 +114,49 @@ module.exports = {
                 const amount = interaction.options.getInteger('amount') || 0;
 
                 if (subcommand === 'add') {
-                    const multiplier = (await database.findOne({ guildId: guild.id }).catch(() => null))?.levelConfig?.multiplier || 1;
+                    const guildConfig = await database.findOne({ guildId: guild.id }).catch(() => null);
+                    const multiplier = guildConfig?.levelConfig?.multiplier || 1;
                     const finalAmount = amount * multiplier;
-                    await database.findOneAndUpdate({ guildId: guild.id, userId: targetUser.id }, { $inc: { xp: finalAmount } }, { upsert: true }).catch(() => null);
+
+                    const record = await UserLevel.findOneAndUpdate(
+                        { guildId: guild.id, userId: targetUser.id },
+                        { $inc: { xp: finalAmount } },
+                        { upsert: true, new: true }
+                    );
+                    await this.recomputeLevel(record);
+
                     const embed = new EmbedBuilder().setColor('#57F287').setTitle('✅ XP Added').setDescription(`Added **${finalAmount} XP** to ${targetUser.username}.\n*(Server Multiplier applied: ${multiplier}x)*`);
                     return interaction.reply({ embeds: [embed], ephemeral: true });
                 }
                 if (subcommand === 'remove') {
-                    await database.findOneAndUpdate({ guildId: guild.id, userId: targetUser.id }, { $inc: { xp: -amount } }, { upsert: true }).catch(() => null);
+                    const record = await UserLevel.findOneAndUpdate(
+                        { guildId: guild.id, userId: targetUser.id },
+                        { $inc: { xp: -amount } },
+                        { upsert: true, new: true }
+                    );
+                    if (record.xp < 0) {
+                        record.xp = 0;
+                        await record.save();
+                    }
                     const embed = new EmbedBuilder().setColor('#ED4245').setTitle('✅ XP Removed').setDescription(`Removed **${amount} XP** from ${targetUser.username}.`);
                     return interaction.reply({ embeds: [embed], ephemeral: true });
                 }
                 if (subcommand === 'set') {
-                    await database.findOneAndUpdate({ guildId: guild.id, userId: targetUser.id }, { $set: { xp: amount, level: Math.floor(Math.sqrt(amount / 100)) } }, { upsert: true }).catch(() => null);
+                    const record = await UserLevel.findOneAndUpdate(
+                        { guildId: guild.id, userId: targetUser.id },
+                        { $set: { xp: amount } },
+                        { upsert: true, new: true }
+                    );
+                    await this.recomputeLevel(record);
                     const embed = new EmbedBuilder().setColor('#5865F2').setTitle('✅ XP Set').setDescription(`Set ${targetUser.username}'s XP to exactly **${amount}**.`);
                     return interaction.reply({ embeds: [embed], ephemeral: true });
                 }
                 if (subcommand === 'reset') {
-                    await database.findOneAndUpdate({ guildId: guild.id, userId: targetUser.id }, { $set: { xp: 0, level: 0 } }, { upsert: true }).catch(() => null);
+                    await UserLevel.findOneAndUpdate(
+                        { guildId: guild.id, userId: targetUser.id },
+                        { $set: { xp: 0, level: 0 } },
+                        { upsert: true }
+                    );
                     const embed = new EmbedBuilder().setColor('#ED4245').setTitle('🔄 XP Reset').setDescription(`${targetUser.username}'s XP and Level have been reset to 0.`);
                     return interaction.reply({ embeds: [embed], ephemeral: true });
                 }
@@ -136,7 +168,27 @@ module.exports = {
         }
     },
 
+    // Recomputes `level` from `xp` using the same linear thresholds
+    // (300 * (level+1) per level) as the background XP engine, then
+    // saves the record if the level changed. Handles admin XP set/add
+    // adjustments that jump across multiple level thresholds at once.
+    async recomputeLevel(record) {
+        let level = record.level || 0;
+        let xp = record.xp || 0;
+        while (xp >= xpNeededForLevel(level)) {
+            level += 1;
+        }
+        if (level !== record.level) {
+            record.level = level;
+            await record.save();
+        }
+        return record;
+    },
+
     // --- Prefix Command Handler ---
+    // NOTE: not currently invoked directly — prefix commands are routed
+    // through messageCreate.js's mockInteraction into execute() above.
+    // Kept here in case that routing changes.
     async executePrefix(message, args, client) {
         const subcommand = args[0]?.toLowerCase();
 
@@ -144,7 +196,6 @@ module.exports = {
             return message.reply('Usage: `|level rank [@user]`, `|level leaderboard`, `|level settings`');
         }
 
-        // Mock interaction for prefix commands
         const mockInteraction = {
             deferReply: async () => {},
             editReply: async (content) => message.reply(content),
@@ -162,9 +213,8 @@ module.exports = {
             }
         };
 
-        // Handle 'xp' group
         if (subcommand === 'xp') {
-            const xpAction = args[1]?.toLowerCase(); // add, remove, set, reset
+            const xpAction = args[1]?.toLowerCase();
             mockInteraction.options.getSubcommand = () => xpAction;
             return this.execute(mockInteraction, client);
         }
@@ -184,22 +234,22 @@ module.exports = {
             targetUser = interaction.user;
         }
 
-        const userData = await database.findOne({ guildId: guild.id, userId: targetUser.id }).catch(() => null) || {};
-        const xp = userData.xp || 0;
-        const level = Math.floor(Math.sqrt(xp / 100));
-        const rank = await database.countDocuments({ guildId: guild.id, xp: { $gt: xp } }).catch(() => 0) + 1;
-        const currentLevelXp = level * level * 100;
-        const nextLevelXp = (level + 1) * (level + 1) * 100;
-        const xpForNextLevel = nextLevelXp - currentLevelXp;
-        const xpProgress = xp - currentLevelXp;
-        const progressPercent = Math.floor((xpProgress / xpForNextLevel) * 100);
+        const userRecord = await UserLevel.findOne({ guildId: guild.id, userId: targetUser.id }).lean().catch(() => null);
+        const xp = userRecord?.xp || 0;
+        const level = userRecord?.level || 0;
+
+        const rank = await UserLevel.countDocuments({ guildId: guild.id, xp: { $gt: xp } }).catch(() => 0);
+
+        const xpForNextLevel = xpNeededForLevel(level);
+        const xpProgress = xp; // xp resets to 0 on level-up in this schema, so xp IS the progress
+        const progressPercent = xpForNextLevel > 0 ? Math.floor((xpProgress / xpForNextLevel) * 100) : 0;
 
         const embed = new EmbedBuilder()
             .setColor('#5865F2')
             .setTitle(`📊 ${targetUser.username}'s Rank`)
             .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
             .addFields(
-                { name: 'Rank', value: `#${rank}`, inline: true },
+                { name: 'Rank', value: `#${rank + 1}`, inline: true },
                 { name: 'Level', value: `${level}`, inline: true },
                 { name: 'XP', value: `${xp}`, inline: true },
                 { name: 'Progress to Next Level', value: `${xpProgress}/${xpForNextLevel} XP (${progressPercent}%)` }
@@ -208,12 +258,17 @@ module.exports = {
     },
 
     async handleLeaderboardCommand(interaction) {
-        const users = await database.find({ guildId: interaction.guild.id, xp: { $gt: 0 } }).sort({ xp: -1 }).limit(10).catch(() => null) || [];
+        const users = await UserLevel.find({ guildId: interaction.guild.id, xp: { $gt: 0 } })
+            .sort({ level: -1, xp: -1 })
+            .limit(10)
+            .lean()
+            .catch(() => null) || [];
+
         if (users.length === 0) {
             const embed = new EmbedBuilder().setColor('#99AAB5').setTitle('🏆 XP Leaderboard').setDescription('No users with XP yet.');
             return interaction.reply({ embeds: [embed] }).catch(() => null);
         }
-        const leaderboard = users.map((u, i) => `**${i + 1}.** <@${u.userId}> — **Level ${Math.floor(Math.sqrt(u.xp / 100))}** (${u.xp} XP)`).join('\n');
+        const leaderboard = users.map((u, i) => `**${i + 1}.** <@${u.userId}> — **Level ${u.level || 0}** (${u.xp} XP)`).join('\n');
         const embed = new EmbedBuilder().setColor('#FAA61A').setTitle('🏆 XP Leaderboard').setDescription(leaderboard);
         return interaction.reply({ embeds: [embed] }).catch(() => null);
     },
@@ -259,15 +314,8 @@ module.exports = {
         const id = interaction.customId;
 
         try {
-            // ==========================================
-            // ⚠️ SPECIAL CASES — must run BEFORE the generic
-            // deferUpdate() below, since these two paths call
-            // showModal() / reply() directly. Discord requires
-            // showModal()/reply() to be the FIRST response to an
-            // interaction — calling deferUpdate() first makes
-            // both throw silently, which looked like "no response".
-            // ==========================================
-
+            // These two must run BEFORE deferUpdate() — showModal()/reply()
+            // must be the first response to an interaction.
             if (interaction.isStringSelectMenu() && id === 'level_settings_menu' && interaction.values[0] === 'set_text') {
                 const config = await database.findOne({ guildId: interaction.guild.id }).catch(() => null) || {};
                 const currentText = config.levelConfig?.levelUpText || 'Congratulations {user}! You reached Level {level}!';
@@ -298,10 +346,6 @@ module.exports = {
                 }).catch(() => null);
             }
 
-            // ==========================================
-            // Everything below is safe to defer first, since
-            // these all resolve via editReply().
-            // ==========================================
             if (interaction.isStringSelectMenu() || interaction.isButton()) {
                 await interaction.deferUpdate().catch(() => {});
             }
@@ -414,48 +458,51 @@ module.exports = {
     },
 
     // --- Level Up Logic ---
+    // NOTE: this is currently dead code — the actual leveling engine
+    // lives in messageCreate.js (Part B) and messageCreateLeveling.js,
+    // neither of which calls this. See note below.
     async checkLevelUp(userId, guildId, client) {
-        const userData = await database.findOne({ guildId, userId }).catch(() => null);
-        if (!userData || !userData.xp) return;
-        const newLevel = Math.floor(Math.sqrt(userData.xp / 100));
-        const oldLevel = userData.level || 0;
-        if (newLevel > oldLevel) {
-            await database.findOneAndUpdate({ guildId, userId }, { $set: { level: newLevel } }, { upsert: true }).catch(() => null);
-            const config = await database.findOne({ guildId }).catch(() => null);
-            const levelConfig = config?.levelConfig;
-            if (!levelConfig?.enabled) return;
+        const userRecord = await UserLevel.findOne({ guildId, userId }).catch(() => null);
+        if (!userRecord || !userRecord.xp) return;
+        const oldLevel = userRecord.level || 0;
+        await this.recomputeLevel(userRecord);
+        const newLevel = userRecord.level;
+        if (newLevel <= oldLevel) return;
 
-            const rewards = levelConfig.rewards || [];
-            const guild = client.guilds.cache.get(guildId);
-            const member = guild?.members.cache.get(userId);
-            if (member && rewards.length > 0) {
-                for (const reward of rewards) {
-                    if (reward.level <= newLevel) {
-                        const role = guild.roles.cache.get(reward.roleId);
-                        if (role && !member.roles.cache.has(role.id)) await member.roles.add(role).catch(() => null);
-                    }
+        const config = await database.findOne({ guildId }).catch(() => null);
+        const levelConfig = config?.levelConfig;
+        if (!levelConfig?.enabled) return;
+
+        const rewards = levelConfig.rewards || [];
+        const guild = client.guilds.cache.get(guildId);
+        const member = guild?.members.cache.get(userId);
+        if (member && rewards.length > 0) {
+            for (const reward of rewards) {
+                if (reward.level <= newLevel) {
+                    const role = guild.roles.cache.get(reward.roleId);
+                    if (role && !member.roles.cache.has(role.id)) await member.roles.add(role).catch(() => null);
                 }
             }
+        }
 
-            if (levelConfig.channelId) {
-                const channel = guild?.channels.cache.get(levelConfig.channelId);
-                if (channel) {
-                    const user = client.users.cache.get(userId);
-                    const pingContent = levelConfig.pingUser ? `${user}` : `🎉 ${user.username} just leveled up!`;
-                    let customText = levelConfig.levelUpText || 'Congratulations {user}! You reached Level {level}!';
-                    customText = customText.replace(/{user}/g, user.toString()).replace(/{level}/g, newLevel).replace(/{oldlevel}/g, oldLevel);
-                    if (levelConfig.cardStyle === 'card') {
-                        try {
-                            const card = await generateLevelUpCard(user, oldLevel, newLevel);
-                            await channel.send({ content: pingContent, files: [card] }).catch(() => null);
-                        } catch(e) {
-                            const embed = new EmbedBuilder().setColor('#57F287').setTitle('🎉 Level Up!').setDescription(customText);
-                            await channel.send({ content: pingContent, embeds: [embed] }).catch(() => null);
-                        }
-                    } else {
+        if (levelConfig.channelId) {
+            const channel = guild?.channels.cache.get(levelConfig.channelId);
+            if (channel) {
+                const user = client.users.cache.get(userId);
+                const pingContent = levelConfig.pingUser ? `${user}` : `🎉 ${user.username} just leveled up!`;
+                let customText = levelConfig.levelUpText || 'Congratulations {user}! You reached Level {level}!';
+                customText = customText.replace(/{user}/g, user.toString()).replace(/{level}/g, newLevel).replace(/{oldlevel}/g, oldLevel);
+                if (levelConfig.cardStyle === 'card') {
+                    try {
+                        const card = await generateLevelUpCard(user, oldLevel, newLevel);
+                        await channel.send({ content: pingContent, files: [card] }).catch(() => null);
+                    } catch(e) {
                         const embed = new EmbedBuilder().setColor('#57F287').setTitle('🎉 Level Up!').setDescription(customText);
                         await channel.send({ content: pingContent, embeds: [embed] }).catch(() => null);
                     }
+                } else {
+                    const embed = new EmbedBuilder().setColor('#57F287').setTitle('🎉 Level Up!').setDescription(customText);
+                    await channel.send({ content: pingContent, embeds: [embed] }).catch(() => null);
                 }
             }
         }

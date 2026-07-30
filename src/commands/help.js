@@ -10,6 +10,7 @@ const {
 // FULL HELP DIRECTORY
 // Every command in the bot is listed here, grouped into browsable categories.
 // Navigation uses a select menu so new categories scale cleanly.
+// (Owner-only utility commands are intentionally excluded from this list.)
 // ============================================================================
 const PREFIX_NOTE = '💡 All commands work with both `/` and the `|` prefix.';
 
@@ -24,9 +25,12 @@ const PAGES = [
       '`/help` - Open this interactive help directory.\n' +
       '`/capabilities` - A full, detailed tour of everything the bot can do.\n' +
       '`/purpose` - Learn about the bot and view its profile.\n' +
-      '`/rank` - Check your level and XP progress.\n' +
-      '`/leaderboard` - View the top 10 ranked members.\n' +
-      '`/analytics` - View server activity and growth stats.',
+      '`/level rank [user]` - Check your (or someone else\'s) level and XP.\n' +
+      '`/level leaderboard` - View the top 10 ranked members.\n' +
+      '`/level settings` - Configure the leveling system (staff).\n' +
+      '`/level multiplier <amount>` - Set a server-wide XP multiplier (staff).\n' +
+      '`/level xp add/remove/set/reset` - Manually adjust a member\'s XP (staff).\n' +
+      '`/analytics setup/edit/delete/update` - Manage live server stat channels.',
   },
   {
     key: 'setup',
@@ -36,14 +40,12 @@ const PAGES = [
     title: '🛠️ Server Setup & Configuration',
     body:
       '`/setup <template> [clear]` - Build a full server layout from templates.\n' +
-      '`/setup-audit` - Configure the audit log channel.\n' +
-      '`/mod-logs-toggle` - Enable/disable moderation logging.\n' +
-      '`/welcome` - Configure welcome messages for new members.\n' +
-      '`/leveling <on/off>` - Toggle the XP tracking system.\n' +
-      '`/fun-module <on/off>` - Toggle the entire fun suite.\n' +
-      '`/clear-channels` - Mass-delete channels quickly.\n' +
-      '`/cute <style>` - Change the bot\'s text styling.\n' +
-      '`/flavour` - Manage custom response variations.',
+      '`/setup-audit` - Configure the audit log channel and tracked actions.\n' +
+      '`/mod-logs-toggle` - Enable/disable moderation logging to a channel.\n' +
+      '`/welcome` - Configure welcome/leave messages and embeds.\n' +
+      '`/cute <style>` - Change the bot\'s text styling for setup templates.\n' +
+      '`/fun-module` - Enable or disable the entire fun commands suite.\n' +
+      '`/clear-channels` - Wipe all categories and channels from the server.',
   },
   {
     key: 'moderation',
@@ -52,29 +54,30 @@ const PAGES = [
     color: '#ED4245',
     title: '🛡️ Moderation & AutoMod',
     body:
-      '`/warn <user> <reason>` - Formally warn a member.\n' +
-      '`/warnings [user]` - View warning history.\n' +
-      '`/mute <user>` • `/unmute <user>` - Timeout or restore a member.\n' +
+      '`/warn <user> <reason>` • `/warnings [user]` • `/unwarn <user> <index>` - Warn, view, and remove warnings.\n' +
+      '`/mute <user> <duration> [reason]` • `/unmute <user>` - Timeout or restore a member.\n' +
       '`/kick <user> [reason]` - Kick a member.\n' +
-      '`/ban <user> [reason]` • `/unban <username>` - Ban or unban.\n' +
-      '`/automodrule` - Configure up to 20 automod filters.\n' +
-      '`/clearroles` - Strip roles in bulk.',
+      '`/ban <user> [reason]` • `/unban <username> [reason]` - Ban or unban.\n' +
+      '`/automodrule setup/edit/delete` - Configure up to 20 background message filters.\n' +
+      '`/purge <amount> [filters]` - Bulk delete messages by user, bots, or links.\n' +
+      '`/lockdown on/off <channel>` - Freeze or thaw a channel during emergencies.\n' +
+      '`/slowmode` - Set, edit, exempt roles from, or remove channel slowmode.\n' +
+      '`/clearroles` - Forcefully delete all modifiable custom server roles.',
   },
   {
     key: 'roles',
-    label: 'Roles',
+    label: 'Roles & Access',
     emoji: '🎭',
     color: '#FEE75C',
-    title: '🎭 Role Management',
+    title: '🎭 Roles & Access',
     body:
-      '`/role user` • `/role remove` - Add/remove roles from members.\n' +
-      '`/role create` • `/role delete` - Create/delete roles.\n' +
-      '`/role everyone` • `bots` • `humans` - Mass-assign roles.\n' +
-      '`/role color` • `rename` • `hoist` • `mentionable` - Edit role properties.\n' +
-      '`/role info` • `/role list` - Inspect the role hierarchy.\n' +
-      '`/autorole` - Auto-grant a role when members join.\n' +
-      '`/reactionroles` - Build interactive role panels.\n' +
-      '`/verification` - Set up a member verification gate.',
+      '`/role user/remove` - Add or remove a role from a member.\n' +
+      '`/role create/delete/rename/color/hoist/mentionable` - Manage role properties.\n' +
+      '`/role everyone/bots/humans` - Mass-assign a role to a group.\n' +
+      '`/role info/list` - Inspect the role hierarchy.\n' +
+      '`/autorole` - Auto-grant a role when members join (all/bots/humans).\n' +
+      '`/reactionroles` - Build interactive self-assignable role panels.\n' +
+      '`/verification setup/edit/delete/disable` - Configure a member verification gate.',
   },
   {
     key: 'tickets',
@@ -83,9 +86,11 @@ const PAGES = [
     color: '#57F287',
     title: '🎫 Ticket Support System',
     body:
-      '`/ticket create` - Open a private support room.\n' +
-      '`/ticket close` - Close and archive a ticket (staff).\n\n' +
-      'Members open tickets for private help; staff manage and close them.',
+      '`/ticket panel` - Post the ticket-creation panel (staff).\n' +
+      '`/ticket channel` - Configure the ticket category/settings (staff).\n' +
+      '`/ticket ongoing` - View currently open tickets (staff).\n' +
+      '`/ticket purge` - Bulk-close old tickets (staff).\n\n' +
+      'Members open tickets from the panel for private help; staff manage and close them.',
   },
   {
     key: 'selfvoice',
@@ -94,12 +99,13 @@ const PAGES = [
     color: '#3498DB',
     title: '🔊 Self Voice — Temp Voice Channels',
     body:
-      '`/selfvoice create [name] [limit]` - Create your own temp VC (when enabled). ' +
-      'Auto-deletes in ~10s unless you join, and removes itself when you leave.\n' +
-      '`/selfvoice setup` - Staff wizard for the module.\n' +
-      '`/selfvoice set <setting> <value>` - Fine-tune defaults.\n' +
+      '`/selfvoice create [name] [limit]` - Create your own temp VC (when enabled).\n' +
+      '`/selfvoice panel` - Resend the control panel for your active room.\n' +
+      '`/selfvoice config` - View the current module configuration.\n' +
+      '`/selfvoice setup` - Staff wizard to configure the module.\n' +
+      '`/selfvoice set <setting> <value>` - Fine-tune defaults (staff).\n' +
       '`/selfvoice enable` • `disable` - Staff module toggle.\n\n' +
-      'Owners get a control panel: rename, lock, hide, limit, bitrate, region, kick, transfer, claim, delete.',
+      'Owners of a temp VC get a control panel: rename, lock, hide, limit, bitrate, kick, transfer, claim, delete.',
   },
   {
     key: 'autoresponder',
@@ -108,12 +114,29 @@ const PAGES = [
     color: '#9B59B6',
     title: '💬 Auto Responder',
     body:
-      '`/autoresponder setup` - Step-by-step wizard with live preview.\n' +
-      '`/autoresponder add <trigger> <response>` - Quick create.\n' +
-      '`/autoresponder variables` - See all dynamic placeholders.\n' +
+      '`/autoresponder setup` - Step-by-step wizard with a live preview.\n' +
+      '`/autoresponder add <trigger> <response>` - Quickly create a responder.\n' +
       '`/autoresponder list` • `info` • `edit` • `remove` • `toggle` • `test` - Manage responders.\n' +
-      '`/autoresponder enable` • `disable` - Staff module toggle.\n\n' +
-      'Supports exact/contains/wildcard/regex matching, cooldowns, chance rolls, reactions, embeds, and role gating.',
+      '`/autoresponder variables` - See all dynamic placeholders you can use.\n' +
+      '`/autoresponder config` - View the module overview.\n' +
+      '`/autoresponder enable` • `disable` - Staff module toggle.',
+  },
+  {
+    key: 'engagement',
+    label: 'Engagement',
+    emoji: '📣',
+    color: '#F47FFF',
+    title: '📣 Server Engagement Tools',
+    body:
+      '`/giveaway start/reroll/end` - Run timed giveaways with a winner draw.\n' +
+      '`/poll create/setup` - Post a poll with vote buttons, with optional auto-close.\n' +
+      '`/suggestions setup/submit/approve/deny/implement/list` - A full member suggestion box.\n' +
+      '`/starboard setup/config/toggle/ignore` - Repost highly-starred messages to a channel.\n' +
+      '`/birthdays set/remove/check/today/upcoming/list/config` - Track member birthdays.\n' +
+      '`/invites check/leaderboard/config/toggle/stats` - Track who invited whom.\n' +
+      '`/embed create/edit/send/save/load/list/delete` - Build and manage rich embeds.\n' +
+      '`/automessage` - Schedule recurring messages to a channel.\n' +
+      '`/autodelete` - Auto-delete messages in a channel after a set time.',
   },
   {
     key: 'fun',
@@ -122,10 +145,10 @@ const PAGES = [
     color: '#F1C40F',
     title: '🎉 Fun & Social',
     body:
-      '**Games:** `/trivia` `/wouldyourather` `/capital-quiz` `/dice-duel` `/coinflip` `/roll` `/dice` `/8ball`\n' +
-      '**Social:** `/hug` `/slap` `/roast` `/rate` `/predict-love`\n' +
+      '**Games:** `/trivia` `/wouldyourather` `/capital-quiz` `/dice-duel` `/coinflip` `/roll` `/8ball`\n' +
+      '**Social:** `/hug` `/slap` `/roast` `/rate` `/predict-love` `/flavor`\n' +
       '**Content:** `/joke` `/dadjoke` `/meme` `/fortune` `/spacefact` `/cat` `/dog`\n' +
-      '**Menu:** `/fun-menu` to explore the fun suite.',
+      '**Menu:** `/fun-menu` to browse the fun suite in one place.',
   },
 ];
 
