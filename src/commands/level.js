@@ -51,7 +51,7 @@ module.exports = {
         .setName('level')
         .setDescription('Leveling system commands')
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild) // Applied to the main command
-        
+
         // Public Commands
         .addSubcommand(sub =>
             sub.setName('rank')
@@ -59,11 +59,11 @@ module.exports = {
                 .addUserOption(opt => opt.setName('user').setDescription('User to check (defaults to you)').setRequired(false))
         )
         .addSubcommand(sub => sub.setName('leaderboard').setDescription('Show the top 10 users by XP'))
-        
+
         // Admin Configuration
         .addSubcommand(sub => sub.setName('settings').setDescription('Configure leveling settings'))
         .addSubcommand(sub => sub.setName('multiplier').setDescription('Set a server-wide XP multiplier (e.g., 2 for Double XP)').addIntegerOption(opt => opt.setName('amount').setDescription('Multiplier amount (1-10)').setRequired(true).setMinValue(1).setMaxValue(10)))
-        
+
         // Admin XP Management Group
         .addSubcommandGroup(group =>
             group.setName('xp').setDescription('Manage user XP')
@@ -81,7 +81,7 @@ module.exports = {
         const subcommandGroup = interaction.options.getSubcommandGroup(false);
         const subcommand = interaction.options.getSubcommand();
         const adminCommands = ['settings', 'multiplier', 'xp'];
-        
+
         if (adminCommands.includes(subcommand) || adminCommands.includes(subcommandGroup)) {
             if (!interaction.member?.permissions?.has(PermissionFlagsBits.ManageGuild)) {
                 return interaction.reply({ content: '❌ You need **Manage Server** permissions to use this command.', ephemeral: true }).catch(() => null);
@@ -94,7 +94,7 @@ module.exports = {
             if (subcommand === 'rank') return await this.handleRankCommand(interaction, interaction.options.getUser('user')?.id, client);
             if (subcommand === 'leaderboard') return await this.handleLeaderboardCommand(interaction);
             if (subcommand === 'settings') return await this.handleSettingsCommand(interaction);
-            
+
             if (subcommand === 'multiplier') {
                 const amount = interaction.options.getInteger('amount');
                 await database.findOneAndUpdate({ guildId: guild.id }, { $set: { 'levelConfig.multiplier': amount } }, { upsert: true }).catch(() => null);
@@ -259,6 +259,49 @@ module.exports = {
         const id = interaction.customId;
 
         try {
+            // ==========================================
+            // ⚠️ SPECIAL CASES — must run BEFORE the generic
+            // deferUpdate() below, since these two paths call
+            // showModal() / reply() directly. Discord requires
+            // showModal()/reply() to be the FIRST response to an
+            // interaction — calling deferUpdate() first makes
+            // both throw silently, which looked like "no response".
+            // ==========================================
+
+            if (interaction.isStringSelectMenu() && id === 'level_settings_menu' && interaction.values[0] === 'set_text') {
+                const config = await database.findOne({ guildId: interaction.guild.id }).catch(() => null) || {};
+                const currentText = config.levelConfig?.levelUpText || 'Congratulations {user}! You reached Level {level}!';
+                const modal = new ModalBuilder().setCustomId('level_text_modal').setTitle('Set Custom Level-Up Text');
+                const textInput = new TextInputBuilder()
+                    .setCustomId('levelUpText')
+                    .setLabel("Enter the message. Use {user} and {level}")
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setValue(currentText)
+                    .setRequired(true);
+                modal.addComponents(new ActionRowBuilder().addComponents(textInput));
+                return interaction.showModal(modal);
+            }
+
+            if (interaction.isButton() && id === 'level_reward_add') {
+                return interaction.reply({ content: '➕ **Add Reward**\nPlease type the level and mention the role in this format:\n`<level> @role`\nExample: `10 @Verified`', ephemeral: true }).then(() => {
+                    const filter = m => m.author.id === interaction.user.id;
+                    interaction.channel.awaitMessages({ filter, max: 1, time: 60000, errors: ['time'] })
+                        .then(async collected => {
+                            const msg = collected.first();
+                            const args = msg.content.split(' ');
+                            const level = parseInt(args[0]);
+                            const role = msg.mentions.roles.first();
+                            if (!level || !role) return msg.reply('❌ Invalid format.');
+                            await database.findOneAndUpdate({ guildId: interaction.guild.id }, { $push: { 'levelConfig.rewards': { level, roleId: role.id } } }, { upsert: true }).catch(() => null);
+                            msg.reply(`✅ Added reward: **Level ${level}** -> ${role.name}`);
+                        }).catch(() => interaction.followUp({ content: '❌ Timed out.', ephemeral: true }).catch(() => null));
+                }).catch(() => null);
+            }
+
+            // ==========================================
+            // Everything below is safe to defer first, since
+            // these all resolve via editReply().
+            // ==========================================
             if (interaction.isStringSelectMenu() || interaction.isButton()) {
                 await interaction.deferUpdate().catch(() => {});
             }
@@ -286,14 +329,6 @@ module.exports = {
                 if (selection === 'set_style') {
                     const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('level_set_style_menu').setPlaceholder('Select level-up style...').addOptions([ { label: '🎨 Visual Card', value: 'card', description: 'Generate an image card' }, { label: '📝 Text Message', value: 'text', description: 'Send a standard text message' } ]));
                     return interaction.editReply({ content: '🎨 **Select Level-Up Style**', embeds: [], components: [row] }).catch(() => null);
-                }
-                if (selection === 'set_text') {
-                    const config = await database.findOne({ guildId: interaction.guild.id }).catch(() => null) || {};
-                    const currentText = config.levelConfig?.levelUpText || 'Congratulations {user}! You reached Level {level}!';
-                    const modal = new ModalBuilder().setCustomId('level_text_modal').setTitle('Set Custom Level-Up Text');
-                    const textInput = new TextInputBuilder().setCustomId('levelUpText').setLabel("Enter the message. Use {user} and {level}").setStyle(TextInputStyle.Paragraph).setValue(currentText).setRequired(true);
-                    modal.addComponents(new ActionRowBuilder().addComponents(textInput));
-                    return interaction.showModal(modal);
                 }
                 if (selection === 'manage_rewards') {
                     const config = await database.findOne({ guildId: interaction.guild.id }).catch(() => null) || {};
@@ -325,22 +360,6 @@ module.exports = {
                 const text = interaction.fields.getTextInputValue('levelUpText');
                 await database.findOneAndUpdate({ guildId: interaction.guild.id }, { $set: { 'levelConfig.levelUpText': text } }, { upsert: true }).catch(() => null);
                 return interaction.reply({ content: `✅ Custom level-up text updated!`, ephemeral: true }).catch(() => null);
-            }
-
-            if (id === 'level_reward_add') {
-                return interaction.reply({ content: '➕ **Add Reward**\nPlease type the level and mention the role in this format:\n`<level> @role`\nExample: `10 @Verified`', ephemeral: true }).then(() => {
-                    const filter = m => m.author.id === interaction.user.id;
-                    interaction.channel.awaitMessages({ filter, max: 1, time: 60000, errors: ['time'] })
-                        .then(async collected => {
-                            const msg = collected.first();
-                            const args = msg.content.split(' ');
-                            const level = parseInt(args[0]);
-                            const role = msg.mentions.roles.first();
-                            if (!level || !role) return msg.reply('❌ Invalid format.');
-                            await database.findOneAndUpdate({ guildId: interaction.guild.id }, { $push: { 'levelConfig.rewards': { level, roleId: role.id } } }, { upsert: true }).catch(() => null);
-                            msg.reply(`✅ Added reward: **Level ${level}** -> ${role.name}`);
-                        }).catch(() => interaction.followUp({ content: '❌ Timed out.', ephemeral: true }).catch(() => null));
-                }).catch(() => null);
             }
 
             if (id === 'level_reward_remove') {
