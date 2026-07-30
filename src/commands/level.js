@@ -1,7 +1,19 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const database = require('../utils/database');
 const UserLevel = require('../utils/models/UserLevel');
-const { createCanvas, loadImage } = require('canvas');
+const { createCanvas, loadImage, registerFont } = require('canvas');
+const path = require('path');
+
+// Render (and most headless Linux hosts) ship with zero system fonts
+// installed. Without registering a font file explicitly, ctx.fillText()
+// silently draws nothing — the canvas package has no fallback font to
+// use. This registers a font bundled in the repo so text always renders
+// regardless of what fonts (if any) the host OS has installed.
+try {
+    registerFont(path.join(__dirname, '..', 'assets', 'fonts', 'LevelFont.ttf'), { family: 'LevelFont' });
+} catch (fontError) {
+    console.error('[Leveling] Failed to register card font — level-up card text may not render:', fontError.message);
+}
 
 // XP needed to go from `level` to `level + 1`. Matches the linear
 // scaling used by the background XP engine in messageCreate.js.
@@ -46,9 +58,9 @@ async function generateLevelUpCard(user, oldLevel, newLevel) {
         ctx.fillText(text, 450, y);
     };
 
-    drawCenteredText('CONGRATS!', 80, 'bold 40px sans-serif', '#FFFFFF');
-    drawCenteredText(`@${user.username}`, 130, 'bold 30px sans-serif', '#FFFFFF');
-    drawCenteredText(`Level ${oldLevel}  =>  Level ${newLevel}`, 200, 'bold 50px sans-serif', '#5865F2');
+    drawCenteredText('CONGRATS!', 80, 'bold 40px LevelFont', '#FFFFFF');
+    drawCenteredText(`@${user.username}`, 130, 'bold 30px LevelFont', '#FFFFFF');
+    drawCenteredText(`Level ${oldLevel}  =>  Level ${newLevel}`, 200, 'bold 50px LevelFont', '#5865F2');
 
     return new AttachmentBuilder(canvas.toBuffer(), { name: 'levelup.png' });
 }
