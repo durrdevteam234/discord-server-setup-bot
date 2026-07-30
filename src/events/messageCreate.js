@@ -539,7 +539,18 @@ module.exports = {
                     }
                 }
 
-                await targetChannel.send({ content: pingContent, embeds: [embed] }).catch(() => null);
+                if (levelConfig.cardStyle === 'card') {
+                    try {
+                        const levelCommand = client.commands.get('level');
+                        const card = await levelCommand.generateLevelUpCard(message.author, oldLevel, newLevel);
+                        await targetChannel.send({ content: pingContent, files: [card] }).catch(() => null);
+                    } catch (cardError) {
+                        console.error('[Leveling] Card generation failed, falling back to embed:', cardError.message);
+                        await targetChannel.send({ content: pingContent, embeds: [embed] }).catch(() => null);
+                    }
+                } else {
+                    await targetChannel.send({ content: pingContent, embeds: [embed] }).catch(() => null);
+                }
             }
 
             // ==========================================

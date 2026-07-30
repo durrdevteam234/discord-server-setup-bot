@@ -54,6 +54,7 @@ async function generateLevelUpCard(user, oldLevel, newLevel) {
 }
 
 module.exports = {
+    generateLevelUpCard,
     data: new SlashCommandBuilder()
         .setName('level')
         .setDescription('Leveling system commands')
