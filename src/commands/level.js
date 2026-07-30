@@ -11,6 +11,7 @@ const path = require('path');
 // regardless of what fonts (if any) the host OS has installed.
 try {
     registerFont(path.join(__dirname, '..', 'assets', 'fonts', 'LevelFont.ttf'), { family: 'LevelFont' });
+    console.log('[Leveling] Card font registered successfully.');
 } catch (fontError) {
     console.error('[Leveling] Failed to register card font — level-up card text may not render:', fontError.message);
 }
