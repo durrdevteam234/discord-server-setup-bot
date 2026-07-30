@@ -36,7 +36,9 @@ async function generateLevelUpCard(user, oldLevel, newLevel) {
 
     try {
         const avatarURL = user.displayAvatarURL({ extension: 'png', size: 128 });
-        const avatar = await loadImage(avatarURL);
+        const avatarResponse = await fetch(avatarURL);
+        const avatarBuffer = Buffer.from(await avatarResponse.arrayBuffer());
+        const avatar = await loadImage(avatarBuffer);
         ctx.save();
         ctx.beginPath();
         ctx.arc(125, 125, 75, 0, Math.PI * 2, true);
@@ -65,7 +67,7 @@ async function generateLevelUpCard(user, oldLevel, newLevel) {
     drawCenteredText(`@${user.username}`, 130, 'bold 30px LevelFont', '#FFFFFF');
     drawCenteredText(`Level ${oldLevel}  =>  Level ${newLevel}`, 200, 'bold 50px LevelFont', '#5865F2');
 
-    return new AttachmentBuilder(canvas.toBuffer(), { name: 'levelup.png' });
+    return new AttachmentBuilder(canvas.toBuffer('image/png'), { name: 'levelup.png' });
 }
 
 module.exports = {
