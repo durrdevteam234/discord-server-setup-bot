@@ -134,6 +134,15 @@ module.exports = {
         }
 
         // ========================================================
+        // L2. LEVELING SETTINGS (dropdowns, buttons, modals)
+        // ========================================================
+        if (cid.startsWith('level_')) {
+            const cmd = activeClient.commands.get('level');
+            if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
+            return interaction.deferUpdate().catch(() => null);
+        }
+
+        // ========================================================
         // K. MODAL SAFETY NET (any remaining unmatched modals)
         // ========================================================
         if (typeof interaction.isModalSubmit === 'function' && interaction.isModalSubmit()) {
@@ -169,11 +178,11 @@ module.exports = {
 
         const coreUtilityCommands = [
             'setup', 'cute', 'fun-module', 'fun-menu', 'help', 'setup-audit',
-                    'mod-logs-toggle', 'reactionroles', 'autorole', 'automodrule',
-                    'ticket', 'verification', 'leaderboard', 'rank', 'analytics', 'clearroles',
-                    'selfvoice', 'autoresponder', 'capabilities',
-                    'starboard', 'suggestions', 'giveaway', 'embed', 'birthdays', 'invites', 'poll',
-                    'slowmode', 'purge', 'lockdown', 'automessage', 'autodelete', 'guilds','level'
+            'mod-logs-toggle', 'reactionroles', 'autorole', 'automodrule',
+            'ticket', 'verification', 'leaderboard', 'rank', 'analytics', 'clearroles',
+            'selfvoice', 'autoresponder', 'capabilities',
+            'starboard', 'suggestions', 'giveaway', 'embed', 'birthdays', 'invites', 'poll',
+            'slowmode', 'purge', 'lockdown', 'automessage', 'autodelete', 'guilds', 'level'
         ];
 
         if (!coreUtilityCommands.includes(commandName.toLowerCase())) {
