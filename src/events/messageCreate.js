@@ -212,7 +212,7 @@ module.exports = {
                     'ticket', 'verification', 'leaderboard', 'rank', 'analytics', 'clearroles',
                     'selfvoice', 'autoresponder', 'capabilities',
                     'starboard', 'suggestions', 'giveaway', 'embed', 'birthdays', 'invites', 'poll',
-                    'slowmode', 'purge', 'lockdown', 'automessage', 'autodelete', 'guilds'
+                    'slowmode', 'purge', 'lockdown', 'automessage', 'autodelete', 'guilds','level'
                 ];
                 if (!coreUtilityCommands.includes(commandName)) {
                     if (

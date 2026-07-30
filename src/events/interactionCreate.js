@@ -168,12 +168,12 @@ module.exports = {
         const currentGuildSettings = mainSettings[interaction.guildId] || {};
 
         const coreUtilityCommands = [
-            'setup', 'cute', 'fun-module', 'help', 'setup-audit',
-            'mod-logs-toggle', 'reactionroles', 'autorole', 'automodrule',
-            'ticket', 'verification', 'leaderboard', 'rank', 'analytics', 'clearroles',
-            'selfvoice', 'autoresponder', 'capabilities',
-            // new modules
-            'starboard', 'suggestions', 'giveaway', 'embed', 'birthdays', 'invites', 'poll',
+            'setup', 'cute', 'fun-module', 'fun-menu', 'help', 'setup-audit',
+                    'mod-logs-toggle', 'reactionroles', 'autorole', 'automodrule',
+                    'ticket', 'verification', 'leaderboard', 'rank', 'analytics', 'clearroles',
+                    'selfvoice', 'autoresponder', 'capabilities',
+                    'starboard', 'suggestions', 'giveaway', 'embed', 'birthdays', 'invites', 'poll',
+                    'slowmode', 'purge', 'lockdown', 'automessage', 'autodelete', 'guilds','level'
         ];
 
         if (!coreUtilityCommands.includes(commandName.toLowerCase())) {
