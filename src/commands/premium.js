@@ -6,10 +6,11 @@ const {
   ButtonStyle,
   PermissionFlagsBits,
   ChannelType,
+  Events,
 } = require('discord.js');
 
 // ============================================================================
-// PREMIUM INFO & SALES COMMAND  +  BACKGROUND PROMO SWEEPER
+// PREMIUM INFO & SALES COMMAND  +  ACTIVITY-TRIGGERED PROMO
 // ServerMiser Premium is a companion bot that joins alongside this one once
 // a server is authorized via Whop. It unlocks AI persona chat, cross-server
 // phone calls, and the full Hoard economy/casino system, on top of
@@ -17,12 +18,14 @@ const {
 //
 // This file does two things:
 //   1. /premium about|info — the existing sales command members can run.
-//   2. A quiet background sweeper (init(client) + setInterval, same pattern
-//      as autodelete.js's sweeper) that occasionally drops a promo embed
-//      into an active server on its own — NOT a command, nothing to
-//      enable/disable/configure. index.js's command loader already calls
-//      `command.init(client)` on anything it loads that has one, so
-//      bundling the sweeper in here needs no other file to change.
+//   2. A promo drop that only ever fires as a side effect of someone
+//      actually running a command (slash or prefix) in a server — NOT a
+//      blind timer sweeping every guild regardless of whether anyone's
+//      around. init(client) attaches its own InteractionCreate/MessageCreate
+//      listeners directly to the client — Node's EventEmitter happily
+//      supports multiple listeners on the same event, so this needs no
+//      changes to index.js, interactionCreate.js, or messageCreate.js.
+//      Still NOT a command itself — nothing to enable/disable/configure.
 // ============================================================================
 
 const WHOP_URL = 'https://whop.com/servermiser/servermiser-premium';
@@ -103,16 +106,19 @@ function buildComparisonEmbed() {
 }
 
 /* ==========================================================================
- *  BACKGROUND PROMO SWEEPER
- *  Purely automatic — no command, no per-server opt-out or config. Every
- *  hour it re-rolls a small chance per server to post a promo embed
- *  (pricing starts at $1.99, with the Buy Premium button above) into a
- *  channel it picks for itself. A per-guild in-memory cooldown keeps any
- *  one server from getting hit twice in quick succession.
+ *  ACTIVITY-TRIGGERED PROMO
+ *  Purely automatic — no command, no per-server opt-out or config. Instead
+ *  of a timer sweeping every guild on a schedule, this piggybacks on real
+ *  command usage: every time someone in a guild runs a slash or prefix
+ *  command, there's a small chance it also drops a promo embed (pricing
+ *  starts at $1.99, with the Buy Premium button above) into a channel it
+ *  picks for itself — so it only ever fires in servers that are actually
+ *  active, never in a dead one. A per-guild in-memory cooldown, set much
+ *  longer than before, keeps any one server from getting hit more than
+ *  rarely even if it's extremely active.
  * ========================================================================== */
-const CHECK_INTERVAL_MS = 60 * 60 * 1000;   // sweep tick — re-evaluates every server once an hour
-const POST_CHANCE_PER_TICK = 0.03;          // ~3% chance per guild per eligible tick
-const MIN_GAP_MS = 20 * 60 * 60 * 1000;     // hard floor: never post in the same server more than once per ~20h
+const POST_CHANCE_PER_TRIGGER = 0.015;      // ~1.5% chance per command run in a guild, once eligible
+const MIN_GAP_MS = 30 * 60 * 60 * 1000;     // hard floor: never post in the same server more than once per 30h
 
 // In-memory only — a missed post after a restart just means the next
 // hourly tick rolls again; there's nothing here worth persisting to Mongo.
@@ -166,25 +172,25 @@ function pickPromoChannel(guild) {
   return guild.channels.cache.find((c) => c.type === ChannelType.GuildText && canSend(guild, c)) || null;
 }
 
+// Called from the command-activity listeners below — `guild` is wherever
+// the command that just ran came from.
 async function maybePromoteGuild(guild) {
+  if (!guild) return;
   try {
     const last = lastPromoAt.get(guild.id) || 0;
     if (Date.now() - last < MIN_GAP_MS) return;
-    if (Math.random() > POST_CHANCE_PER_TICK) return;
+    if (Math.random() > POST_CHANCE_PER_TRIGGER) return;
 
     const channel = pickPromoChannel(guild);
     if (!channel) return;
 
-    await channel.send({ embeds: [buildPromoEmbed()], components: [buyButtonRow()] }).catch(() => null);
+    // Set the cooldown before the send resolves, not after — otherwise a
+    // burst of commands firing in the same moment could all pass the gap
+    // check before any of them finishes sending, and double-post.
     lastPromoAt.set(guild.id, Date.now());
+    await channel.send({ embeds: [buildPromoEmbed()], components: [buyButtonRow()] }).catch(() => null);
   } catch (err) {
-    console.error(`[Premium] Promo sweep failed in guild ${guild.id}:`, err.message);
-  }
-}
-
-async function runPromoSweep(client) {
-  for (const guild of client.guilds.cache.values()) {
-    await maybePromoteGuild(guild);
+    console.error(`[Premium] Promo trigger failed in guild ${guild.id}:`, err.message);
   }
 }
 
@@ -205,11 +211,24 @@ module.exports = {
   name: 'premium',
 
   // Called once at startup by index.js's command loader
-  // (`if (command.init) command.init(client)`), same pattern as
-  // autodelete.js's background sweeper.
+  // (`if (command.init) command.init(client)`). Attaches its own listeners
+  // straight to the client instead of an independent timer — every slash
+  // command dispatch and every prefix command message becomes a (rare)
+  // chance to promote, so it's activity-gated rather than schedule-gated.
   init(client) {
-    console.log('[Premium] Starting background promo sweeper (interval: ' + (CHECK_INTERVAL_MS / 60000) + 'm).');
-    setInterval(() => runPromoSweep(client).catch((err) => console.error('[Premium] Sweep cycle failed:', err.message)), CHECK_INTERVAL_MS);
+    console.log(`[Premium] Promo trigger armed — ~${(POST_CHANCE_PER_TRIGGER * 100).toFixed(1)}% chance per command run, min ${Math.round(MIN_GAP_MS / 3600000)}h between posts per server.`);
+
+    client.on(Events.InteractionCreate, (interaction) => {
+      if (!interaction.isChatInputCommand() || !interaction.guild) return;
+      maybePromoteGuild(interaction.guild).catch(() => null);
+    });
+
+    client.on(Events.MessageCreate, (message) => {
+      if (message.author.bot || !message.guild || !message.content) return;
+      const prefix = client.prefix || '|';
+      if (!message.content.startsWith(prefix)) return;
+      maybePromoteGuild(message.guild).catch(() => null);
+    });
   },
 
   async execute(interaction) {
