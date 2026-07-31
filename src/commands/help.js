@@ -8,8 +8,11 @@ const {
 
 // ============================================================================
 // FULL HELP DIRECTORY
-// Every command in the bot is listed here, grouped into browsable categories.
-// Navigation uses a select menu so new categories scale cleanly.
+// Every command in the bot is listed here, grouped into browsable pages.
+// Navigation uses a select menu so new pages scale cleanly.
+// Pages are labeled generically ("Page 1", "Page 2", ...) rather than by
+// category name — the label is derived from array position, not hardcoded,
+// so it never needs updating as pages are added, removed, or reordered.
 // (Owner-only utility commands are intentionally excluded from this list.)
 // ============================================================================
 const PREFIX_NOTE = '💡 All commands work with both `/` and the `|` prefix.';
@@ -17,14 +20,13 @@ const PREFIX_NOTE = '💡 All commands work with both `/` and the `|` prefix.';
 const PAGES = [
   {
     key: 'general',
-    label: 'General',
     emoji: '👤',
     color: '#5865F2',
-    title: '👤 General & Info',
     body:
       '`/help` - Open this interactive help directory.\n' +
       '`/capabilities` - A full, detailed tour of everything the bot can do.\n' +
       '`/purpose` - Learn about the bot and view its profile.\n' +
+      '`/premium about/info` - Learn what ServerMiser Premium unlocks and compare it to Free.\n' +
       '`/level rank [user]` - Check your (or someone else\'s) level and XP.\n' +
       '`/level leaderboard` - View the top 10 ranked members.\n' +
       '`/level settings` - Configure the leveling system (staff).\n' +
@@ -34,10 +36,8 @@ const PAGES = [
   },
   {
     key: 'setup',
-    label: 'Server Setup',
     emoji: '🛠️',
     color: '#EB459E',
-    title: '🛠️ Server Setup & Configuration',
     body:
       '`/setup <template> [clear]` - Build a full server layout from templates.\n' +
       '`/setup-audit` - Configure the audit log channel and tracked actions.\n' +
@@ -49,10 +49,8 @@ const PAGES = [
   },
   {
     key: 'moderation',
-    label: 'Moderation',
     emoji: '🛡️',
     color: '#ED4245',
-    title: '🛡️ Moderation & AutoMod',
     body:
       '`/warn <user> <reason>` • `/warnings [user]` • `/unwarn <user> <index>` - Warn, view, and remove warnings.\n' +
       '`/mute <user> <duration> [reason]` • `/unmute <user>` - Timeout or restore a member.\n' +
@@ -66,10 +64,8 @@ const PAGES = [
   },
   {
     key: 'roles',
-    label: 'Roles & Access',
     emoji: '🎭',
     color: '#FEE75C',
-    title: '🎭 Roles & Access',
     body:
       '`/role user/remove` - Add or remove a role from a member.\n' +
       '`/role create/delete/rename/color/hoist/mentionable` - Manage role properties.\n' +
@@ -81,10 +77,8 @@ const PAGES = [
   },
   {
     key: 'tickets',
-    label: 'Tickets',
     emoji: '🎫',
     color: '#57F287',
-    title: '🎫 Ticket Support System',
     body:
       '`/ticket panel` - Post the ticket-creation panel (staff).\n' +
       '`/ticket channel` - Configure the ticket category/settings (staff).\n' +
@@ -94,10 +88,8 @@ const PAGES = [
   },
   {
     key: 'selfvoice',
-    label: 'Self Voice',
     emoji: '🔊',
     color: '#3498DB',
-    title: '🔊 Self Voice — Temp Voice Channels',
     body:
       '`/selfvoice create [name] [limit]` - Create your own temp VC (when enabled).\n' +
       '`/selfvoice panel` - Resend the control panel for your active room.\n' +
@@ -109,10 +101,8 @@ const PAGES = [
   },
   {
     key: 'autoresponder',
-    label: 'Auto Responder',
     emoji: '💬',
     color: '#9B59B6',
-    title: '💬 Auto Responder',
     body:
       '`/autoresponder setup` - Step-by-step wizard with a live preview.\n' +
       '`/autoresponder add <trigger> <response>` - Quickly create a responder.\n' +
@@ -123,10 +113,8 @@ const PAGES = [
   },
   {
     key: 'engagement',
-    label: 'Engagement',
     emoji: '📣',
     color: '#F47FFF',
-    title: '📣 Server Engagement Tools',
     body:
       '`/giveaway start/reroll/end` - Run timed giveaways with a winner draw.\n' +
       '`/poll create/setup` - Post a poll with vote buttons, with optional auto-close.\n' +
@@ -140,10 +128,8 @@ const PAGES = [
   },
   {
     key: 'fun',
-    label: 'Fun & Games',
     emoji: '🎉',
     color: '#F1C40F',
-    title: '🎉 Fun & Social',
     body:
       '**Games:** `/trivia` `/wouldyourather` `/capital-quiz` `/dice-duel` `/coinflip` `/roll` `/8ball`\n' +
       '**Social:** `/hug` `/slap` `/roast` `/rate` `/predict-love` `/flavor`\n' +
@@ -152,12 +138,16 @@ const PAGES = [
   },
 ];
 
+// Every page is labeled purely by position — "Page 1", "Page 2", etc. —
+// never by what's actually in it.
+const pageLabel = (index) => `Page ${index + 1}`;
+
 function buildEmbed(page, index) {
   return new EmbedBuilder()
     .setColor(page.color)
-    .setTitle(`${page.title}`)
+    .setTitle(`${page.emoji} ${pageLabel(index)}`)
     .setDescription(page.body)
-    .setFooter({ text: `${PREFIX_NOTE}  •  Category ${index + 1}/${PAGES.length}` })
+    .setFooter({ text: `${PREFIX_NOTE}  •  ${pageLabel(index)} of ${PAGES.length}` })
     .setTimestamp();
 }
 
@@ -165,9 +155,9 @@ function buildMenu(activeKey) {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId('help_select')
-      .setPlaceholder('📚 Choose a category to browse…')
-      .addOptions(PAGES.map(p => ({
-        label: p.label,
+      .setPlaceholder('📚 Choose a page to browse…')
+      .addOptions(PAGES.map((p, i) => ({
+        label: pageLabel(i),
         value: p.key,
         emoji: p.emoji,
         default: p.key === activeKey,
