@@ -4,14 +4,25 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  PermissionFlagsBits,
+  ChannelType,
 } = require('discord.js');
 
 // ============================================================================
-// PREMIUM INFO & SALES COMMAND
+// PREMIUM INFO & SALES COMMAND  +  BACKGROUND PROMO SWEEPER
 // ServerMiser Premium is a companion bot that joins alongside this one once
 // a server is authorized via Whop. It unlocks AI persona chat, cross-server
 // phone calls, and the full Hoard economy/casino system, on top of
 // everything the free bot already offers.
+//
+// This file does two things:
+//   1. /premium about|info — the existing sales command members can run.
+//   2. A quiet background sweeper (init(client) + setInterval, same pattern
+//      as autodelete.js's sweeper) that occasionally drops a promo embed
+//      into an active server on its own — NOT a command, nothing to
+//      enable/disable/configure. index.js's command loader already calls
+//      `command.init(client)` on anything it loads that has one, so
+//      bundling the sweeper in here needs no other file to change.
 // ============================================================================
 
 const WHOP_URL = 'https://whop.com/servermiser/servermiser-premium';
@@ -91,6 +102,92 @@ function buildComparisonEmbed() {
     .setFooter({ text: 'Nothing is removed or replaced — Premium runs as a companion bot alongside the free one.' });
 }
 
+/* ==========================================================================
+ *  BACKGROUND PROMO SWEEPER
+ *  Purely automatic — no command, no per-server opt-out or config. Every
+ *  hour it re-rolls a small chance per server to post a promo embed
+ *  (pricing starts at $1.99, with the Buy Premium button above) into a
+ *  channel it picks for itself. A per-guild in-memory cooldown keeps any
+ *  one server from getting hit twice in quick succession.
+ * ========================================================================== */
+const CHECK_INTERVAL_MS = 60 * 60 * 1000;   // sweep tick — re-evaluates every server once an hour
+const POST_CHANCE_PER_TICK = 0.03;          // ~3% chance per guild per eligible tick
+const MIN_GAP_MS = 20 * 60 * 60 * 1000;     // hard floor: never post in the same server more than once per ~20h
+
+// In-memory only — a missed post after a restart just means the next
+// hourly tick rolls again; there's nothing here worth persisting to Mongo.
+const lastPromoAt = new Map();
+
+const PROMO_LINES = [
+  {
+    title: '✨ Psst — Premium is here',
+    body: 'ServerMiser Premium unlocks AI persona chat, cross-server phone calls, and the full Hoard economy — casino games, jobs, a shop, and a nightly gremlin who taxes the rich.\n\nPlans start at just **$1.99**.',
+  },
+  {
+    title: '👹 The Miser is waiting',
+    body: 'In Premium servers, a nightly tax event skims the richest wallets — on top of jobs, gambling, a shop, and a full leaderboard.\n\nGet started for as little as **$1.99**.',
+  },
+  {
+    title: '🤖 Give this server a voice',
+    body: 'Premium\'s AI Persona Chat gives your server a fully customizable AI character — personality, backstory, even its own name and avatar.\n\nStarting at just **$1.99**.',
+  },
+  {
+    title: '📞 Call another server',
+    body: 'Premium\'s cross-server phone lets you ring another Discord server running Premium, live, like a phone line between communities.\n\nUnlocks starting at **$1.99**.',
+  },
+];
+
+function buildPromoEmbed() {
+  const pick = PROMO_LINES[Math.floor(Math.random() * PROMO_LINES.length)];
+  return new EmbedBuilder()
+    .setColor(ACCENT_COLOR)
+    .setTitle(pick.title)
+    .setDescription(pick.body)
+    .setFooter({ text: 'Run /premium info to compare Free and Premium side by side.' });
+}
+
+function canSend(guild, channel) {
+  const me = guild.members.me;
+  if (!me) return false;
+  const perms = channel.permissionsFor(me);
+  return !!perms && perms.has(PermissionFlagsBits.SendMessages) && perms.has(PermissionFlagsBits.EmbedLinks);
+}
+
+// Picks a text channel whose name suggests it's a general-purpose room,
+// falling back to the first text channel the bot can actually speak in.
+function pickPromoChannel(guild) {
+  const named = guild.channels.cache.find(
+    (c) => c.type === ChannelType.GuildText &&
+      /general|chat|lounge|main/i.test(c.name) &&
+      canSend(guild, c)
+  );
+  if (named) return named;
+
+  return guild.channels.cache.find((c) => c.type === ChannelType.GuildText && canSend(guild, c)) || null;
+}
+
+async function maybePromoteGuild(guild) {
+  try {
+    const last = lastPromoAt.get(guild.id) || 0;
+    if (Date.now() - last < MIN_GAP_MS) return;
+    if (Math.random() > POST_CHANCE_PER_TICK) return;
+
+    const channel = pickPromoChannel(guild);
+    if (!channel) return;
+
+    await channel.send({ embeds: [buildPromoEmbed()], components: [buyButtonRow()] }).catch(() => null);
+    lastPromoAt.set(guild.id, Date.now());
+  } catch (err) {
+    console.error(`[Premium] Promo sweep failed in guild ${guild.id}:`, err.message);
+  }
+}
+
+async function runPromoSweep(client) {
+  for (const guild of client.guilds.cache.values()) {
+    await maybePromoteGuild(guild);
+  }
+}
+
 module.exports = {
   noPremiumEmbed,
   buyButtonRow,
@@ -106,6 +203,14 @@ module.exports = {
     ),
 
   name: 'premium',
+
+  // Called once at startup by index.js's command loader
+  // (`if (command.init) command.init(client)`), same pattern as
+  // autodelete.js's background sweeper.
+  init(client) {
+    console.log('[Premium] Starting background promo sweeper (interval: ' + (CHECK_INTERVAL_MS / 60000) + 'm).');
+    setInterval(() => runPromoSweep(client).catch((err) => console.error('[Premium] Sweep cycle failed:', err.message)), CHECK_INTERVAL_MS);
+  },
 
   async execute(interaction) {
     const isInteraction = typeof interaction.isChatInputCommand === 'function' ? interaction.isChatInputCommand() : false;
