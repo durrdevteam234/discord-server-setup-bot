@@ -1,6 +1,7 @@
 const { Events, ActivityType } = require('discord.js');
 // 💥 LINK THE UTILITY: Directly reference your custom analytics file
 const { pingBotList } = require('../utils/botListPinger');
+const analyticsCommand = require('../commands/analytics');
 
 module.exports = {
   name: Events.ClientReady, // Correctly bound to your system's V14 event lifecycle handler
@@ -144,5 +145,14 @@ module.exports = {
 
     // Repeat every 5 minutes to keep charts updated
     setInterval(pushDashboardStats, 5 * 60 * 1000);
+
+    // ==========================================
+    // MODULE D: /analytics COUNTER AUTO-REFRESH 🔄
+    // ==========================================
+    try {
+      analyticsCommand.startAnalyticsRefresher(client);
+    } catch (err) {
+      console.error('❌ [ANALYTICS ERROR] Failed to start counter auto-refresh loop:', err.message);
+    }
   },
 };
