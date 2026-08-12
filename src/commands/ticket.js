@@ -6,8 +6,6 @@ const {
   ActionRowBuilder, 
   ButtonBuilder, 
   ButtonStyle,
-  RoleSelectMenuBuilder,
-  ChannelSelectMenuBuilder,
   StringSelectMenuBuilder,
   ModalBuilder,
   TextInputBuilder,
@@ -285,17 +283,41 @@ module.exports = {
       const modeEmoji = ticketMode === 'channel' ? '🔹' : '🧵';
       const modeName = ticketMode === 'channel' ? 'Channels' : 'Threads';
 
+      // Fetch ALL text channels from guild
+      await interaction.guild.channels.fetch().catch(() => null);
+      const allChannels = interaction.guild.channels.cache
+        .filter(channel => channel.type === ChannelType.GuildText)
+        .sort((a, b) => {
+          // Sort by position, then by name
+          if (a.parentId !== b.parentId) return (a.parent?.position || 0) - (b.parent?.position || 0);
+          return a.position - b.position;
+        })
+        .first(25); // Discord component limit is 25 options
+
+      if (allChannels.size === 0) {
+        return interaction.editReply({ 
+          content: '❌ No text channels available in this server. Please create some text channels first.',
+          components: []
+        });
+      }
+
       const wizardEmbed = new EmbedBuilder()
         .setColor('#5865F2')
         .setTitle('🧙 Ticket System Deployment Wizard')
         .setDescription(`**Step 2 of 4:** Select the channel where the ticket panel will be deployed.\n\n${modeEmoji} **Mode:** ${modeName}`)
         .setTimestamp();
 
+      const channelOptions = allChannels.map(channel => ({
+        label: channel.name,
+        value: channel.id,
+        description: channel.parent ? `Category: ${channel.parent.name}` : 'No category'
+      }));
+
       const channelSelect = new ActionRowBuilder().addComponents(
-        new ChannelSelectMenuBuilder()
+        new StringSelectMenuBuilder()
           .setCustomId(`ticket_wizard_panel_channel_${ticketMode}`)
-          .setChannelTypes(ChannelType.GuildText)
           .setPlaceholder('Choose channel for ticket panel...')
+          .addOptions(channelOptions)
       );
 
       await interaction.editReply({ embeds: [wizardEmbed], components: [channelSelect] });
@@ -366,11 +388,35 @@ module.exports = {
         .setDescription(`**Step 4 of 4:** Select the log channel for ticket events.\n\n${modeEmoji} Panel Channel: <#${selectedChannel}>\n👮 Staff Role: <@&${selectedRole}>`)
         .setTimestamp();
 
+      // Fetch ALL text channels from guild
+      await interaction.guild.channels.fetch().catch(() => null);
+      const allLogChannels = interaction.guild.channels.cache
+        .filter(channel => channel.type === ChannelType.GuildText)
+        .sort((a, b) => {
+          // Sort by position, then by name
+          if (a.parentId !== b.parentId) return (a.parent?.position || 0) - (b.parent?.position || 0);
+          return a.position - b.position;
+        })
+        .first(25); // Discord component limit is 25 options
+
+      if (allLogChannels.size === 0) {
+        return interaction.editReply({ 
+          content: '❌ No text channels available for logging. Please create some text channels first.',
+          components: []
+        });
+      }
+
+      const logChannelOptions = allLogChannels.map(channel => ({
+        label: channel.name,
+        value: channel.id,
+        description: channel.parent ? `Category: ${channel.parent.name}` : 'No category'
+      }));
+
       const logChannelSelect = new ActionRowBuilder().addComponents(
-        new ChannelSelectMenuBuilder()
+        new StringSelectMenuBuilder()
           .setCustomId(`ticket_wizard_log_select_${selectedChannel}_${selectedRole}_${ticketMode}`)
-          .setChannelTypes(ChannelType.GuildText)
           .setPlaceholder('Choose a channel for ticket logs...')
+          .addOptions(logChannelOptions)
       );
 
       await interaction.editReply({ embeds: [wizardEmbed], components: [logChannelSelect] });
@@ -379,7 +425,7 @@ module.exports = {
     // ==========================================
     // WIZARD: Step 4 - Deploy Panel
     // ==========================================
-    if (customId.startsWith('ticket_wizard_log_select_') && interaction.isChannelSelectMenu()) {
+    if (customId.startsWith('ticket_wizard_log_select_') && interaction.isStringSelectMenu()) {
       await interaction.deferUpdate();
 
       const parts = customId.replace('ticket_wizard_log_select_', '').split('_');
@@ -463,17 +509,41 @@ module.exports = {
     if (customId === 'ticket_wizard_step1') {
       await interaction.deferUpdate();
 
+      // Fetch ALL text channels from guild
+      await interaction.guild.channels.fetch().catch(() => null);
+      const allLegacyChannels = interaction.guild.channels.cache
+        .filter(channel => channel.type === ChannelType.GuildText)
+        .sort((a, b) => {
+          // Sort by position, then by name
+          if (a.parentId !== b.parentId) return (a.parent?.position || 0) - (b.parent?.position || 0);
+          return a.position - b.position;
+        })
+        .first(25); // Discord component limit is 25 options
+
+      if (allLegacyChannels.size === 0) {
+        return interaction.editReply({ 
+          content: '❌ No text channels available. Please create some text channels first.',
+          components: []
+        });
+      }
+
       const wizardEmbed = new EmbedBuilder()
         .setColor('#5865F2')
         .setTitle('🧙 Ticket System Deployment Wizard')
         .setDescription('**Step 1 of 3:** Select the channel where the ticket panel will be deployed.')
         .setTimestamp();
 
+      const legacyChannelOptions = allLegacyChannels.map(channel => ({
+        label: channel.name,
+        value: channel.id,
+        description: channel.parent ? `Category: ${channel.parent.name}` : 'No category'
+      }));
+
       const channelSelect = new ActionRowBuilder().addComponents(
-        new ChannelSelectMenuBuilder()
+        new StringSelectMenuBuilder()
           .setCustomId('ticket_wizard_channel_select')
-          .setChannelTypes(ChannelType.GuildText)
           .setPlaceholder('Choose a channel for the ticket panel...')
+          .addOptions(legacyChannelOptions)
       );
 
       await interaction.editReply({ embeds: [wizardEmbed], components: [channelSelect] });
