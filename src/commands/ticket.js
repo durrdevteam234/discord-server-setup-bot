@@ -283,15 +283,15 @@ module.exports = {
       const modeEmoji = ticketMode === 'channel' ? '🔹' : '🧵';
       const modeName = ticketMode === 'channel' ? 'Channels' : 'Threads';
 
-      // Fetch ALL text channels from guild
-      await interaction.guild.channels.fetch().catch(() => null);
+      // Fetch ALL text channels from guild with timeout
+      await Promise.race([
+        interaction.guild.channels.fetch(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2500))
+      ]).catch(() => null);
+      
       const allChannels = interaction.guild.channels.cache
         .filter(channel => channel.type === ChannelType.GuildText)
-        .sort((a, b) => {
-          // Sort by position, then by name
-          if (a.parentId !== b.parentId) return (a.parent?.position || 0) - (b.parent?.position || 0);
-          return a.position - b.position;
-        })
+        .sort((a, b) => a.position - b.position) // Simple position sort only
         .first(25); // Discord component limit is 25 options
 
       if (allChannels.size === 0) {
@@ -310,7 +310,7 @@ module.exports = {
       const channelOptions = allChannels.map(channel => ({
         label: channel.name,
         value: channel.id,
-        description: channel.parent ? `Category: ${channel.parent.name}` : 'No category'
+        description: `Channel · Position: ${channel.position}`
       }));
 
       const channelSelect = new ActionRowBuilder().addComponents(
@@ -326,7 +326,7 @@ module.exports = {
     // ==========================================
     // WIZARD: Step 2a - Panel Channel Selection (both modes)
     // ==========================================
-    if ((customId.startsWith('ticket_wizard_panel_channel_') || customId === 'ticket_wizard_channel_select') && interaction.isChannelSelectMenu()) {
+    if ((customId.startsWith('ticket_wizard_panel_channel_') || customId === 'ticket_wizard_channel_select') && interaction.isStringSelectMenu()) {
       await interaction.deferUpdate();
 
       const selectedChannel = interaction.values[0];
@@ -334,8 +334,12 @@ module.exports = {
       const ticketMode = isThreadMode ? 'thread' : 'channel';
       const modeEmoji = isThreadMode ? '🧵' : '🔹';
 
-      // Fetch all roles from guild (excluding @everyone)
-      await interaction.guild.roles.fetch().catch(() => null);
+      // Fetch all roles from guild with timeout (excluding @everyone)
+      await Promise.race([
+        interaction.guild.roles.fetch(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2500))
+      ]).catch(() => null);
+      
       const allRoles = interaction.guild.roles.cache
         .filter(role => role.id !== interaction.guildId) // Exclude @everyone
         .sort((a, b) => b.position - a.position)
@@ -388,15 +392,15 @@ module.exports = {
         .setDescription(`**Step 4 of 4:** Select the log channel for ticket events.\n\n${modeEmoji} Panel Channel: <#${selectedChannel}>\n👮 Staff Role: <@&${selectedRole}>`)
         .setTimestamp();
 
-      // Fetch ALL text channels from guild
-      await interaction.guild.channels.fetch().catch(() => null);
+      // Fetch ALL text channels from guild with timeout
+      await Promise.race([
+        interaction.guild.channels.fetch(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2500))
+      ]).catch(() => null);
+      
       const allLogChannels = interaction.guild.channels.cache
         .filter(channel => channel.type === ChannelType.GuildText)
-        .sort((a, b) => {
-          // Sort by position, then by name
-          if (a.parentId !== b.parentId) return (a.parent?.position || 0) - (b.parent?.position || 0);
-          return a.position - b.position;
-        })
+        .sort((a, b) => a.position - b.position) // Simple position sort only
         .first(25); // Discord component limit is 25 options
 
       if (allLogChannels.size === 0) {
@@ -409,7 +413,7 @@ module.exports = {
       const logChannelOptions = allLogChannels.map(channel => ({
         label: channel.name,
         value: channel.id,
-        description: channel.parent ? `Category: ${channel.parent.name}` : 'No category'
+        description: `Channel · Position: ${channel.position}`
       }));
 
       const logChannelSelect = new ActionRowBuilder().addComponents(
@@ -509,15 +513,15 @@ module.exports = {
     if (customId === 'ticket_wizard_step1') {
       await interaction.deferUpdate();
 
-      // Fetch ALL text channels from guild
-      await interaction.guild.channels.fetch().catch(() => null);
+      // Fetch ALL text channels from guild with timeout
+      await Promise.race([
+        interaction.guild.channels.fetch(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2500))
+      ]).catch(() => null);
+      
       const allLegacyChannels = interaction.guild.channels.cache
         .filter(channel => channel.type === ChannelType.GuildText)
-        .sort((a, b) => {
-          // Sort by position, then by name
-          if (a.parentId !== b.parentId) return (a.parent?.position || 0) - (b.parent?.position || 0);
-          return a.position - b.position;
-        })
+        .sort((a, b) => a.position - b.position) // Simple position sort only
         .first(25); // Discord component limit is 25 options
 
       if (allLegacyChannels.size === 0) {
@@ -536,7 +540,7 @@ module.exports = {
       const legacyChannelOptions = allLegacyChannels.map(channel => ({
         label: channel.name,
         value: channel.id,
-        description: channel.parent ? `Category: ${channel.parent.name}` : 'No category'
+        description: `Channel · Position: ${channel.position}`
       }));
 
       const channelSelect = new ActionRowBuilder().addComponents(
