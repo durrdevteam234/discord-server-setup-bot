@@ -312,16 +312,37 @@ module.exports = {
       const ticketMode = isThreadMode ? 'thread' : 'channel';
       const modeEmoji = isThreadMode ? '🧵' : '🔹';
 
+      // Fetch all roles from guild (excluding @everyone)
+      await interaction.guild.roles.fetch().catch(() => null);
+      const allRoles = interaction.guild.roles.cache
+        .filter(role => role.id !== interaction.guildId) // Exclude @everyone
+        .sort((a, b) => b.position - a.position)
+        .first(25); // Discord component limit is 25 options
+
+      if (allRoles.size === 0) {
+        return interaction.editReply({ 
+          content: '❌ No roles available in this server. Please create some roles first.',
+          components: []
+        });
+      }
+
       const wizardEmbed = new EmbedBuilder()
         .setColor('#5865F2')
         .setTitle('🧙 Ticket System Deployment Wizard')
         .setDescription(`**Step 3 of 4:** Select the staff role to ping when tickets are opened.\n\n${modeEmoji} Panel Channel: <#${selectedChannel}>`)
         .setTimestamp();
 
+      const roleOptions = allRoles.map(role => ({
+        label: role.name,
+        value: role.id,
+        description: `Position: ${role.position}`
+      }));
+
       const roleSelect = new ActionRowBuilder().addComponents(
-        new RoleSelectMenuBuilder()
+        new StringSelectMenuBuilder()
           .setCustomId(`ticket_wizard_role_select_${selectedChannel}_${ticketMode}`)
           .setPlaceholder('Choose staff role to ping on ticket open...')
+          .addOptions(roleOptions)
       );
 
       await interaction.editReply({ embeds: [wizardEmbed], components: [roleSelect] });
@@ -330,7 +351,7 @@ module.exports = {
     // ==========================================
     // WIZARD: Step 3 - Staff Role Selection
     // ==========================================
-    if (customId.startsWith('ticket_wizard_role_select_') && interaction.isRoleSelectMenu()) {
+    if (customId.startsWith('ticket_wizard_role_select_') && interaction.isStringSelectMenu()) {
       await interaction.deferUpdate();
 
       const parts = customId.replace('ticket_wizard_role_select_', '').split('_');
