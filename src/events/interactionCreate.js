@@ -35,9 +35,9 @@ module.exports = {
         }
 
         // ========================================================
-        // D. TICKET SYSTEM
+        // D. TICKET SYSTEM & WIZARD
         // ========================================================
-        if (cid.startsWith('ticket_system_')) {
+        if (cid.startsWith('ticket_system_') || cid.startsWith('ticket_wizard_') || cid.startsWith('ticket_user_') || cid.startsWith('ticket_staff_') || cid.startsWith('ticket_get_') || cid.startsWith('ticket_confirm_') || cid.startsWith('ticket_history_')) {
             const cmd = activeClient.commands.get('ticket');
             if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
             return;
