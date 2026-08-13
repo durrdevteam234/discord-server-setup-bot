@@ -99,7 +99,7 @@ const {
   
         return isInteraction 
           ? interaction.editReply({ embeds: [step1Embed], components: [selectRow] }) 
-          : interaction.reply({ embeds: [step1Embed], components: [selectMenu] });
+          : interaction.reply({ embeds: [step1Embed], components: [selectRow] });
       }
     // ==========================================
     // MODULE FLOW B: EDIT SKIPPABLE WIZARD

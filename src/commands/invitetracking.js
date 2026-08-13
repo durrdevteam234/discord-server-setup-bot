@@ -100,8 +100,12 @@ async function handleMemberJoin(member, client) {
   const accountAgeDays = Math.floor(accountAgeMs / (1000 * 60 * 60 * 24));
   const isFake = accountAgeDays < (config.fakeThreshold ?? 7);
 
+  // Captures the updated record (upserted if this is the inviter's first
+  // credited join) so the log can show their new invite count immediately,
+  // not just "a join happened."
+  let inviterRecord = null;
   if (inviterId) {
-    await InviteRecord.findOneAndUpdate(
+    inviterRecord = await InviteRecord.findOneAndUpdate(
       { guildId: guild.id, inviterId },
       { $inc: { joins: 1, fake: isFake ? 1 : 0 }, $set: { inviteCode: usedCode } },
       { upsert: true, new: true }
@@ -120,12 +124,18 @@ async function handleMemberJoin(member, client) {
   const codeStr = usedCode ?? 'Unknown';
   const usedInvite = usedCode ? newGuildMap.get(usedCode) : null;
   const totalUses = usedInvite ? usedInvite.uses : '?';
+  const maxUses = usedInvite?.maxUses;
+  const inviterNet = inviterRecord ? netInvites(inviterRecord) : null;
 
   const embed = new EmbedBuilder()
     .setColor(0x57f287)
     .setTitle('👋 Member Joined')
-    .setDescription(`${member} joined using ${inviterMention}'s invite (\`${codeStr}\`, used ${totalUses} time${totalUses === 1 ? '' : 's'})`)
+    .setDescription(`${member} joined using ${inviterMention}'s invite (\`${codeStr}\`)`)
     .addFields(
+      { name: 'Invite Code', value: `\`${codeStr}\``, inline: true },
+      { name: 'Invite Uses', value: `${totalUses}${maxUses ? ` / ${maxUses}` : ''}`, inline: true },
+      { name: 'Inviter', value: inviterMention, inline: true },
+      { name: "Inviter's Net Invites", value: inviterNet === null ? 'N/A' : String(inviterNet), inline: true },
       { name: 'Account Age', value: `${accountAgeDays} day${accountAgeDays === 1 ? '' : 's'}`, inline: true },
       { name: 'Is Fake', value: isFake ? '⚠️ Yes' : '✅ No', inline: true }
     )
@@ -146,19 +156,30 @@ async function handleMemberLeave(member, client) {
     { sort: { joinedAt: -1 }, new: false }
   ).catch(() => null);
 
+  // Same as the join log: capture the updated record so the log shows the
+  // inviter's new (decremented) count right away, not just "they lost one."
+  let inviterRecord = null;
   if (joinRecord?.inviterId) {
-    await InviteRecord.findOneAndUpdate(
+    inviterRecord = await InviteRecord.findOneAndUpdate(
       { guildId: guild.id, inviterId: joinRecord.inviterId },
-      { $inc: { leaves: 1 } }
+      { $inc: { leaves: 1 } },
+      { new: true }
     ).catch(() => null);
   }
 
   const inviterMention = joinRecord?.inviterId ? `<@${joinRecord.inviterId}>` : 'Unknown';
-  
+  const codeStr = joinRecord?.inviteCode ?? 'Unknown';
+  const inviterNet = inviterRecord ? netInvites(inviterRecord) : null;
+
   const embed = new EmbedBuilder()
     .setColor(0x99aab5)
     .setTitle('👋 Member Left')
-    .setDescription(`**${member.user.tag}** left. They were invited by ${inviterMention}.`)
+    .setDescription(`**${member.user.tag}** left. They had joined using ${inviterMention}'s invite (\`${codeStr}\`).`)
+    .addFields(
+      { name: 'Invite Code', value: `\`${codeStr}\``, inline: true },
+      { name: 'Inviter', value: inviterMention, inline: true },
+      { name: "Inviter's Net Invites", value: inviterNet === null ? 'N/A' : String(inviterNet), inline: true }
+    )
     .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
     .setTimestamp();
 

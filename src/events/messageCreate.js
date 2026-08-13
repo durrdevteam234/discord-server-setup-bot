@@ -1,10 +1,17 @@
 const discord = require('discord.js');
 const audit = require('../utils/auditLog');
 const db = require('../utils/database');
+const UserLevel = require('../utils/models/UserLevel');
 const formatter = require('../utils/textFormatter.js');
 const mongoose = require('mongoose');
 
 const xpCooldowns = new Map();
+
+// XP needed to go from `level` to `level + 1`. Must match level.js's
+// xpNeededForLevel() so /level rank and the live XP engine agree.
+function xpNeededForLevel(level) {
+    return (level + 1) * 300;
+}
 
 module.exports = {
     name: discord.Events.MessageCreate,
@@ -212,7 +219,7 @@ module.exports = {
                     'ticket', 'verification', 'leaderboard', 'rank', 'analytics',
                     'selfvoice', 'autoresponder', 'capabilities', 'stickies', 'channels', 'rules',
                     'starboard', 'suggestions', 'giveaway', 'embed', 'birthdays', 'invites', 'poll',
-                    'slowmode', 'purge', 'lockdown', 'automessage', 'autodelete'
+                    'slowmode', 'purge', 'lockdown', 'automessage', 'autodelete', 'guilds','level'
                 ];
                 if (!coreUtilityCommands.includes(commandName)) {
                     if (
@@ -255,6 +262,10 @@ module.exports = {
                     const resolvedTargetMember = message.mentions.members.first() || message.member;
                     let activeBotResponse = null;
 
+                    // If the command has an 'xp' subcommand group (like level.js),
+                    // argsArray[0] === 'xp' and the real subcommand is argsArray[1].
+                    const usesXpGroup = argsArray[0]?.toLowerCase() === 'xp';
+
                     const mockInteraction = {
                         id: message.id,
                         commandName: commandName,
@@ -269,7 +280,13 @@ module.exports = {
                         replied: false,
                         deferred: false,
                         options: {
-                            getSubcommand: () => argsArray[0] || null,
+                            getSubcommand: () => {
+                                if (usesXpGroup) return argsArray[1] || null;
+                                return argsArray[0] || null;
+                            },
+                            getSubcommandGroup: () => {
+                                return usesXpGroup ? 'xp' : null;
+                            },
                             getString: (name) => {
                                 if (
                                     name === 'template' ||
@@ -288,8 +305,13 @@ module.exports = {
                                 return rawArgsString.length > 0 ? rawArgsString : null;
                             },
                             getInteger: (name) => {
-                                const val = parseInt(rawArgsString, 10);
-                                return isNaN(val) ? null : val;
+                                // Skip past leading non-numeric args like 'xp', 'add', mentions, etc.
+                                for (const token of argsArray) {
+                                    const cleaned = token.replace(/[<@!>]/g, '');
+                                    const val = parseInt(cleaned, 10);
+                                    if (!isNaN(val)) return val;
+                                }
+                                return null;
                             },
                             getNumber: (name) => {
                                 const val = parseFloat(rawArgsString);
@@ -418,48 +440,79 @@ module.exports = {
             }
 
             // ==========================================
-            // PART B: BACKGROUND TRACKING XP ENGINE
+            // PART B: BACKGROUND XP ENGINE
+            // Uses the same UserLevel model and the same guild_config
+            // store (db.findOne/findOneAndUpdate) that /level settings
+            // actually reads and writes, so toggling leveling on/off,
+            // the multiplier, channel, and rewards here now take effect.
             // ==========================================
             const guildId = message.guild?.id;
             if (!guildId) return;
 
-            const mainSettingsLocal = (await db.readData('settings.json')) || {};
-            const guildSettingsLocal = mainSettingsLocal[guildId] || {};
+            const guildConfig = await db.findOne({ guildId }).catch(() => null) || {};
+            const levelConfig = guildConfig.levelConfig || {};
 
-            const levelingSettings = (await db.readData('leveling_settings.json')) || {};
-            const levelConfig = levelingSettings[guildId] || {};
-
-            const targetStatus = levelConfig.status || levelConfig._doc?.status || levelConfig.enabled || levelConfig._doc?.enabled;
-            const mainLevelingStatus = guildSettingsLocal.leveling || guildSettingsLocal._doc?.leveling;
-
-            const isLevelingActive =
-                (mainLevelingStatus === 'on' || mainLevelingStatus === true) ||
-                (targetStatus === 'on' || targetStatus === true);
-
-            if (!isLevelingActive) return;
+            if (!levelConfig.enabled) return;
 
             const cooldownKey = `${guildId}-${message.author.id}`;
             const now = Date.now();
             if (xpCooldowns.has(cooldownKey) && now < (xpCooldowns.get(cooldownKey) + 60000)) return;
             xpCooldowns.set(cooldownKey, now);
 
-            const levelsData = (await db.readData('levels.json')) || {};
-            if (!levelsData[guildId]) levelsData[guildId] = {};
-            if (!levelsData[guildId][message.author.id]) {
-                levelsData[guildId][message.author.id] = { xp: 0, level: 0 };
-            }
-            const userProfile = levelsData[guildId][message.author.id];
-            
-            // XP per message: 5-10 — smaller per-message gain
-            const xpGained = Math.floor(Math.random() * 6) + 5;
-            userProfile.xp += xpGained;
-            
-            // XP needed scales more steeply: 300 per level
-            const xpNeeded = (userProfile.level + 1) * 300;
+            const multiplier = levelConfig.multiplier || 1;
+            const baseXp = Math.floor(Math.random() * 6) + 5;
+            const xpGained = baseXp * multiplier;
 
-            if (userProfile.xp >= xpNeeded) {
-                userProfile.level += 1;
-                userProfile.xp = 0;
+            const userRecord = await UserLevel.findOneAndUpdate(
+                { guildId, userId: message.author.id },
+                { $inc: { xp: xpGained } },
+                { upsert: true, new: true }
+            ).catch(() => null);
+
+            if (!userRecord) return;
+
+            const oldLevel = userRecord.level || 0;
+            let newLevel = oldLevel;
+            let xp = userRecord.xp;
+
+            // Climb thresholds, resetting xp to the remainder each time
+            // (matches the original level-up-then-reset-to-0 behavior).
+            while (xp >= xpNeededForLevel(newLevel)) {
+                xp -= xpNeededForLevel(newLevel);
+                newLevel += 1;
+            }
+
+            if (newLevel !== oldLevel || xp !== userRecord.xp) {
+                userRecord.level = newLevel;
+                userRecord.xp = xp;
+                await userRecord.save().catch(() => null);
+            }
+
+            if (newLevel > oldLevel) {
+                // --- HANDLE ROLE REWARDS ---
+                const rewards = levelConfig.rewards || [];
+                if (rewards.length > 0) {
+                    const member = await message.guild.members.fetch(message.author.id).catch(() => null);
+                    if (member) {
+                        for (const reward of rewards) {
+                            if (reward.level <= newLevel) {
+                                const role = message.guild.roles.cache.get(reward.roleId);
+                                if (role && !member.roles.cache.has(role.id)) {
+                                    await member.roles.add(role).catch(() => null);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // --- HANDLE CUSTOM LEVEL UP MESSAGE & PING ---
+                const pingUser = levelConfig.pingUser !== false; // Default to true
+                const pingContent = pingUser ? `${message.author}` : `🎉 ${message.author.username} just leveled up!`;
+
+                let customText = levelConfig.levelUpText || `🎉 **Level Up!** ${message.author} has reached **Level ${newLevel}**! ✨`;
+                customText = customText.replace(/{user}/g, message.author.toString())
+                                       .replace(/{level}/g, newLevel)
+                                       .replace(/{oldlevel}/g, oldLevel);
 
                 let cuteStyle = 'off';
                 try {
@@ -471,26 +524,12 @@ module.exports = {
                 const embed = new discord.EmbedBuilder()
                     .setColor(isCuteActive ? '#FF69B4' : '#00FF00')
                     .setTitle(isCuteActive ? '✨ LEVEL UP! ✨' : '🎉 Level Up!')
-                    .setDescription(
-                        isCuteActive
-                            ? `GG **${message.author.username}**! You just reached level **${userProfile.level}**! 💕`
-                            : `GG **${message.author.tag}**, you have advanced to level **${userProfile.level}**!`
-                    )
+                    .setDescription(customText)
                     .setThumbnail(message.author.displayAvatarURL({ dynamic: true }));
 
-                let targetChannelId = null;
-                if (levelConfig) {
-                    targetChannelId = levelConfig.channelId ||
-                        levelConfig.settings?.channelId ||
-                        levelConfig._doc?.channelId;
-                }
-                if (!targetChannelId && guildSettingsLocal) {
-                    targetChannelId = guildSettingsLocal.channelId ||
-                        guildSettingsLocal._doc?.channelId;
-                }
-
+                let targetChannelId = levelConfig.channelId || null;
                 let targetChannel = message.channel;
-                if (targetChannelId && typeof targetChannelId === 'string') {
+                if (targetChannelId) {
                     try {
                         targetChannel = message.guild.channels.cache.get(targetChannelId) ||
                             await message.guild.channels.fetch(targetChannelId) ||
@@ -500,10 +539,19 @@ module.exports = {
                     }
                 }
 
-                await targetChannel.send({ embeds: [embed] }).catch(() => null);
+                if (levelConfig.cardStyle === 'card') {
+                    try {
+                        const levelCommand = client.commands.get('level');
+                        const card = await levelCommand.generateLevelUpCard(message.author, oldLevel, newLevel);
+                        await targetChannel.send({ content: pingContent, files: [card] }).catch(() => null);
+                    } catch (cardError) {
+                        console.error('[Leveling] Card generation failed, falling back to embed:', cardError.message);
+                        await targetChannel.send({ content: pingContent, embeds: [embed] }).catch(() => null);
+                    }
+                } else {
+                    await targetChannel.send({ content: pingContent, embeds: [embed] }).catch(() => null);
+                }
             }
-
-            await db.writeData('levels.json', levelsData);
 
             // ==========================================
             // 🔄 BACKGROUND AUTOMATION INTEGRATION LOOPS
