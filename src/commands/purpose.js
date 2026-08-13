@@ -18,21 +18,21 @@ function generatePurposeEmbed(client, guildId) {
       : "Hi! I'm a Discord bot created to help manage and organize your server!"
     )
     .addFields(
-      { 
-        name: isCute ? '💖 My Purpose' : '🎯 My Purpose', 
+      {
+        name: isCute ? '💖 My Purpose' : '🎯 My Purpose',
         value: isCute
-          ? '✨ I help you set up your server with templates\n✨ Manage moderation (ban, kick, mute, warn)\n✨ Run a leveling system for your members\n✨ Handle support tickets\n✨ Keep your server organized and fun! ♡'
-          : '• Set up your server with templates\n• Manage moderation (ban, kick, mute, warn)\n• Run a leveling system for your members\n• Handle support tickets\n• Keep your server organized'
+          ? '✨ Set up your server with templates\n✨ Manage moderation like bans, kicks, mutes, and warns\n✨ Run a leveling system for your members\n✨ Handle support tickets\n✨ Keep your server organized and fun! ♡'
+          : '• Set up your server with templates\n• Manage moderation like bans, kicks, mutes, and warns\n• Run a leveling system for your members\n• Handle support tickets\n• Keep your server organized'
       },
-      { 
-        name: isCute ? '💕 Features' : '⚡ Features', 
+      {
+        name: isCute ? '💕 Features' : '⚡ Features',
         value: isCute
-          ? '✨ Server Setup Templates\n✨ Leveling System\n✨ Moderation Tools\n✨ Ticket System\n✨ Cute Mode! (´｀)♡'
-          : '• Server Setup Templates\n• Leveling System\n• Moderation Tools\n• Ticket System\n• Customizable Settings'
+          ? '✨ Server setup templates\n✨ Leveling system\n✨ Moderation tools\n✨ Ticket system\n✨ Cute mode! (´｀)♡'
+          : '• Server setup templates\n• Leveling system\n• Moderation tools\n• Ticket system\n• Customizable settings'
       },
-      { 
-        name: isCute ? '💗 Creator' : '👨‍💻 Creator', 
-        value: 'Created with ❤️ for Discord communities' 
+      {
+        name: isCute ? '💗 Creator' : '👨‍💻 Creator',
+        value: 'Created with ❤️ for Discord communities'
       }
     )
     .setFooter({ text: isCute ? '✨ Thank you for using me! ✨' : 'Thank you for using me!' });

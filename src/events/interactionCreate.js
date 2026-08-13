@@ -26,16 +26,7 @@ module.exports = {
         }
 
         // ========================================================
-        // C. ROLE CLEANER
-        // ========================================================
-        if (cid.startsWith('clear_roles_')) {
-            const cmd = activeClient.commands.get('clearroles');
-            if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
-            return;
-        }
-
-        // ========================================================
-        // D. TICKET SYSTEM
+        // C. TICKET SYSTEM
         // ========================================================
         if (cid.startsWith('ticket_system_')) {
             const cmd = activeClient.commands.get('ticket');
@@ -134,6 +125,15 @@ module.exports = {
         }
 
         // ========================================================
+        // M. RULES CUSTOMIZATION
+        // ========================================================
+        if (cid.startsWith('rules_')) {
+            const cmd = activeClient.commands.get('rules');
+            if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
+            return interaction.deferUpdate().catch(() => null);
+        }
+
+        // ========================================================
         // K. MODAL SAFETY NET (any remaining unmatched modals)
         // ========================================================
         if (typeof interaction.isModalSubmit === 'function' && interaction.isModalSubmit()) {
@@ -170,8 +170,8 @@ module.exports = {
         const coreUtilityCommands = [
             'setup', 'cute', 'fun-module', 'help', 'setup-audit',
             'mod-logs-toggle', 'reactionroles', 'autorole', 'automodrule',
-            'ticket', 'verification', 'leaderboard', 'rank', 'analytics', 'clearroles',
-            'selfvoice', 'autoresponder', 'capabilities',
+            'ticket', 'verification', 'leaderboard', 'rank', 'analytics',
+            'selfvoice', 'autoresponder', 'capabilities', 'stickies', 'channels', 'rules',
             // new modules
             'starboard', 'suggestions', 'giveaway', 'embed', 'birthdays', 'invites', 'poll',
         ];

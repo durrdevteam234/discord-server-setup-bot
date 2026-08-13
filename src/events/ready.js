@@ -144,5 +144,63 @@ module.exports = {
 
     // Repeat every 5 minutes to keep charts updated
     setInterval(pushDashboardStats, 5 * 60 * 1000);
+
+    // ==========================================
+    // MODULE D: ANALYTICS AUTO-UPDATE EVERY MINUTE 📊
+    // ==========================================
+    console.log('📊 Launching analytics auto-refresh loop...');
+
+    const autoUpdateAnalytics = async () => {
+      try {
+        const mongoose = require('mongoose');
+        const AnalyticsModel = mongoose.models.AnalyticsRule;
+        
+        if (!AnalyticsModel) return;
+
+        // Find all guilds with analytics enabled
+        const allAnalytics = await AnalyticsModel.find({ enabled: true }).catch(() => []);
+        
+        if (allAnalytics.length === 0) return;
+
+        for (const doc of allAnalytics) {
+          try {
+            const guild = client.guilds.cache.get(doc.guildId);
+            if (!guild) continue;
+
+            const totalMembers = guild.memberCount;
+            const totalBots = guild.members.cache.filter(m => m.user.bot).size || 0;
+            const totalHumans = totalMembers - totalBots;
+
+            // Update total members channel
+            if (doc.totalChannelId) {
+              const tc = guild.channels.cache.get(doc.totalChannelId);
+              if (tc) await tc.setName(`👥 Total Members: ${totalMembers}`).catch(() => null);
+            }
+
+            // Update humans channel
+            if (doc.humansChannelId) {
+              const hc = guild.channels.cache.get(doc.humansChannelId);
+              if (hc) await hc.setName(`🙋 Humans: ${totalHumans}`).catch(() => null);
+            }
+
+            // Update bots channel
+            if (doc.botsChannelId) {
+              const bc = guild.channels.cache.get(doc.botsChannelId);
+              if (bc) await bc.setName(`🤖 Bots: ${totalBots}`).catch(() => null);
+            }
+          } catch (guildErr) {
+            // Silently continue if one guild fails
+          }
+        }
+      } catch (err) {
+        console.error('[Analytics Auto-Update Error]:', err.message);
+      }
+    };
+
+    // Update analytics immediately on startup
+    autoUpdateAnalytics();
+
+    // Auto-update every 60 seconds (1 minute)
+    setInterval(autoUpdateAnalytics, 60 * 1000);
   },
 };

@@ -209,8 +209,8 @@ module.exports = {
                 const coreUtilityCommands = [
                     'setup', 'cute', 'fun-module', 'fun-menu', 'help', 'setup-audit',
                     'mod-logs-toggle', 'reactionroles', 'autorole', 'automodrule',
-                    'ticket', 'verification', 'leaderboard', 'rank', 'analytics', 'clearroles',
-                    'selfvoice', 'autoresponder', 'capabilities',
+                    'ticket', 'verification', 'leaderboard', 'rank', 'analytics',
+                    'selfvoice', 'autoresponder', 'capabilities', 'stickies', 'channels', 'rules',
                     'starboard', 'suggestions', 'giveaway', 'embed', 'birthdays', 'invites', 'poll',
                     'slowmode', 'purge', 'lockdown', 'automessage', 'autodelete'
                 ];

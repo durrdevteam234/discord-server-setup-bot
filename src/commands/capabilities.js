@@ -17,19 +17,19 @@ const CATEGORIES = [
     color: '#5865F2',
     title: '🌟 What This Bot Can Do',
     description:
-      'A complete server management suite — moderation, leveling, tickets, automod, ' +
+      'A complete server management suite for moderation, leveling, tickets, automod, ' +
       'reaction roles, temporary voice channels, auto responders, starboard, suggestions, ' +
       'giveaways, embeds, birthdays, invite tracking, analytics, fun, and more.\n\n' +
       'Use the dropdown below to explore each area in detail. Every command works with ' +
       'both slash commands (`/`) and the text prefix (`|`).',
     fields: [
-      { name: '🛠️ Server Setup', value: 'One-command templated server builds, audit logging, welcome/leave messages.' },
-      { name: '🛡️ Moderation', value: 'Warn, mute, kick, ban, automod filters, and full mod logs.' },
-      { name: '📈 Engagement', value: 'XP & leveling, leaderboards, tickets, suggestions, giveaways, analytics counters.' },
-      { name: '🔊 Self Voice', value: 'Members spin up their own temporary, fully customizable voice channels.' },
+      { name: '🛠️ Server Setup', value: 'One-command template server builds, audit logging, and welcome or leave messages.' },
+      { name: '🛡️ Moderation', value: 'Warn, mute, kick, ban, automod filters, and full moderation logs.' },
+      { name: '📈 Engagement', value: 'XP and leveling, leaderboards, tickets, suggestions, giveaways, and analytics counters.' },
+      { name: '🔊 Self Voice', value: 'Members can spin up their own temporary, fully customizable voice channels.' },
       { name: '💬 Auto Responder', value: 'Automatic replies to custom triggers with dynamic variables.' },
       { name: '⭐ Starboard', value: 'Highlight popular messages once they hit a reaction threshold.' },
-      { name: '🎂 Birthdays & 📨 Invites', value: 'Track member birthdays and who invited whom.' },
+      { name: '🎂 Birthdays and Invites', value: 'Track member birthdays and who invited whom.' },
       { name: '🎉 Fun', value: 'Games, memes, jokes, trivia, and social interaction commands.' },
     ],
   },
@@ -45,7 +45,7 @@ const CATEGORIES = [
       { name: '`/setup-audit`', value: 'Configure which channel receives server audit logs.' },
       { name: '`/mod-logs-toggle`', value: 'Turn background moderation logging on or off.' },
       { name: '`/welcome <#channel> <enabled> [join_message] [leave_message] [embed]`', value: 'Configure custom join/leave messages, with variables `{user}` `{server}` `{memberCount}`.' },
-      { name: '`/clear-channels`', value: 'Mass-delete channels to reset the server layout.' },
+      { name: '`/channels`', value: 'Create, edit, delete, and customize channels and categories with precise permissions.' },
       { name: '`/cute <style>`', value: 'Switch the bot\'s text styling (wide, small caps, bubbles).' },
       { name: '`/flavour`', value: 'Manage the bot\'s custom response speech variations.' },
     ],
@@ -62,7 +62,7 @@ const CATEGORIES = [
       { name: '`/mute` • `/unmute`', value: 'Timeout members from chatting, then restore access.' },
       { name: '`/kick` • `/ban` • `/unban`', value: 'Remove or restore members with logged reasons.' },
       { name: '`/automodrule`', value: 'Configure up to 20 automod filters: spam, caps, invites, links, phishing, mass mentions, zalgo, raid defense, and more.' },
-      { name: '`/clearroles`', value: 'Strip roles in bulk for cleanup or resets.' },
+      { name: '`/autodelete`', value: 'Set channel auto-delete rules based on blacklist words, trigger text, and content categories.' },
     ],
   },
   {

@@ -60,6 +60,7 @@ if (fs.existsSync(commandsPath)) {
 }
 
 const eventsPath = path.join(__dirname, 'events');
+let readyEventHandler = null;
 if (fs.existsSync(eventsPath)) {
   const eventFiles = fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'));
   console.log(`📂 [LOADER] Loading ${eventFiles.length} events from ${eventsPath}`);
@@ -68,7 +69,8 @@ if (fs.existsSync(eventsPath)) {
     const event = require(path.join(eventsPath, file));
     
     if (event.name === 'ready' || event.name === 'clientReady') {
-      console.log(` ⏭️ Skipping ${event.name} (handled in index.js)`);
+      console.log(` ✅ Loaded event: ${event.name} (once) - will execute inline`);
+      readyEventHandler = event;
       continue;
     }
 
@@ -288,6 +290,18 @@ client.once('ready', async () => {
 
   pushDashboardStats();
   setInterval(pushDashboardStats, 5 * 60 * 1000);
+
+  // ==========================================
+  // Execute ready.js module for analytics auto-update
+  // ==========================================
+  if (readyEventHandler && typeof readyEventHandler.execute === 'function') {
+    console.log('🔄 [READY EVENT] Executing ready.js module...');
+    try {
+      readyEventHandler.execute(client);
+    } catch (err) {
+      console.error('❌ [READY EVENT] Error executing ready.js:', err.message);
+    }
+  }
 });
 
 const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI;

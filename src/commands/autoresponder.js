@@ -24,6 +24,7 @@ const {
     caseSensitive: { type: Boolean, default: false },
     responses: { type: [String], default: [] },
     replyMode: { type: String, default: 'reply' }, // reply|channel|dm
+    responseType: { type: String, default: 'text' }, // text|embed|reaction
     useEmbed: { type: Boolean, default: false },
     embedColor: { type: String, default: '#5865F2' },
     embedTitle: { type: String, default: '' },
@@ -94,6 +95,7 @@ const {
       caseSensitive: false,
       responses: [],
       replyMode: 'reply',
+      responseType: 'text',
       useEmbed: false,
       embedColor: COLOR,
       embedTitle: '',
@@ -133,12 +135,15 @@ const {
         { name: '🔍 Match Type', value: `\`${draft.matchType}\``, inline: true },
         { name: '🔠 Case Sensitive', value: draft.caseSensitive ? 'Yes' : 'No', inline: true },
         { name: '💬 Responses', value: responses, inline: false },
+        { name: '🧩 Response Type', value: `\`${draft.responseType || 'text'}\``, inline: true },
         { name: '📤 Delivery', value: `\`${draft.replyMode}\`${draft.useEmbed ? ' • embed' : ''}`, inline: true },
         { name: '🎲 Chance', value: `${draft.chance}%`, inline: true },
         { name: '⏱️ Cooldown', value: `${draft.cooldown}s`, inline: true },
         { name: '🗑️ Delete Trigger', value: draft.deleteTrigger ? 'Yes' : 'No', inline: true },
         { name: '🔒 Required Role', value: draft.requiredRole ? `<@&${draft.requiredRole}>` : 'Anyone', inline: true },
         { name: '😀 Reactions', value: draft.reactions.length ? draft.reactions.join(' ') : 'None', inline: true },
+        { name: '📌 Allowed Channels', value: draft.allowedChannels.length ? draft.allowedChannels.map(id => `<#${id}>`).join(', ') : 'All channels', inline: true },
+        { name: '🚫 Ignored Channels', value: draft.ignoredChannels.length ? draft.ignoredChannels.map(id => `<#${id}>`).join(', ') : 'None', inline: true },
       )
       .setFooter({ text: `ID: ${draft.id} • Use /autoresponder variables to see all placeholders` });
   }
@@ -164,17 +169,27 @@ const {
     );
     const row3 = new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
+        .setCustomId('autoresponder_select_response_type')
+        .setPlaceholder('Response style')
+        .addOptions(
+          { label: 'Plain text', value: 'text', default: (draft.responseType || 'text') === 'text', emoji: '💬' },
+          { label: 'Embedded response', value: 'embed', default: (draft.responseType || 'text') === 'embed', emoji: '🧩' },
+          { label: 'Reaction response', value: 'reaction', default: (draft.responseType || 'text') === 'reaction', emoji: '😀' },
+        )
+    );
+    const row4 = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
         .setCustomId('autoresponder_select_match')
         .setPlaceholder(`Match type: ${draft.matchType}`)
         .addOptions(Object.entries(MATCH_LABELS).map(([value, label]) => ({
           label: value, description: label.slice(0, 100), value, default: draft.matchType === value,
         }))),
     );
-    const row4 = new ActionRowBuilder().addComponents(
+    const row5 = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('autoresponder_wiz_save').setLabel('Save').setStyle(ButtonStyle.Success).setEmoji('💾'),
       new ButtonBuilder().setCustomId('autoresponder_wiz_cancel').setLabel('Cancel').setStyle(ButtonStyle.Danger).setEmoji('✖️'),
     );
-    return [row1, row2, row3, row4];
+    return [row1, row2, row3, row4, row5];
   }
   
   async function renderWizard(interaction, key, editing = false) {
@@ -432,6 +447,10 @@ const {
             s.draft.deleteTrigger = /^(y|yes|true|on)$/i.test(interaction.fields.getTextInputValue('delete').trim());
             const role = interaction.fields.getTextInputValue('role').replace(/[^0-9]/g, '');
             s.draft.requiredRole = role || '';
+            const allowed = interaction.fields.getTextInputValue('allowed_channels').split(',').map(v => v.trim()).filter(Boolean).map(v => v.replace(/[^0-9]/g, '')).filter(Boolean);
+            const ignored = interaction.fields.getTextInputValue('ignored_channels').split(',').map(v => v.trim()).filter(Boolean).map(v => v.replace(/[^0-9]/g, '')).filter(Boolean);
+            s.draft.allowedChannels = allowed;
+            s.draft.ignoredChannels = ignored;
           } else if (id === 'autoresponder_modal_reactions') {
             const raw = interaction.fields.getTextInputValue('reactions');
             s.draft.reactions = raw.split(/[\s,]+/).map(x => x.trim()).filter(Boolean).slice(0, 5);
@@ -455,6 +474,9 @@ const {
             else s.draft.replyMode = val;
           } else if (id === 'autoresponder_select_match') {
             s.draft.matchType = val;
+          } else if (id === 'autoresponder_select_response_type') {
+            s.draft.responseType = val;
+            s.draft.useEmbed = val === 'embed';
           }
           s.createdAt = Date.now();
           return renderWizard(interaction, key, !!s.editingId);
@@ -484,6 +506,8 @@ const {
             new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('chance').setLabel('Trigger chance (1-100)').setStyle(TextInputStyle.Short).setRequired(false).setValue(String(s.draft.chance))),
             new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('delete').setLabel('Delete the trigger message? (yes/no)').setStyle(TextInputStyle.Short).setRequired(false).setValue(s.draft.deleteTrigger ? 'yes' : 'no')),
             new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('role').setLabel('Required role ID (blank = anyone)').setStyle(TextInputStyle.Short).setRequired(false).setValue(s.draft.requiredRole || '')),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('allowed_channels').setLabel('Allowed channel IDs (comma separated)').setStyle(TextInputStyle.Short).setRequired(false).setValue((s.draft.allowedChannels || []).join(', '))),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('ignored_channels').setLabel('Ignored channel IDs (comma separated)').setStyle(TextInputStyle.Short).setRequired(false).setValue((s.draft.ignoredChannels || []).join(', '))),
           );
           return interaction.showModal(modal).catch(() => null);
         }
@@ -501,6 +525,9 @@ const {
         if (id === 'autoresponder_wiz_save') {
           if (!s.draft.trigger || !s.draft.responses.length) {
             return interaction.reply({ content: '❌ You must set both a **trigger** and at least one **response** before saving.', ephemeral: true }).catch(() => null);
+          }
+          if ((s.draft.responseType || 'text') === 'reaction' && (!s.draft.reactions || s.draft.reactions.length === 0)) {
+            return interaction.reply({ content: '❌ Reaction responders need at least one emoji selected before saving.', ephemeral: true }).catch(() => null);
           }
           const config = await getConfig(interaction.guildId);
           s.draft.createdBy = s.draft.createdBy || interaction.user.id;
