@@ -35,18 +35,6 @@ const BLACKLIST_CATEGORY_LABELS = {
   mass_mentions: 'Mass mentions',
 };
 
-function parsePrefixArgs(interaction) {
-  const tokens = String(interaction.content || '').trim().split(/\s+/);
-  const args = tokens.slice(1);
-  const channel = interaction.mentions?.channels?.first() || interaction.channel;
-  const seconds = Number(args[0]) || 0;
-  return { seconds, channel, args };
-}
-
-function isPrefixMode(interaction) {
-  return typeof interaction.isChatInputCommand === 'function' && interaction.isChatInputCommand() === false;
-}
-
 async function processConfiguration(interaction, channel, seconds, settings = {}) {
   if (!channel || !channel.isTextBased?.()) {
     return interaction.reply({
@@ -125,15 +113,6 @@ module.exports = {
         content: '❌ You need Administrator permission to configure auto-delete rules.',
         flags: [MessageFlags.Ephemeral],
       }).catch(() => null);
-    }
-
-    if (isPrefixMode(interaction)) {
-      const parsed = parsePrefixArgs(interaction);
-      const channel = parsed.channel || interaction.channel;
-      return processConfiguration(interaction, channel, parsed.seconds, {
-        enabled: true,
-        lifespanSeconds: parsed.seconds,
-      });
     }
 
     const channel = interaction.options.getChannel('channel') || interaction.channel;

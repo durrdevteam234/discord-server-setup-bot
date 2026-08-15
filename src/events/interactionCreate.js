@@ -2,13 +2,17 @@ const { MessageFlags } = require('discord.js');
 const db = require('../utils/database');
 
 const SETTINGS_TTL_MS = 30_000;
+const SETTINGS_TIMEOUT_MS = 3_000;
 let cachedSettings = null;
 let cachedSettingsAt = 0;
 
 async function getGuildSettings(guildId) {
   const now = Date.now();
   if (!cachedSettings || now - cachedSettingsAt > SETTINGS_TTL_MS) {
-    cachedSettings = (await db.readData('settings.json').catch(() => ({}))) || {};
+    cachedSettings = await Promise.race([
+      db.readData('settings.json').catch(() => ({})) || {},
+      new Promise((_, reject) => setTimeout(() => reject(new Error('settings read timeout')), SETTINGS_TIMEOUT_MS)),
+    ]).catch(() => ({}));
     cachedSettingsAt = now;
   }
   return cachedSettings[guildId] || {};

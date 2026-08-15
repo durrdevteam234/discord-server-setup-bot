@@ -97,8 +97,11 @@ if (fs.existsSync(eventsPath)) {
   }
 }
 
-client.once('ready', async () => {
-  console.log(`\n✅ [BOT ONLINE] ${client.user.tag} is live!`);
+client.once('ready', onClientReady);
+client.once('clientReady', onClientReady);
+
+async function onClientReady() {
+  console.log(`\n✅ [BOT ONLINE] ${client.user?.tag || 'unknown'} is live!`);
   console.log(` Guilds: ${client.guilds.cache.size}`);
   console.log(` Users: ${client.guilds.cache.reduce((acc, g) => acc + (g.memberCount || 0), 0)}`);
   console.log(` Ping: ${Math.round(client.ws.ping)}ms`);
@@ -356,7 +359,7 @@ client.once('ready', async () => {
       console.error('❌ [READY EVENT] Error executing ready.js:', err.message);
     }
   }
-});
+}
 
 const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
 if (MONGO_URI) {

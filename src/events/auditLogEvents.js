@@ -361,16 +361,16 @@ async function onGuildUpdate(oldGuild, newGuild) {
 
 // ─── Export as an array of event handlers ───────────────────
 module.exports = [
-  { name: Events.MessageUpdate, once: false, execute: onMessageUpdate },
-  { name: Events.MessageDelete, once: false, execute: onMessageDelete },
-  { name: Events.ChannelCreate, once: false, execute: onChannelCreate },
-  { name: Events.ChannelUpdate, once: false, execute: onChannelUpdate },
-  { name: Events.ChannelDelete, once: false, execute: onChannelDelete },
-  { name: Events.RoleCreate, once: false, execute: onRoleCreate },
-  { name: Events.RoleUpdate, once: false, execute: onRoleUpdate },
-  { name: Events.RoleDelete, once: false, execute: onRoleDelete },
-  { name: Events.GuildBanAdd, once: false, execute: onGuildBanAdd },
-  { name: Events.GuildBanRemove, once: false, execute: onGuildBanRemove },
-  { name: Events.GuildMemberUpdate, once: false, execute: onGuildMemberUpdate },
-  { name: Events.GuildUpdate, once: false, execute: onGuildUpdate },
+  { name: 'messageUpdate', once: false, execute: onMessageUpdate },
+  { name: 'messageDelete', once: false, execute: onMessageDelete },
+  { name: 'channelCreate', once: false, execute: onChannelCreate },
+  { name: 'channelUpdate', once: false, execute: onChannelUpdate },
+  { name: 'channelDelete', once: false, execute: onChannelDelete },
+  { name: 'roleCreate', once: false, execute: onRoleCreate },
+  { name: 'roleUpdate', once: false, execute: onRoleUpdate },
+  { name: 'roleDelete', once: false, execute: onRoleDelete },
+  { name: 'guildBanAdd', once: false, execute: onGuildBanAdd },
+  { name: 'guildBanRemove', once: false, execute: onGuildBanRemove },
+  { name: 'guildMemberUpdate', once: false, execute: onGuildMemberUpdate },
+  { name: 'guildUpdate', once: false, execute: onGuildUpdate },
 ];
