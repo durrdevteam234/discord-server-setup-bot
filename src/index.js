@@ -108,6 +108,17 @@ client.once('clientReady', (event) => {
   onClientReady();
 });
 
+client.on('debug', (info) => console.log('[WS DEBUG]', info));
+client.on('error', (err) => console.error('[WS ERROR]', err));
+client.on('disconnect', () => console.log('[WS DISCONNECT]'));
+client.on('reconnecting', () => console.log('[WS RECONNECTING]'));
+client.on('shardDisconnect', (_, id) => console.log('[WS SHARD DISCONNECT]', id));
+client.on('shardError', (err, id) => console.error('[WS SHARD ERROR]', err, id));
+client.on('shardReconnecting', (id) => console.log('[WS SHARD RECONNECTING]', id));
+client.on('connect', () => console.log('[WS CONNECTED]'));
+client.on('invalidated', () => console.log('[WS INVALIDATED]'));
+client.on('invalidRequestWarning', (warn) => console.log('[WS INVALID REQUEST]', warn));
+
 async function onClientReady() {
   if (onClientReady.ran) return;
   onClientReady.ran = true;
@@ -426,7 +437,7 @@ process.on('uncaughtException', (err) => {
   console.error('❌ [UNCAUGHT EXCEPTION]', err);
 });
 
-const TOKEN = process.env.DISCORD_TOKEN || process.env.TOKEN;
+const TOKEN = (process.env.DISCORD_TOKEN || process.env.TOKEN || '').trim();
 if (!TOKEN) {
   console.error('❌ [FATAL] DISCORD_TOKEN / TOKEN environment variable is not set.');
   process.exit(1);
@@ -443,5 +454,8 @@ client.login(TOKEN).then(() => {
 setTimeout(() => {
   if (!onClientReady.ran) {
     console.error('❌ [FATAL] Ready event did not fire within 30 seconds. Check token/intents.');
+    console.error('❌ [FATAL] client.user:', client.user?.tag || 'undefined');
+    console.error('❌ [FATAL] client.ws:', client.ws ? 'exists' : 'missing');
+    console.error('❌ [FATAL] ws status:', client.ws?.status || 'n/a');
   }
 }, 30_000);
