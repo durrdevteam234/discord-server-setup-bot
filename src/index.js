@@ -444,18 +444,34 @@ if (!TOKEN) {
 }
 
 console.log('🔑 [DISCORD] Logging in...');
+let loginResolved = false;
 client.login(TOKEN).then(() => {
+  loginResolved = true;
   console.log('[DEBUG] client.login() resolved');
 }).catch(err => {
   console.error('❌ [FATAL] Login failed:', err.message);
   process.exit(1);
 });
 
+const debugInterval = setInterval(() => {
+  console.log('[DEBUG] Periodic check:', {
+    loginResolved,
+    user: client.user?.tag || 'undefined',
+    wsExists: !!client.ws,
+    wsStatus: client.ws?.status || 'n/a',
+    wsReady: client.ws?.ready || false,
+    readyRan: onClientReady.ran,
+  });
+}, 5_000);
+
 setTimeout(() => {
+  clearInterval(debugInterval);
   if (!onClientReady.ran) {
     console.error('❌ [FATAL] Ready event did not fire within 30 seconds. Check token/intents.');
     console.error('❌ [FATAL] client.user:', client.user?.tag || 'undefined');
     console.error('❌ [FATAL] client.ws:', client.ws ? 'exists' : 'missing');
     console.error('❌ [FATAL] ws status:', client.ws?.status || 'n/a');
+    console.error('❌ [FATAL] ws ready:', client.ws?.ready || false);
+    console.error('❌ [FATAL] login resolved:', loginResolved);
   }
 }, 30_000);
