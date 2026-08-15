@@ -211,7 +211,6 @@ module.exports = {
         }
 
         console.log(`[SLASH] Executing /${commandName}`);
-        const startTime = Date.now();
 
         try {
             if (typeof command.executeSlash === 'function') {
