@@ -38,6 +38,7 @@ module.exports = {
                         let violatesFilter = null;
                         const content = message.content;
                         const contentLower = content.toLowerCase();
+                        const normalizedContent = contentLower.replace(/[^a-z]/g, '');
                         const now = Date.now();
                         const userKey = `${message.guild.id}-${message.author.id}`;
 
@@ -51,8 +52,18 @@ module.exports = {
                             }
                             // 2. BAD WORDS
                             if (rule.filterType === 'bad_words') {
-                                const blacklist = ['backdoor', 'exploit', 'tokengrabber'];
-                                if (blacklist.some(word => contentLower.includes(word))) violatesFilter = rule;
+                                const blacklist = [
+                                    'fuck', 'fucking', 'fucked', 'fk', 'fck', 'fuk', 'fuh', 'dih', 'dick',
+                                    'shi', 'shit', 'shitty', 'sh1t', 'sh!t', 'foid',
+                                    'bitch', 'bitches', 'b1tch', 'biatch', 'ass', 'asshole', 'bastard', 'damn',
+                                    'crap', 'hell', 'motherfucker', 'motherfukker', 'mfer', 'nigga', 'niga', 'nga', 'nigger',
+                                    'whore', 'slut', 'retard', 'cunt', 'rape', 'sexist', 'porn', 'sex'
+                                ];
+
+                                const normalizedBlacklist = blacklist.map(word => word.toLowerCase().replace(/[^a-z]/g, ''));
+                                if (normalizedBlacklist.some(word => normalizedContent.includes(word))) {
+                                    violatesFilter = rule;
+                                }
                             }
                             // 3. CHAT CLEARING NEW LINES
                             if (rule.filterType === 'new_lines' && (content.match(/\n/g) || []).length > 8) {
