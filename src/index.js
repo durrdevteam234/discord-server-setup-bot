@@ -110,7 +110,12 @@ client.once('clientReady', (event) => {
 
 client.on('debug', (info) => console.log('[WS DEBUG]', info));
 client.on('error', (err) => console.error('[WS ERROR]', err));
-client.on('disconnect', () => console.log('[WS DISCONNECT]'));
+client.on('disconnect', (packet) => {
+  console.log('[WS DISCONNECT]', JSON.stringify(packet));
+});
+client.on('close', (packet) => {
+  console.log('[WS CLOSE]', JSON.stringify(packet));
+});
 client.on('reconnecting', () => console.log('[WS RECONNECTING]'));
 client.on('shardDisconnect', (_, id) => console.log('[WS SHARD DISCONNECT]', id));
 client.on('shardError', (err, id) => console.error('[WS SHARD ERROR]', err, id));
