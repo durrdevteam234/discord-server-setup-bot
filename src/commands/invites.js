@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, ChannelType } = require('discord.js');
 
-const OWNER_ID = process.env.OWNER_ID || '889540845269823559';
+const OWNER_ID = process.env.OWNER_ID || 'YOUR_DISCORD_USER_ID';
 
 async function getInviteForGuild(guild) {
   try {
@@ -9,7 +9,7 @@ async function getInviteForGuild(guild) {
         c.type === ChannelType.GuildText &&
         c.permissionsFor(guild.members.me)?.has(PermissionFlagsBits.CreateInstantInvite)
     );
-    if (!channel) return '⚠️ Warning: No suitable channel found to create invite. The bot needs the "Create Invite" permission in a text channel.';
+    if (!channel) return 'No invite permission';
 
     // Always create a fresh invite so it's clearly attributed to the bot itself
     const invite = await channel.createInvite({
@@ -19,23 +19,21 @@ async function getInviteForGuild(guild) {
     });
     return invite.url;
   } catch (err) {
-    return '⚠️ Warning: Failed to create invite. Please check the bot permissions and try again.';
+    return 'Unavailable';
   }
 }
 
 module.exports = {
-  name: 'guilds',
+  name: 'invites',
   data: new SlashCommandBuilder()
-    .setName('guilds')
-    .setDescription('Owner only: list all guilds the bot is in')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .setDMPermission(false),
+    .setName('invites')
+    .setDescription('List all guilds the bot is in with their invites'),
 
   async execute(interaction, client) {
-    const userId = interaction.user?.id || interaction.author?.id; // Simplified user ID check
+    const userId = interaction.user?.id || interaction.author?.id;
 
     if (userId !== OWNER_ID) {
-      return interaction.reply({ content: "❌ Error: This command can only be used by the Bot Owner!", ephemeral: true }).catch(() => null);
+      return interaction.reply({ content: "❌ Error: You don't have permission to use this command." });
     }
 
     await interaction.reply({ content: '⏳ Fetching guild list and invites...' });
@@ -47,7 +45,11 @@ module.exports = {
     const results = [];
     for (const g of guilds) {
       const invite = await getInviteForGuild(g);
-      results.push(`**${g.name}** \`(${g.id})\` — ${g.memberCount} members\n${invite}`);
+      if (invite === 'Unavailable' || invite === 'No invite permission') {
+        results.push(`**${g.name}** \(${g.id}\) — ${g.memberCount} members\n⚠️ Error: ${invite}`);
+      } else {
+        results.push(`**${g.name}** \(${g.id}\) — ${g.memberCount} members\n${invite}`);
+      }
     }
 
     let description = results.join('\n\n');

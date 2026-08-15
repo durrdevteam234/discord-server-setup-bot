@@ -44,7 +44,7 @@ const {
     name: 'verification',
   
     async execute(interaction, client) {
-      const isInteraction = interaction.isCommand ? interaction.isCommand() : false;
+       const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : false;
       const guild = interaction.guild;
       const guildId = guild.id;
       const memberExecutor = interaction.member;

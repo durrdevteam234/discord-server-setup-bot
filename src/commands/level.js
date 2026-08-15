@@ -99,7 +99,7 @@ module.exports = {
         ),
 
     name: 'level',
-    prefix: '|level',
+    // NOTE: not currently invoked directly — slash commands are routed
 
     async execute(interaction, client) {
         // Permission check for admin commands
@@ -207,38 +207,7 @@ module.exports = {
     // NOTE: not currently invoked directly — prefix commands are routed
     // through messageCreate.js's mockInteraction into execute() above.
     // Kept here in case that routing changes.
-    async executePrefix(message, args, client) {
-        const subcommand = args[0]?.toLowerCase();
-
-        if (!subcommand || subcommand === 'help') {
-            return message.reply('Usage: `|level rank [@user]`, `|level leaderboard`, `|level settings`');
-        }
-
-        const mockInteraction = {
-            deferReply: async () => {},
-            editReply: async (content) => message.reply(content),
-            reply: async (content) => message.reply(content),
-            guild: message.guild,
-            member: message.member,
-            user: message.author,
-            client: client,
-            channel: message.channel,
-            options: {
-                getSubcommand: () => subcommand,
-                getUser: (name) => message.mentions.users.first(),
-                getInteger: (name) => parseInt(args[2]),
-                getSubcommandGroup: () => args[0]?.toLowerCase() === 'xp' ? 'xp' : null
-            }
-        };
-
-        if (subcommand === 'xp') {
-            const xpAction = args[1]?.toLowerCase();
-            mockInteraction.options.getSubcommand = () => xpAction;
-            return this.execute(mockInteraction, client);
-        }
-
-        return this.execute(mockInteraction, client);
-    },
+    
 
     // --- Handlers ---
 

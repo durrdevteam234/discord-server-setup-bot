@@ -106,36 +106,5 @@ module.exports = {
   },
 
   // 🌟 FIXED: Unified properties alignment, safe text selection indices, and redirect handlers
-  async executePrefix(message, argsArray, client) {
-    if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
-      return message.reply('❌ Permissions required!').catch(() => null);
-    }
-
-    const usernameArg = argsArray && argsArray[0] ? argsArray[0].trim() : null;
-    const reasonArg = argsArray && argsArray.length > 1 ? argsArray.slice(1).join(' ') : 'No reason provided';
-
-    const mockInteraction = {
-      isMock: true,
-      guild: message.guild,
-      guildId: message.guild.id,
-      member: message.member,
-      author: message.author, // Aligns beautifully with text sender scopes
-      processingMessage: null,
-      options: {
-        getString: (name) => name === 'username' ? usernameArg : reasonArg
-      },
-      reply: async (options) => {
-        return message.reply(options);
-      },
-      // Redirect state corrections directly onto processing message instances
-      editReply: async (options) => {
-        if (mockInteraction.processingMessage) {
-          return mockInteraction.processingMessage.edit(options);
-        }
-        return message.reply(options);
-      }
-    };
-
-    await this.execute(mockInteraction, client).catch(err => console.error('Error handling unban prefix wrapper:', err));
-  }
+  
 };

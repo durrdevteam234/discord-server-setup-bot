@@ -1,6 +1,11 @@
 const { EmbedBuilder } = require('discord.js');
 const database = require('./database.js');
 
+/**
+ * Resolve the configured mod-log / audit-log channel for a guild.
+ * Checks the unified guild_config store first, then settings.json,
+ * then falls back to channel-name heuristics.
+ */
 async function resolveModLogChannel(guild) {
   if (!guild) return null;
 
@@ -33,15 +38,36 @@ async function resolveModLogChannel(guild) {
   return textChannel || null;
 }
 
-async function logAction(guild, action, user, details) {
+/**
+ * Check whether mod logging is enabled for a guild.
+ * Defaults to true if not explicitly disabled.
+ */
+async function isModLogsEnabled(guild) {
+  if (!guild) return false;
+  try {
+    const config = await database.findOne({ guildId: guild.id }).catch(() => null) || {};
+    if (config.modLogsEnabled === false || config.modLogsEnabled === 'off' || config.modLogsEnabled === 'disabled') return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Send a generic audit log embed to the guild's configured mod-log channel.
+ * Respects the modLogsEnabled toggle.
+ */
+async function logAction(guild, action, user, details, color = '#FF0000') {
   try {
     if (!guild) return;
+    const enabled = await isModLogsEnabled(guild);
+    if (!enabled) return;
 
     const channel = await resolveModLogChannel(guild);
     if (!channel) return;
 
     const embed = new EmbedBuilder()
-      .setColor('#FF0000')
+      .setColor(color)
       .setTitle(`📜 Audit Log: ${action}`)
       .addFields(
         { name: 'User', value: user ? `${user.username} (${user.id})` : 'System/Unknown', inline: true },
@@ -56,4 +82,32 @@ async function logAction(guild, action, user, details) {
   }
 }
 
-module.exports = { logAction, resolveModLogChannel };
+/**
+ * Send a rich audit log embed with custom fields.
+ * Respects the modLogsEnabled toggle.
+ */
+async function logRich(guild, { title, color = '#FF0000', fields = [], description = null, footer = null }) {
+  try {
+    if (!guild) return;
+    const enabled = await isModLogsEnabled(guild);
+    if (!enabled) return;
+
+    const channel = await resolveModLogChannel(guild);
+    if (!channel) return;
+
+    const embed = new EmbedBuilder()
+      .setColor(color)
+      .setTitle(title)
+      .setTimestamp();
+
+    if (description) embed.setDescription(description);
+    if (fields && fields.length > 0) embed.addFields(fields);
+    if (footer) embed.setFooter({ text: footer });
+
+    await channel.send({ embeds: [embed] }).catch(() => null);
+  } catch (error) {
+    console.error('Error logging rich action in auditLog.js:', error);
+  }
+}
+
+module.exports = { logAction, logRich, resolveModLogChannel, isModLogsEnabled };

@@ -14,7 +14,7 @@ module.exports = {
   name: 'welcome',
 
   async execute(interaction, client) {
-    const isInteraction = interaction.isCommand ? interaction.isCommand() : false;
+    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : false;
     const guildId = interaction.guildId;
     const memberExecutor = interaction.member;
 
@@ -83,37 +83,5 @@ module.exports = {
     }
   },
 
-  async executePrefix(message, argsArray, client) {
-    const guild = message.guild;
-    if (!guild) return;
-
-    const member = message.member;
-    if (!member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-      return message.reply('❌ You need Manage Server permissions!').catch(() => null);
-    }
-
-    // Resolves channel from prefix arguments
-    const targetChannel = message.mentions.channels.first() || (argsArray && argsArray[0] ? guild.channels.cache.get(argsArray[0]) : null);
-    const statusArg = argsArray && argsArray[1] ? argsArray[1].toLowerCase() : null;
-    const isEnabled = statusArg === 'true';
-
-    // Parse messages safely by slicing out the custom join/leave blocks if present
-    const joinMessage = argsArray && argsArray[2] ? argsArray.slice(2).join(' ') : null;
-
-    const mockInteraction = {
-      guild: message.guild,
-      guildId: message.guild.id,
-      member: message.member,
-      user: message.author,
-      isCommand: () => false,
-      options: {
-        getChannel: (name) => targetChannel,
-        getBoolean: (name) => (name === 'embed' ? null : isEnabled),
-        getString: (name) => (name === 'join_message' ? joinMessage : null),
-      },
-      reply: async (options) => message.reply(options)
-    };
-
-    await this.execute(mockInteraction, client).catch(err => console.error('Error handling inline welcome prefix wrapper:', err));
-  }
+  
 };

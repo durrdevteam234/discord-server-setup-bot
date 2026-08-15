@@ -1,6 +1,19 @@
 const { MessageFlags } = require('discord.js');
 const db = require('../utils/database');
 
+const SETTINGS_TTL_MS = 30_000;
+let cachedSettings = null;
+let cachedSettingsAt = 0;
+
+async function getGuildSettings(guildId) {
+  const now = Date.now();
+  if (!cachedSettings || now - cachedSettingsAt > SETTINGS_TTL_MS) {
+    cachedSettings = (await db.readData('settings.json').catch(() => ({}))) || {};
+    cachedSettingsAt = now;
+  }
+  return cachedSettings[guildId] || {};
+}
+
 module.exports = {
     name: 'interactionCreate',
     async execute(interaction, client) {
@@ -164,8 +177,7 @@ module.exports = {
             return;
         }
 
-        const mainSettings = (await db.readData('settings.json')) || {};
-        const currentGuildSettings = mainSettings[interaction.guildId] || {};
+        const currentGuildSettings = await getGuildSettings(interaction.guildId);
 
         const coreUtilityCommands = [
             'setup', 'cute', 'fun-module', 'help', 'setup-audit',

@@ -25,7 +25,7 @@ module.exports = {
         ),
 
     async execute(interaction) {
-        const isInteraction = interaction.isCommand ? interaction.isCommand() : false;
+        const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : false;
 
         // Extend interaction token lifetime right away to stop timeout crashes
         if (isInteraction) {
@@ -62,31 +62,5 @@ module.exports = {
         }
     },
 
-    async executePrefix(message, argsArray, client) {
-        if (!message.member.permissions.has(PermissionFlagsBits.ManageGuild) && !message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply("❌ You need **Manage Server** or **Administrator** permissions to use this command!").catch(() => null);
-        }
-
-        const action = argsArray && argsArray[0] ? argsArray[0].toLowerCase().trim() : null;
-        if (action !== 'enable' && action !== 'disable') {
-            return message.reply('❌ Usage: `|setup-audit enable #channel` or `|setup-audit disable`.').catch(() => null);
-        }
-
-        const targetChannel = message.mentions.channels.first() || (argsArray && argsArray[1] ? message.guild.channels.cache.get(argsArray[1]) : null);
-
-        // Build a mock interaction options setup mirroring the core slash subcommands
-        const mockInteraction = {
-            guild: message.guild,
-            guildId: message.guild.id,
-            member: message.member,
-            user: message.author,
-            options: {
-                getString: (name) => action,
-                getChannel: (name) => targetChannel
-            },
-            reply: async (options) => message.reply(options)
-        };
-
-        await this.execute(mockInteraction).catch(err => console.error('Error handling inline setup-audit prefix wrapper:', err));
-    }
+    
 };

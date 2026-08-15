@@ -106,40 +106,5 @@ module.exports = {
   },
 
   // 🌟 FIXED: Implemented clean argument text parsing index and status update redirects
-  async executePrefix(message, argsArray, client) {
-    let targetUser = message.mentions.users.first();
-    
-    // Correct index check targeting index 0 directly to prevent crashes
-    if (!targetUser && argsArray && argsArray.length > 0) {
-      const pureId = argsArray[0].replace(/[^0-9]/g, '');
-      if (pureId.length >= 17 && pureId.length <= 20) {
-        targetUser = await client.users.fetch(pureId).catch(() => null);
-      }
-    }
-    const reasonText = argsArray && argsArray.length > 1 ? argsArray.slice(1).join(' ') : '';
-
-    const mockInteraction = {
-      isMock: true,
-      guild: message.guild,
-      guildId: message.guild?.id,
-      member: message.member,
-      author: message.author,
-      processingMessage: null,
-      options: {
-        getUser: (name) => targetUser,
-        getString: (name) => reasonText
-      },
-      reply: async (options) => {
-        return message.reply(options);
-      },
-      // Redirect state updates back to the temporary message reference seamlessly
-      editReply: async (options) => {
-        if (mockInteraction.processingMessage) {
-          return mockInteraction.processingMessage.edit(options);
-        }
-        return message.reply(options);
-      }
-    };
-    await this.execute(mockInteraction, client).catch(() => null);
-  }
+  
 };

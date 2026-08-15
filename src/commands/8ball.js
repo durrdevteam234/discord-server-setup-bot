@@ -17,7 +17,7 @@ module.exports = {
    * Handles native app interactions and your custom text message create adapter parameters.
    */
   async execute(interaction, client) {
-    const isSlash = interaction.isCommand ? interaction.isCommand() : true;
+    const isSlash = interaction.isChatInputCommand ? interaction.isChatInputCommand() : true;
     const author = interaction.user;
 
     // Use a safe runtime defer framework to prevent sudden client payload drop timeouts

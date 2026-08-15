@@ -257,48 +257,5 @@ const {
       }
     },
   
-    async executePrefix(message, argsArray, client) {
-      let targetUser = message.mentions.users.first();
-      let indexArg = null;
-  
-      if (!targetUser && argsArray && argsArray.length > 0) {
-        const pureId = argsArray[0].replace(/[^0-9]/g, '');
-        if (pureId.length >= 17 && pureId.length <= 20) {
-          targetUser = await client.users.fetch(pureId).catch(() => null);
-        }
-      }
-  
-      // Whatever token comes after the mention/ID (if numeric) is the index
-      const remainingArgs = message.mentions.users.first()
-        ? argsArray.slice(1)
-        : argsArray.slice(1); // first token was either a mention or an ID either way
-      if (remainingArgs.length > 0) {
-        const parsed = parseInt(remainingArgs[0], 10);
-        if (!isNaN(parsed)) indexArg = parsed;
-      }
-  
-      const mockInteraction = {
-        isMock: true,
-        guild: message.guild,
-        guildId: message.guild?.id,
-        channel: message.channel,
-        member: message.member,
-        author: message.author,
-        processingMessage: null,
-        options: {
-          getUser: (name) => targetUser,
-          getInteger: (name) => indexArg,
-        },
-        reply: async (options) => {
-          return message.reply(options);
-        },
-        editReply: async (options) => {
-          if (mockInteraction.processingMessage) {
-            return mockInteraction.processingMessage.edit(options);
-          }
-          return message.reply(options);
-        },
-      };
-      await this.execute(mockInteraction, client).catch(() => null);
-    },
+    
   };

@@ -91,40 +91,5 @@ module.exports = {
   },
 
   // 🌟 FIXED: Safe argument array targeting and clean execution wrappers
-  async executePrefix(message, argsArray, client) {
-    let targetUser = message.mentions.users.first();
-    
-    // Correct index selection mapping implemented
-    if (!targetUser && argsArray && argsArray.length > 0) {
-      const pureId = argsArray[0].replace(/[^0-9]/g, '');
-      if (pureId.length >= 17 && pureId.length <= 20) {
-        targetUser = await client.users.fetch(pureId).catch(() => null);
-      }
-    }
-    const reasonText = argsArray && argsArray.length > 1 ? argsArray.slice(1).join(' ') : 'No reason provided';
-
-    const mockInteraction = {
-      isMock: true,
-      guild: message.guild,
-      guildId: message.guild.id,
-      member: message.member,
-      author: message.author,
-      processingMessage: null,
-      options: {
-        getUser: (name) => targetUser,
-        getString: (name) => reasonText
-      },
-      reply: async (options) => {
-        return message.reply(options);
-      },
-      // Safely redirects status overrides directly back onto the parsing container
-      editReply: async (options) => {
-        if (mockInteraction.processingMessage) {
-          return mockInteraction.processingMessage.edit(options);
-        }
-        return message.reply(options);
-      }
-    };
-    await this.execute(mockInteraction, client).catch(() => null);
-  }
+  
 };

@@ -66,24 +66,34 @@ const eventsPath = path.join(__dirname, 'events');
 let readyEventHandler = null;
 if (fs.existsSync(eventsPath)) {
   const eventFiles = fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'));
-  console.log(`📂 [LOADER] Loading ${eventFiles.length} events from ${eventsPath}`);
+  console.log(`📂 [LOADER] Loading ${eventFiles.length} event files from ${eventsPath}`);
   
   for (const file of eventFiles) {
-    const event = require(path.join(eventsPath, file));
+    const loaded = require(path.join(eventsPath, file));
     
-    if (event.name === 'ready' || event.name === 'clientReady') {
-      console.log(` ✅ Loaded event: ${event.name} (once) - will execute inline`);
-      readyEventHandler = event;
-      continue;
-    }
+    // Support both single event exports and array exports (e.g. auditLogEvents.js)
+    const eventList = Array.isArray(loaded) ? loaded : [loaded];
+    
+    for (const event of eventList) {
+      if (!event || !event.name) {
+        console.warn(` ⚠️ Skipping invalid event export in ${file}`);
+        continue;
+      }
+      
+      if (event.name === 'ready' || event.name === 'clientReady') {
+        console.log(` ✅ Loaded event: ${event.name} (once) - will execute inline`);
+        readyEventHandler = event;
+        continue;
+      }
 
-    if (event.once) {
-      client.once(event.name, (...args) => event.execute(...args, client));
-    } else {
-      client.on(event.name, (...args) => event.execute(...args, client));
+      if (event.once) {
+        client.once(event.name, (...args) => event.execute(...args, client));
+      } else {
+        client.on(event.name, (...args) => event.execute(...args, client));
+      }
+      
+      console.log(` ✅ Loaded event: ${event.name}${event.once ? ' (once)' : ''}`);
     }
-    
-    console.log(` ✅ Loaded event: ${event.name}${event.once ? ' (once)' : ''}`);
   }
 }
 
@@ -107,19 +117,44 @@ client.once('ready', async () => {
 
   try {
     console.log('🔄 [DISCORD] Deploying slash commands to Discord...');
-    const commandPayloads = [];
+    const globalPayloads = [];
+    const ownerOnlyPayloads = [];
+    const OWNER_GUILD_ID = process.env.OWNER_GUILD_ID;
+
     for (const cmd of client.commands.values()) {
       if (cmd.data && typeof cmd.data.toJSON === 'function') {
-        commandPayloads.push(cmd.data.toJSON());
+        const name = cmd.data.name || cmd.name;
+        if (name === 'mydata' || name === 'guilds') {
+          ownerOnlyPayloads.push(cmd.data.toJSON());
+        } else {
+          globalPayloads.push(cmd.data.toJSON());
+        }
       }
     }
 
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-    await rest.put(
-      Routes.applicationCommands(client.user.id),
-      { body: commandPayloads }
-    );
-    console.log(`✅ [DISCORD] Deployed ${commandPayloads.length} global command(s).`);
+
+    if (globalPayloads.length > 0) {
+      await rest.put(
+        Routes.applicationCommands(client.user.id),
+        { body: globalPayloads }
+      );
+      console.log(`✅ [DISCORD] Deployed ${globalPayloads.length} global command(s).`);
+    }
+
+    if (OWNER_GUILD_ID && ownerOnlyPayloads.length > 0) {
+      await rest.put(
+        Routes.applicationGuildCommands(client.user.id, OWNER_GUILD_ID),
+        { body: ownerOnlyPayloads }
+      );
+      console.log(`✅ [DISCORD] Deployed ${ownerOnlyPayloads.length} owner-only command(s) to guild ${OWNER_GUILD_ID}.`);
+    } else if (ownerOnlyPayloads.length > 0) {
+      await rest.put(
+        Routes.applicationCommands(client.user.id),
+        { body: ownerOnlyPayloads }
+      );
+      console.log(`✅ [DISCORD] Deployed ${ownerOnlyPayloads.length} owner-only command(s) globally (set OWNER_GUILD_ID to restrict visibility).`);
+    }
   } catch (err) {
     console.error('❌ [DISCORD] Command deployment failed:', err.message);
   }

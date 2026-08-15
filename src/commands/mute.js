@@ -132,41 +132,5 @@ module.exports = {
   },
 
   // 🌟 FIXED: Added correct input selectors and state tracking redirects
-  async executePrefix(message, argsArray, client) {
-    let targetUser = message.mentions.users.first();
-    
-    // Correct index selection mapping implemented
-    if (!targetUser && argsArray && argsArray.length > 0) {
-      const pureId = argsArray[0].replace(/[^0-9]/g, '');
-      if (pureId.length >= 17 && pureId.length <= 20) {
-        targetUser = await client.users.fetch(pureId).catch(() => null);
-      }
-    }
-    const durationText = argsArray && argsArray[1] ? argsArray[1] : '';
-    const reasonText = argsArray && argsArray.length > 2 ? argsArray.slice(2).join(' ') : 'No reason provided';
-
-    const mockInteraction = {
-      isMock: true,
-      guild: message.guild,
-      guildId: message.guild?.id,
-      member: message.member,
-      author: message.author,
-      processingMessage: null,
-      options: {
-        getUser: (name) => targetUser,
-        getString: (name) => name === 'duration' ? durationText : reasonText
-      },
-      reply: async (options) => {
-        return message.reply(options);
-      },
-      // Redirect status message updates cleanly onto the text message instance
-      editReply: async (options) => {
-        if (mockInteraction.processingMessage) {
-          return mockInteraction.processingMessage.edit(options);
-        }
-        return message.reply(options);
-      }
-    };
-    await this.execute(mockInteraction, client).catch(() => null);
-  }
+  
 };

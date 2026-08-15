@@ -34,7 +34,7 @@ module.exports = {
   name: 'setup',
 
   async execute(interaction, client) {
-    const isInteraction = interaction.isCommand ? interaction.isCommand() : false;
+    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : false;
     const memberExecutor = interaction.member;
 
     if (!memberExecutor.permissions.has(PermissionFlagsBits.Administrator) && 
@@ -352,7 +352,7 @@ module.exports = {
           { name: 'Categories Provisioned', value: '5 Layout Rows', inline: true },
           { name: 'Channels Spawned', value: Object.keys(channels).length.toString(), inline: true },
           { name: 'Role Tree Density', value: `${newlyCreatedRoleIds.length} Total Ranks`, inline: true },
-          { name: 'Prefix Gateway', value: '|', inline: true },
+           { name: 'Gateway', value: 'slash commands', inline: true },
           { name: 'Permissions Matrix', value: '🟢 Corrected Split Logic Verified' }
         );
 
@@ -383,43 +383,5 @@ module.exports = {
     }
   },
 
-  async executePrefix(message, argsArray, client) {
-    const guild = message.guild;
-    if (!guild) return;
-
-    const member = message.member;
-    if (!member.permissions.has(PermissionFlagsBits.Administrator) && !member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-      return message.reply('❌ You require Manager or Administrator permissions to initiate setups.').catch(() => null);
-    }
-
-    const templateArg = argsArray ? argsArray.toLowerCase().trim() : null;
-    const clearArg = argsArray ? argsArray.toLowerCase().trim() : null;
-    
-    const validTemplates = ['gaming', 'community', 'study', 'business', 'creative', 'development', 'finance', 'roleplay', 'minimalist', 'history', 'geography'];
-    if (!templateArg || !validTemplates.includes(templateArg)) {
-      return message.reply(`❌ **Usage:** \`|setup <${validTemplates.join('|')}> [clear]\``).catch(() => null);
-    }
-
-    const isClearSet = (clearArg === 'clear' || clearArg === 'true');
-
-    const mockInteraction = {
-      guild: message.guild,
-      guildId: message.guild.id,
-      channelId: message.channelId,
-      channel: message.channel,
-      member: message.member,
-      user: message.author,
-      options: {
-        getString: (name) => templateArg,
-        getBoolean: (name) => isClearSet
-      },
-      reply: async (options) => message.reply(options),
-      editReply: async (options) => {
-        if (typeof options === 'string') return message.channel.send({ content: options });
-        return message.channel.send(options);
-      }
-    };
-
-    await this.execute(mockInteraction, client).catch(err => console.error('Error handling inline server setup prefix wrapper:', err));
-  }
+  
 };
