@@ -466,24 +466,33 @@ const loginBot = async () => {
   loginAttempts += 1;
   console.log(`🔑 [DISCORD] Login attempt ${loginAttempts}/${MAX_LOGIN_ATTEMPTS}...`);
 
+  if (readyTimer) clearTimeout(readyTimer);
+  readyTimer = setTimeout(() => {
+    if (!client.user) {
+      console.warn('[DISCORD] Gateway did not become ready after 30s. Retrying login...');
+      if (loginAttempts < MAX_LOGIN_ATTEMPTS) {
+        client.destroy().catch(() => {});
+        setTimeout(loginBot, 10000);
+      } else {
+        console.error('[DISCORD] Max login retries reached. Exiting.');
+        process.exit(1);
+      }
+    }
+  }, 30000);
+
   try {
     await client.login(TOKEN);
-
-    if (readyTimer) clearTimeout(readyTimer);
-    readyTimer = setTimeout(() => {
-      if (!client.user) {
-        console.warn('[DISCORD] Gateway did not become ready after 30s. Retrying login...');
-        if (loginAttempts < MAX_LOGIN_ATTEMPTS) {
-          client.destroy().catch(() => {});
-          setTimeout(loginBot, 10000);
-        } else {
-          console.error('[DISCORD] Max login retries reached. Exiting.');
-          process.exit(1);
-        }
-      }
-    }, 30000);
+    if (readyTimer) {
+      clearTimeout(readyTimer);
+      readyTimer = null;
+    }
   } catch (err) {
     console.error('❌ [FATAL] Login failed:', err.message || err);
+
+    if (readyTimer) {
+      clearTimeout(readyTimer);
+      readyTimer = null;
+    }
 
     if (loginAttempts < MAX_LOGIN_ATTEMPTS) {
       console.warn('[DISCORD] Retrying login in 10s...');
