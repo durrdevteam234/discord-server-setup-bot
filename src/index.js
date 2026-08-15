@@ -1,7 +1,5 @@
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 
-console.log('[DEBUG] index.js starting');
-
 const { Client, Collection, GatewayIntentBits, Partials, REST, Routes, ActivityType } = require('discord.js');
 const mongoose = require('mongoose');
 const fs = require('fs');
@@ -36,20 +34,47 @@ const client = new Client({
 
 client.commands = new Collection();
 
+const rawToken = process.env.DISCORD_TOKEN || process.env.TOKEN || '';
+const TOKEN = String(rawToken).trim();
+const TOKEN_HAS_HIDDEN_WHITESPACE = /[\u200B\u00A0\t\r\n ]/.test(String(rawToken));
+
+if (!TOKEN) {
+  console.error('❌ [FATAL] DISCORD_TOKEN / TOKEN environment variable is not set.');
+  process.exit(1);
+}
+
+console.log(`[DISCORD] Token present: true, length=${TOKEN.length}, hiddenWhitespace=${TOKEN_HAS_HIDDEN_WHITESPACE}`);
+
+client.on('warn', (warning) => {
+  console.warn(`[DISCORD WARN] ${warning}`);
+});
+
+client.on('error', (error) => {
+  console.error('[DISCORD CLIENT ERROR]', error);
+});
+
+client.on('shardError', (error, shardId) => {
+  console.error(`[WS ERROR] shard=${shardId}`, error);
+});
+
+client.on('shardDisconnect', (event, shardId) => {
+  console.warn(`[WS DISCONNECT] shard=${shardId} code=${event?.code ?? 'n/a'} reason=${event?.reason ?? 'n/a'}`);
+});
+
 const commandsPath = path.join(__dirname, 'commands');
 if (fs.existsSync(commandsPath)) {
   const commandFiles = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'));
   console.log(`📂 [LOADER] Loading ${commandFiles.length} commands from ${commandsPath}`);
-  
+
   for (const file of commandFiles) {
     try {
       const command = require(path.join(commandsPath, file));
       const name = command.name || command.data?.name;
-      
+
       if (name) {
         client.commands.set(name.toLowerCase(), command);
         console.log(` ✅ Loaded command: ${name}`);
-        
+
         if (command.init) {
           command.init(client);
         }
@@ -58,7 +83,7 @@ if (fs.existsSync(commandsPath)) {
       console.error(` ❌ Failed to load ${file}:`, err.message);
     }
   }
-  
+
   console.log(`✅ [LOADER] Total commands loaded: ${client.commands.size}`);
 } else {
   console.error(`❌ [LOADER ERROR] Commands path not found at: ${commandsPath}`);
@@ -69,19 +94,17 @@ let readyEventHandler = null;
 if (fs.existsSync(eventsPath)) {
   const eventFiles = fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'));
   console.log(`📂 [LOADER] Loading ${eventFiles.length} event files from ${eventsPath}`);
-  
+
   for (const file of eventFiles) {
     const loaded = require(path.join(eventsPath, file));
-    
-    // Support both single event exports and array exports (e.g. auditLogEvents.js)
     const eventList = Array.isArray(loaded) ? loaded : [loaded];
-    
+
     for (const event of eventList) {
       if (!event || !event.name) {
         console.warn(` ⚠️ Skipping invalid event export in ${file}`);
         continue;
       }
-      
+
       if (event.name === 'ready' || event.name === 'clientReady') {
         console.log(` ✅ Loaded event: ${event.name} (once) - will execute inline`);
         readyEventHandler = event;
@@ -93,41 +116,21 @@ if (fs.existsSync(eventsPath)) {
       } else {
         client.on(event.name, (...args) => event.execute(...args, client));
       }
-      
+
       console.log(` ✅ Loaded event: ${event.name}${event.once ? ' (once)' : ''}`);
     }
   }
 }
 
-client.once('ready', (event) => {
-  console.log('[DEBUG] raw ready event fired, type:', event?.type || 'no type');
-  onClientReady();
-});
-client.once('clientReady', (event) => {
-  console.log('[DEBUG] raw clientReady event fired');
-  onClientReady();
-});
+let readyTimer = null;
 
-client.on('debug', (info) => console.log('[WS DEBUG]', info));
-client.on('error', (err) => console.error('[WS ERROR]', err));
-client.on('disconnect', (packet) => {
-  console.log('[WS DISCONNECT]', JSON.stringify(packet));
-});
-client.on('close', (packet) => {
-  console.log('[WS CLOSE]', JSON.stringify(packet));
-});
-client.on('reconnecting', () => console.log('[WS RECONNECTING]'));
-client.on('shardDisconnect', (_, id) => console.log('[WS SHARD DISCONNECT]', id));
-client.on('shardError', (err, id) => console.error('[WS SHARD ERROR]', err, id));
-client.on('shardReconnecting', (id) => console.log('[WS SHARD RECONNECTING]', id));
-client.on('connect', () => console.log('[WS CONNECTED]'));
-client.on('invalidated', () => console.log('[WS INVALIDATED]'));
-client.on('invalidRequestWarning', (warn) => console.log('[WS INVALID REQUEST]', warn));
+client.once('ready', async () => {
+  if (readyTimer) {
+    clearTimeout(readyTimer);
+    readyTimer = null;
+  }
 
-async function onClientReady() {
-  if (onClientReady.ran) return;
-  onClientReady.ran = true;
-  console.log(`\n✅ [BOT ONLINE] ${client.user?.tag || 'unknown'} is live!`);
+  console.log(`\n✅ [BOT ONLINE] ${client.user.tag} is live!`);
   console.log(` Guilds: ${client.guilds.cache.size}`);
   console.log(` Users: ${client.guilds.cache.reduce((acc, g) => acc + (g.memberCount || 0), 0)}`);
   console.log(` Ping: ${Math.round(client.ws.ping)}ms`);
@@ -135,7 +138,7 @@ async function onClientReady() {
   console.log('\n' + '='.repeat(60));
   console.log('🔄 [BOTNEXUS] Starting command sync...');
   console.log('='.repeat(60));
-  
+
   try {
     await syncCommandsToBotNexus();
     console.log('✅ [BOTNEXUS] Command sync completed successfully!');
@@ -146,44 +149,19 @@ async function onClientReady() {
 
   try {
     console.log('🔄 [DISCORD] Deploying slash commands to Discord...');
-    const globalPayloads = [];
-    const ownerOnlyPayloads = [];
-    const OWNER_GUILD_ID = process.env.OWNER_GUILD_ID;
-
+    const commandPayloads = [];
     for (const cmd of client.commands.values()) {
       if (cmd.data && typeof cmd.data.toJSON === 'function') {
-        const name = cmd.data.name || cmd.name;
-        if (name === 'mydata' || name === 'guilds') {
-          ownerOnlyPayloads.push(cmd.data.toJSON());
-        } else {
-          globalPayloads.push(cmd.data.toJSON());
-        }
+        commandPayloads.push(cmd.data.toJSON());
       }
     }
 
-    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-
-    if (globalPayloads.length > 0) {
-      await rest.put(
-        Routes.applicationCommands(client.user.id),
-        { body: globalPayloads }
-      );
-      console.log(`✅ [DISCORD] Deployed ${globalPayloads.length} global command(s).`);
-    }
-
-    if (OWNER_GUILD_ID && ownerOnlyPayloads.length > 0) {
-      await rest.put(
-        Routes.applicationGuildCommands(client.user.id, OWNER_GUILD_ID),
-        { body: ownerOnlyPayloads }
-      );
-      console.log(`✅ [DISCORD] Deployed ${ownerOnlyPayloads.length} owner-only command(s) to guild ${OWNER_GUILD_ID}.`);
-    } else if (ownerOnlyPayloads.length > 0) {
-      await rest.put(
-        Routes.applicationCommands(client.user.id),
-        { body: ownerOnlyPayloads }
-      );
-      console.log(`✅ [DISCORD] Deployed ${ownerOnlyPayloads.length} owner-only command(s) globally (set OWNER_GUILD_ID to restrict visibility).`);
-    }
+    const rest = new REST({ version: '10' }).setToken(TOKEN);
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: commandPayloads }
+    );
+    console.log(`✅ [DISCORD] Deployed ${commandPayloads.length} global command(s).`);
   } catch (err) {
     console.error('❌ [DISCORD] Command deployment failed:', err.message);
   }
@@ -206,7 +184,6 @@ async function onClientReady() {
     birthdaysCmd.startScheduler(client);
   }
 
-  // FIX: Populate invite cache properly
   const invitesCmd = client.commands.get('invites');
   if (invitesCmd?.inviteCache != null) {
     console.log('🔄 Populating invite cache...');
@@ -214,7 +191,7 @@ async function onClientReady() {
       try {
         const invites = await guild.invites.fetch();
         const guildMap = new Map();
-        
+
         for (const invite of invites.values()) {
           guildMap.set(invite.code, {
             uses: invite.uses,
@@ -223,7 +200,7 @@ async function onClientReady() {
             expiresAt: invite.expiresAt,
           });
         }
-        
+
         invitesCmd.inviteCache.set(guild.id, guildMap);
         console.log(` ✅ Cached ${invites.size} invites for ${guild.name}`);
       } catch (err) {
@@ -240,18 +217,18 @@ async function onClientReady() {
     return [
       { text: 'go buy ServerMiser Premium yo i need this', type: ActivityType.Watching },
       { text: '1.99 dollars per week is actually not bad lol', type: ActivityType.Watching },
-      { text: 'whop.com/servermiser/servermiser-premium work in progress don\'t blame me yo', type: ActivityType.Watching},
-      { text: 'how can a server with 30 members have 239 cases.', type: ActivityType.Streaming},
-      { text: 'yo uh, why is the moon blue..', type: ActivityType.Watching},
-      { text: 'psst, hey you want some candy..', type: ActivityType.Listening},
-      { text: 'your chats are so stupid man.', type: ActivityType.Watching},
+      { text: 'whop.com/servermiser/servermiser-premium work in progress don\'t blame me yo', type: ActivityType.Watching },
+      { text: 'how can a server with 30 members have 239 cases.', type: ActivityType.Streaming },
+      { text: 'yo uh, why is the moon blue..', type: ActivityType.Watching },
+      { text: 'psst, hey you want some candy..', type: ActivityType.Listening },
+      { text: 'your chats are so stupid man.', type: ActivityType.Watching },
       { text: '|help for noobs.', type: ActivityType.Playing },
       { text: 'i am the observer and i will always be observing', type: ActivityType.Watching },
       { text: "formal's new beat is peak", type: ActivityType.Listening },
       { text: 'in a coding match', type: ActivityType.Competing },
       { text: `over ${guildCount.toLocaleString()} servers`, type: ActivityType.Watching },
       { text: `${userCount.toLocaleString()} humans (and bots pretending)`, type: ActivityType.Watching },
-      { text: `servermiser.pntr.dev`, type: ActivityType.Watching },
+      { text: 'servermiser.pntr.dev', type: ActivityType.Watching },
       { text: `at ${ping}ms ping, basically teleporting`, type: ActivityType.Competing },
       { text: 'therapist for your server\'s trust issues', type: ActivityType.Competing },
       { text: 'mute button go brrr', type: ActivityType.Playing },
@@ -274,10 +251,10 @@ async function onClientReady() {
       client.user.setActivity(current.text, { type: current.type });
       statusIndex = (statusIndex + 1) % statuses.length;
     } catch (err) {
-      // Silently fail
+      // silently fail
     }
   };
-  
+
   updateStatus();
   setInterval(updateStatus, 3 * 60 * 1000);
 
@@ -293,10 +270,10 @@ async function onClientReady() {
       pingBotList(serverCount, userCount, shardCount);
       pushStatsToBotNexus(serverCount);
     } catch (syncErr) {
-      // Silent fail
+      // silently fail
     }
   };
-  
+
   sendStatsUpdate();
   pingDashboard(client).catch(() => null);
   setInterval(sendStatsUpdate, 10 * 1000);
@@ -311,7 +288,7 @@ async function onClientReady() {
       console.warn('⚠️ [DASHBOARD] STATS_API_KEY not set, skipping dashboard sync');
       return;
     }
-    
+
     try {
       const totalGuilds = client.guilds.cache.size;
       const totalMembers = client.guilds.cache.reduce((acc, g) => acc + (g.memberCount || 0), 0);
@@ -334,7 +311,7 @@ async function onClientReady() {
         database.getGuildCategories().catch(() => []),
         database.getTotalXp().catch(() => 0),
         database.getTotalTickets().catch(() => 0),
-        database.getDailySetupCounts().catch(() => [0, 0, 0, 0, 0, 0, 0])
+        database.getDailySetupCounts().catch(() => [0, 0, 0, 0, 0, 0, 0]),
       ]);
 
       const totalSetups = Number(counters.totalSetups || 0);
@@ -347,36 +324,31 @@ async function onClientReady() {
         uptime,
         ramUsage,
         activeShards: `1 / ${shardCount}`,
-        securityCompliance: "100%",
+        securityCompliance: '100%',
         totalTickets,
         totalXp,
         totalSetups,
-        setupSuccessRate: totalSetups > 0 ? `${((successfulSetups / totalSetups) * 100).toFixed(1)}%` : "0%",
+        setupSuccessRate: totalSetups > 0 ? `${((successfulSetups / totalSetups) * 100).toFixed(1)}%` : '0%',
         ...(Array.isArray(guildCategories) && guildCategories.length > 0 ? { guildCategories } : {}),
-        ...(Array.isArray(dailySetups) && dailySetups.length === 7 ? { dailySetups } : {})
+        ...(Array.isArray(dailySetups) && dailySetups.length === 7 ? { dailySetups } : {}),
       };
-
-      console.log('[DASHBOARD] Posting payload:', payload);
 
       await fetch(dashboardUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${statsApiKey}`
+          Authorization: `Bearer ${statsApiKey}`,
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
     } catch (error) {
-      // Silent fail
+      // silently fail
     }
   }
 
   pushDashboardStats();
   setInterval(pushDashboardStats, 10 * 1000);
 
-  // ==========================================
-  // Execute ready.js module for analytics auto-update
-  // ==========================================
   if (readyEventHandler && typeof readyEventHandler.execute === 'function') {
     console.log('🔄 [READY EVENT] Executing ready.js module...');
     try {
@@ -385,7 +357,7 @@ async function onClientReady() {
       console.error('❌ [READY EVENT] Error executing ready.js:', err.message);
     }
   }
-}
+});
 
 const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
 if (MONGO_URI) {
@@ -404,89 +376,49 @@ const PORT = process.env.PORT || 3000;
 
 app.get('/', (_req, res) => res.json({ status: 'online', tag: client.user?.tag || 'starting' }));
 
-app.get('/test/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    commandsLoaded: client.commands.size,
-    user: client.user?.tag || 'undefined',
-    wsStatus: client.ws?.status || 'n/a',
-    wsReady: client.ws?.ready || false,
-    readyRan: onClientReady.ran || false,
-    loginResolved: loginResolved || false,
-    timestamp: new Date().toISOString(),
+app.get('/test/health', (_req, res) => {
+  res.json({
+    ok: true,
+    status: 'online',
+    uptime: process.uptime(),
+    time: new Date().toISOString(),
+    user: client.user?.tag || null,
+    isReady: client.isReady(),
+    wsStatus: client.ws?.status ?? null,
+    wsReady: client.ws?.ready ?? null,
+    guilds: client.guilds.cache.size,
   });
 });
 
-app.get('/test/discord-login', async (req, res) => {
-  const TOKEN = (process.env.DISCORD_TOKEN || process.env.TOKEN || '').trim();
-  if (!TOKEN) {
-    return res.json({ status: 'error', message: 'Missing DISCORD_TOKEN/TOKEN' });
-  }
-
-  const testClient = new Client({ intents: [GatewayIntentBits.Guilds] });
-  const result = {
-    status: 'unknown',
-    loginResolved: false,
-    readyFired: false,
-    wsStatus: null,
-    closeCode: null,
-    closeReason: null,
-    error: null,
-    duration: 0,
+app.get('/test/discord-login', async (_req, res) => {
+  const ws = client.ws;
+  const payload = {
+    ok: Boolean(TOKEN),
+    tokenLength: TOKEN.length,
+    tokenTrimmed: TOKEN !== (process.env.DISCORD_TOKEN || process.env.TOKEN || ''),
+    hiddenWhitespace: TOKEN_HAS_HIDDEN_WHITESPACE,
+    user: client.user?.tag || null,
+    isReady: client.isReady(),
+    wsStatus: ws?.status ?? null,
+    wsReady: ws?.ready ?? null,
+    envSource: process.env.DISCORD_TOKEN ? 'DISCORD_TOKEN' : (process.env.TOKEN ? 'TOKEN' : 'missing'),
   };
 
-  const startTime = Date.now();
-
-  const timeout = setTimeout(() => {
-    testClient.destroy();
-    result.status = 'timeout';
-    result.error = 'Login/ready did not complete within 15s';
-    result.duration = Date.now() - startTime;
-    res.json(result);
-  }, 15000);
-
-  testClient.once('ready', () => {
-    result.status = 'success';
-    result.loginResolved = true;
-    result.readyFired = true;
-    result.wsStatus = testClient.ws?.status;
-    clearTimeout(timeout);
-    testClient.destroy();
-    result.duration = Date.now() - startTime;
-    res.json(result);
-  });
-
-  testClient.on('error', (err) => {
-    result.error = err.message;
-  });
-
-  testClient.on('disconnect', (packet) => {
-    result.closeCode = packet?.code;
-    result.closeReason = packet?.reason;
-  });
-
-  testClient.on('close', (packet) => {
-    result.closeCode = packet;
-    if (!result.readyFired && result.status !== 'timeout') {
-      result.status = 'closed';
-      clearTimeout(timeout);
-      testClient.destroy();
-      result.duration = Date.now() - startTime;
-      res.json(result);
-    }
-  });
-
   try {
-    await testClient.login(TOKEN);
-    result.loginResolved = true;
+    const response = await fetch('https://discord.com/api/v10/gateway/bot', {
+      method: 'GET',
+      headers: { Authorization: `Bot ${TOKEN}` },
+    });
+    payload.gatewayHttpStatus = response.status;
+    payload.gatewayHttpStatusText = response.statusText;
+    payload.gatewayMessage = response.ok ? 'Discord API reachable' : 'Discord API responded with error';
   } catch (err) {
-    result.status = 'login_error';
-    result.error = err.message;
-    clearTimeout(timeout);
-    testClient.destroy();
-    result.duration = Date.now() - startTime;
-    res.json(result);
+    payload.gatewayHttpStatus = null;
+    payload.gatewayError = err.message || String(err);
+    payload.gatewayMessage = 'Discord API unreachable from this environment';
   }
+
+  res.json(payload);
 });
 
 app.listen(PORT, () => {
@@ -495,14 +427,14 @@ app.listen(PORT, () => {
 
 client.on('guildCreate', async (guild) => {
   console.log(`➕ [GUILD] Joined: ${guild.name} (${guild.id})`);
-  
+
   const invitesCmd = client.commands.get('invites');
   if (!invitesCmd?.inviteCache) return;
-  
+
   try {
     const invites = await guild.invites.fetch();
     const guildMap = new Map();
-    
+
     for (const invite of invites.values()) {
       guildMap.set(invite.code, {
         uses: invite.uses,
@@ -511,7 +443,7 @@ client.on('guildCreate', async (guild) => {
         expiresAt: invite.expiresAt,
       });
     }
-    
+
     invitesCmd.inviteCache.set(guild.id, guildMap);
     console.log(` ✅ Cached ${invites.size} invites for new guild ${guild.name}`);
   } catch (err) {
@@ -527,41 +459,42 @@ process.on('uncaughtException', (err) => {
   console.error('❌ [UNCAUGHT EXCEPTION]', err);
 });
 
-const TOKEN = (process.env.DISCORD_TOKEN || process.env.TOKEN || '').trim();
-if (!TOKEN) {
-  console.error('❌ [FATAL] DISCORD_TOKEN / TOKEN environment variable is not set.');
-  process.exit(1);
-}
+let loginAttempts = 0;
+const MAX_LOGIN_ATTEMPTS = 3;
+
+const loginBot = async () => {
+  loginAttempts += 1;
+  console.log(`🔑 [DISCORD] Login attempt ${loginAttempts}/${MAX_LOGIN_ATTEMPTS}...`);
+
+  try {
+    await client.login(TOKEN);
+
+    if (readyTimer) clearTimeout(readyTimer);
+    readyTimer = setTimeout(() => {
+      if (!client.user) {
+        console.warn('[DISCORD] Gateway did not become ready after 30s. Retrying login...');
+        if (loginAttempts < MAX_LOGIN_ATTEMPTS) {
+          client.destroy().catch(() => {});
+          setTimeout(loginBot, 10000);
+        } else {
+          console.error('[DISCORD] Max login retries reached. Exiting.');
+          process.exit(1);
+        }
+      }
+    }, 30000);
+  } catch (err) {
+    console.error('❌ [FATAL] Login failed:', err.message || err);
+
+    if (loginAttempts < MAX_LOGIN_ATTEMPTS) {
+      console.warn('[DISCORD] Retrying login in 10s...');
+      setTimeout(loginBot, 10000);
+      return;
+    }
+
+    console.error('❌ [DISCORD] Max login attempts reached. Exiting.');
+    process.exit(1);
+  }
+};
 
 console.log('🔑 [DISCORD] Logging in...');
-let loginResolved = false;
-client.login(TOKEN).then(() => {
-  loginResolved = true;
-  console.log('[DEBUG] client.login() resolved');
-}).catch(err => {
-  console.error('❌ [FATAL] Login failed:', err.message);
-  process.exit(1);
-});
-
-const debugInterval = setInterval(() => {
-  console.log('[DEBUG] Periodic check:', {
-    loginResolved,
-    user: client.user?.tag || 'undefined',
-    wsExists: !!client.ws,
-    wsStatus: client.ws?.status || 'n/a',
-    wsReady: client.ws?.ready || false,
-    readyRan: onClientReady.ran,
-  });
-}, 5_000);
-
-setTimeout(() => {
-  clearInterval(debugInterval);
-  if (!onClientReady.ran) {
-    console.error('❌ [FATAL] Ready event did not fire within 30 seconds. Check token/intents.');
-    console.error('❌ [FATAL] client.user:', client.user?.tag || 'undefined');
-    console.error('❌ [FATAL] client.ws:', client.ws ? 'exists' : 'missing');
-    console.error('❌ [FATAL] ws status:', client.ws?.status || 'n/a');
-    console.error('❌ [FATAL] ws ready:', client.ws?.ready || false);
-    console.error('❌ [FATAL] login resolved:', loginResolved);
-  }
-}, 30_000);
+loginBot();
