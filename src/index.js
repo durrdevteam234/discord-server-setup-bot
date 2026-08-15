@@ -1,5 +1,7 @@
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 
+console.log('[DEBUG] index.js starting');
+
 const { Client, Collection, GatewayIntentBits, Partials, REST, Routes, ActivityType } = require('discord.js');
 const mongoose = require('mongoose');
 const fs = require('fs');
@@ -97,10 +99,18 @@ if (fs.existsSync(eventsPath)) {
   }
 }
 
-client.once('ready', onClientReady);
-client.once('clientReady', onClientReady);
+client.once('ready', (event) => {
+  console.log('[DEBUG] raw ready event fired, type:', event?.type || 'no type');
+  onClientReady();
+});
+client.once('clientReady', (event) => {
+  console.log('[DEBUG] raw clientReady event fired');
+  onClientReady();
+});
 
 async function onClientReady() {
+  if (onClientReady.ran) return;
+  onClientReady.ran = true;
   console.log(`\n✅ [BOT ONLINE] ${client.user?.tag || 'unknown'} is live!`);
   console.log(` Guilds: ${client.guilds.cache.size}`);
   console.log(` Users: ${client.guilds.cache.reduce((acc, g) => acc + (g.memberCount || 0), 0)}`);
@@ -423,7 +433,15 @@ if (!TOKEN) {
 }
 
 console.log('🔑 [DISCORD] Logging in...');
-client.login(TOKEN).catch(err => {
+client.login(TOKEN).then(() => {
+  console.log('[DEBUG] client.login() resolved');
+}).catch(err => {
   console.error('❌ [FATAL] Login failed:', err.message);
   process.exit(1);
 });
+
+setTimeout(() => {
+  if (!onClientReady.ran) {
+    console.error('❌ [FATAL] Ready event did not fire within 30 seconds. Check token/intents.');
+  }
+}, 30_000);

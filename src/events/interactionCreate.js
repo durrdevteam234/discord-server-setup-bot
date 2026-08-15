@@ -175,11 +175,16 @@ module.exports = {
         const commandName = interaction.commandName;
         if (!commandName) return;
 
+        console.log(`[SLASH] Received /${commandName} from ${interaction.user.tag} in ${interaction.guildId}`);
+
         const command = activeClient.commands.get(commandName.toLowerCase());
         if (!command) {
             console.warn(`[WARNING] Received slash interaction for /${commandName}, but it is not registered.`);
             return;
         }
+
+        console.log(`[SLASH] Executing /${commandName}`);
+        const startTime = Date.now();
 
         const currentGuildSettings = await getGuildSettings(interaction.guildId);
 
@@ -205,6 +210,9 @@ module.exports = {
             }
         }
 
+        console.log(`[SLASH] Executing /${commandName}`);
+        const startTime = Date.now();
+
         try {
             if (typeof command.executeSlash === 'function') {
                 await command.executeSlash(interaction, activeClient);
@@ -223,5 +231,6 @@ module.exports = {
                 await interaction.reply(errorPayload).catch(() => null);
             }
         }
+        console.log(`[SLASH] /${commandName} completed in ${Date.now() - startTime}ms`);
     },
 };
