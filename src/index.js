@@ -404,6 +404,91 @@ const PORT = process.env.PORT || 3000;
 
 app.get('/', (_req, res) => res.json({ status: 'online', tag: client.user?.tag || 'starting' }));
 
+app.get('/test/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    commandsLoaded: client.commands.size,
+    user: client.user?.tag || 'undefined',
+    wsStatus: client.ws?.status || 'n/a',
+    wsReady: client.ws?.ready || false,
+    readyRan: onClientReady.ran || false,
+    loginResolved: loginResolved || false,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get('/test/discord-login', async (req, res) => {
+  const TOKEN = (process.env.DISCORD_TOKEN || process.env.TOKEN || '').trim();
+  if (!TOKEN) {
+    return res.json({ status: 'error', message: 'Missing DISCORD_TOKEN/TOKEN' });
+  }
+
+  const testClient = new Client({ intents: [GatewayIntentBits.Guilds] });
+  const result = {
+    status: 'unknown',
+    loginResolved: false,
+    readyFired: false,
+    wsStatus: null,
+    closeCode: null,
+    closeReason: null,
+    error: null,
+    duration: 0,
+  };
+
+  const startTime = Date.now();
+
+  const timeout = setTimeout(() => {
+    testClient.destroy();
+    result.status = 'timeout';
+    result.error = 'Login/ready did not complete within 15s';
+    result.duration = Date.now() - startTime;
+    res.json(result);
+  }, 15000);
+
+  testClient.once('ready', () => {
+    result.status = 'success';
+    result.loginResolved = true;
+    result.readyFired = true;
+    result.wsStatus = testClient.ws?.status;
+    clearTimeout(timeout);
+    testClient.destroy();
+    result.duration = Date.now() - startTime;
+    res.json(result);
+  });
+
+  testClient.on('error', (err) => {
+    result.error = err.message;
+  });
+
+  testClient.on('disconnect', (packet) => {
+    result.closeCode = packet?.code;
+    result.closeReason = packet?.reason;
+  });
+
+  testClient.on('close', (packet) => {
+    result.closeCode = packet;
+    if (!result.readyFired && result.status !== 'timeout') {
+      result.status = 'closed';
+      clearTimeout(timeout);
+      testClient.destroy();
+      result.duration = Date.now() - startTime;
+      res.json(result);
+    }
+  });
+
+  try {
+    await testClient.login(TOKEN);
+    result.loginResolved = true;
+  } catch (err) {
+    result.status = 'login_error';
+    result.error = err.message;
+    clearTimeout(timeout);
+    testClient.destroy();
+    result.duration = Date.now() - startTime;
+    res.json(result);
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`✅ [WEB] Keep-alive server running on port ${PORT}.`);
 });
