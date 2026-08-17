@@ -77,7 +77,7 @@ module.exports = {
 
     // Full URL including the actual endpoint path — must match server.ts's POST route.
     // Override with DASHBOARD_URL in Render if your domain ever changes.
-    const dashboardUrl = process.env.DASHBOARD_URL || 'https://servermiser.is-a.dev/api/bot-stats';
+    const dashboardUrl = process.env.DASHBOARD_URL || 'https://discord-server-setup-bot-w22o.onrender.com/api/bot-stats';
     const apiKey = process.env.STATS_API_KEY;
 
     async function pushDashboardStats() {
@@ -167,9 +167,15 @@ module.exports = {
             const guild = client.guilds.cache.get(doc.guildId);
             if (!guild) continue;
 
-            const totalMembers = guild.memberCount;
-            const totalBots = guild.members.cache.filter(m => m.user.bot).size || 0;
-            const totalHumans = totalMembers - totalBots;
+            const totalMembers = guild.memberCount || 0;
+            let totalBots = 0;
+            try {
+              const members = await guild.members.fetch();
+              totalBots = members.filter((m) => m.user.bot).size || 0;
+            } catch (fetchErr) {
+              totalBots = guild.members.cache.filter((m) => m.user.bot).size || 0;
+            }
+            const totalHumans = Math.max(0, totalMembers - totalBots);
 
             // Update total members channel
             if (doc.totalChannelId) {
@@ -196,6 +202,16 @@ module.exports = {
         console.error('[Analytics Auto-Update Error]:', err.message);
       }
     };
+
+    const warmMemberCache = async () => {
+      for (const guild of client.guilds.cache.values()) {
+        await guild.members.fetch().catch(() => null);
+      }
+    };
+
+    // Warm the full member cache before the first run so bot/human totals
+    // are accurate immediately on startup instead of waiting for the first timer cycle.
+    warmMemberCache().catch(() => null);
 
     // Update analytics immediately on startup
     autoUpdateAnalytics();

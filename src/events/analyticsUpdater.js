@@ -29,12 +29,12 @@ function buildLabels(style, totalMembers, totalHumans, totalBots) {
 }
 
 async function getMemberCounts(guild) {
-  const totalMembers = guild.memberCount;
+  const totalMembers = guild.memberCount || 0;
 
   let totalBots = 0;
   try {
     const members = await guild.members.fetch();
-    totalBots = members.filter((m) => m.user.bot).size;
+    totalBots = members.filter((m) => m.user.bot).size || 0;
   } catch (err) {
     totalBots = guild.members.cache.filter((m) => m.user.bot).size || 0;
   }
@@ -91,7 +91,32 @@ async function runLiveAnalyticsSync(guild) {
   }
 }
 
+async function preloadGuildMembers(client) {
+  if (!client?.guilds?.cache) return;
+
+  for (const guild of client.guilds.cache.values()) {
+    await guild.members.fetch().catch(() => null);
+  }
+}
+
+async function refreshAllAnalyticsGuilds(client) {
+  if (!client?.guilds?.cache) return;
+
+  for (const guild of client.guilds.cache.values()) {
+    await runLiveAnalyticsSync(guild);
+  }
+}
+
 module.exports = [
+  {
+    name: Events.ClientReady,
+    once: true,
+    async execute(client) {
+      await preloadGuildMembers(client);
+      await refreshAllAnalyticsGuilds(client);
+      setInterval(() => refreshAllAnalyticsGuilds(client).catch(() => null), 60 * 1000);
+    },
+  },
   {
     name: Events.GuildMemberAdd,
     once: false,

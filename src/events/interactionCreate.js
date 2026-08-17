@@ -1,5 +1,6 @@
-const { MessageFlags } = require('discord.js');
+const { MessageFlags, EmbedBuilder } = require('discord.js');
 const db = require('../utils/database');
+const { isAuditLogsEnabled, resolveAuditLogChannel } = require('../utils/auditLog');
 
 const SETTINGS_TTL_MS = 30_000;
 const SETTINGS_TIMEOUT_MS = 3_000;
@@ -159,12 +160,47 @@ module.exports = {
         }
 
         // ========================================================
+        // AUDIT LOG USER ID LOOKUP (ephemeral, server-side response)
+        // ========================================================
+        if (interaction.isButton() && cid.startsWith('audit_get_user_id_')) {
+            const userId = cid.replace('audit_get_user_id_', '').trim();
+            if (!userId) return interaction.reply({ content: 'No user ID was attached to this action.', ephemeral: true }).catch(() => null);
+            return interaction.reply({
+                content: `User ID for <@${userId}>: \`${userId}\``,
+                ephemeral: true,
+            }).catch(() => null);
+        }
+
+        // ========================================================
         // REACTION ROLES FALLBACK (buttons & selects not matched above)
         // ========================================================
         if (interaction.isButton() || interaction.isStringSelectMenu()) {
             const cmd = activeClient.commands.get('reactionroles');
             if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
             return;
+        }
+
+        // ========================================================
+        // L. SLASH COMMAND AUDIT LOGGING
+        // ========================================================
+        if (interaction.isChatInputCommand()) {
+            try {
+                const guild = interaction.guild;
+                if (guild && (await isAuditLogsEnabled(guild))) {
+                    const logChannel = await resolveAuditLogChannel(guild);
+                    if (logChannel) {
+                        const embed = new EmbedBuilder()
+                            .setColor('#5865F2')
+                            .setTitle('🧭 Slash Command Executed')
+                            .setDescription(`**Command:** /${interaction.commandName}\n**User:** ${interaction.user.tag} (${interaction.user.id})\n**Channel:** ${interaction.channel?.toString() || 'Unknown'}`)
+                            .setTimestamp();
+
+                        await logChannel.send({ embeds: [embed] }).catch(() => null);
+                    }
+                }
+            } catch (error) {
+                console.error('[Audit:SlashCommand]', error.message);
+            }
         }
 
         // ========================================================

@@ -1,5 +1,5 @@
-const { Events, EmbedBuilder } = require('discord.js');
-const { isModLogsEnabled, resolveModLogChannel } = require('../utils/auditLog');
+const { Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AuditLogEvent } = require('discord.js');
+const { isModLogsEnabled, resolveModLogChannel, isAuditLogsEnabled, resolveAuditLogChannel } = require('../utils/auditLog');
 
 // ============================================================
 // CONSOLIDATED AUDIT LOG EVENT HANDLERS
@@ -16,6 +16,128 @@ const CHANNEL_TYPE_NAMES = {
   15: 'Forum Channel',
 };
 
+function getUserAvatar(user, size = 128) {
+  if (!user) return null;
+  if (typeof user.displayAvatarURL === 'function') {
+    return user.displayAvatarURL({ dynamic: true, size });
+  }
+  if (typeof user.avatarURL === 'function') {
+    return user.avatarURL({ dynamic: true, size });
+  }
+  return null;
+}
+
+function getGuildIcon(guild, size = 128) {
+  if (!guild || typeof guild.iconURL !== 'function') return null;
+  return guild.iconURL({ dynamic: true, size }) || null;
+}
+
+function buildUserIdRow(userId) {
+  if (!userId) return null;
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`audit_get_user_id_${userId}`)
+      .setLabel('Get User ID')
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
+
+function buildMessageJumpRow(message) {
+  if (!message?.guild || !message?.channel || !message?.id) return null;
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setURL(`https://discord.com/channels/${message.guild.id}/${message.channel.id}/${message.id}`)
+      .setLabel('Go to Message')
+      .setStyle(ButtonStyle.Link)
+  );
+}
+
+async function addActorField(embed, guild, actionType, targetId) {
+  if (!embed || !guild || !actionType) return embed;
+
+  try {
+    const auditLogs = await guild.fetchAuditLogs({ type: actionType, limit: 10 });
+    const target = targetId ? auditLogs.entries.find((entry) => entry.target?.id === String(targetId) || entry.targetId === targetId) : null;
+    const entry = target || auditLogs.entries.first();
+    if (!entry?.executor) return embed;
+
+    if (!embed.data.author) {
+      embed.setAuthor({
+        name: entry.executor.tag,
+        iconURL: getUserAvatar(entry.executor, 64) || undefined,
+      });
+    }
+
+    if (!embed.data.thumbnail && getUserAvatar(entry.executor, 256)) {
+      embed.setThumbnail(getUserAvatar(entry.executor, 256));
+    }
+
+    embed.addFields({ name: 'Actor', value: `${entry.executor.tag} (${entry.executor.id})` });
+  } catch (error) {
+    // Ignore audit-log lookup failures; this is best-effort actor enrichment.
+  }
+
+  return embed;
+}
+
+async function onGuildAuditLogEntryCreate(guildAuditLogEntry, user) {
+  try {
+    if (!guildAuditLogEntry?.guild) return;
+    const guild = guildAuditLogEntry.guild;
+    if (!(await isModLogsEnabled(guild))) return;
+    const logChannel = await resolveModLogChannel(guild);
+    if (!logChannel) return;
+
+    const actionName = guildAuditLogEntry.action ?? 'Audit Log Entry';
+    const targetName = guildAuditLogEntry.target ? (
+      guildAuditLogEntry.target.tag ||
+      guildAuditLogEntry.target.name ||
+      guildAuditLogEntry.target.id ||
+      'Unknown target'
+    ) : 'Unknown target';
+
+    const embed = new EmbedBuilder()
+      .setColor('#5865F2')
+      .setTitle('📘 Audit Log Entry')
+      .setAuthor({
+        name: user ? `${user.tag}` : 'Unknown Executor',
+        iconURL: getUserAvatar(user, 64) || undefined,
+      })
+      .setThumbnail(getGuildIcon(guild, 128) || undefined)
+      .setDescription(`**Action:** ${actionName}\n**Target:** ${targetName}`)
+      .setTimestamp();
+
+    const components = [];
+    if (user?.id) components.push(buildUserIdRow(user.id));
+
+    if (user?.tag) {
+      embed.addFields({ name: 'Actor', value: `${user.tag} (${user.id})` });
+    }
+
+    if (guildAuditLogEntry.reason) {
+      embed.addFields({ name: 'Reason', value: guildAuditLogEntry.reason.slice(0, 1024) || 'No reason provided' });
+    }
+
+    if (guildAuditLogEntry.changes && guildAuditLogEntry.changes.length > 0) {
+      const changeSummary = guildAuditLogEntry.changes.slice(0, 5).map(change => {
+        const key = change.key || 'unknown';
+        const oldValue = change.old ? String(change.old).slice(0, 180) : 'None';
+        const newValue = change.new ? String(change.new).slice(0, 180) : 'None';
+        return `**${key}:** \`${oldValue}\` → \`${newValue}\``;
+      }).join('\n');
+
+      embed.addFields({ name: 'Changes', value: changeSummary || 'No explicit changes recorded.' });
+    }
+
+    await logChannel.send({
+      embeds: [embed],
+      components: components.filter(Boolean),
+    }).catch(() => null);
+  } catch (error) {
+    console.error('[Audit:GuildAuditLogEntryCreate]', error.message);
+  }
+}
+
 // ─── Message Edited ─────────────────────────────────────────
 async function onMessageUpdate(oldMessage, newMessage) {
   try {
@@ -24,21 +146,32 @@ async function onMessageUpdate(oldMessage, newMessage) {
     if (oldMessage.content === newMessage.content) return;
 
     const guild = newMessage.guild;
-    if (!(await isModLogsEnabled(guild))) return;
-    const channel = await resolveModLogChannel(guild);
+    if (!(await isAuditLogsEnabled(guild))) return;
+    const channel = await resolveAuditLogChannel(guild);
     if (!channel) return;
 
     const embed = new EmbedBuilder()
       .setColor('#FAA61A')
       .setTitle('✏️ Message Edited')
-      .setDescription(`**Author:** ${newMessage.author} (${newMessage.author.id})\n**Channel:** ${newMessage.channel}\n[Jump to message](https://discord.com/channels/${guild.id}/${newMessage.channel.id}/${newMessage.id})`)
+      .setAuthor({
+        name: newMessage.author.tag,
+        iconURL: getUserAvatar(newMessage.author, 64) || undefined,
+      })
+      .setThumbnail(getUserAvatar(newMessage.author, 256) || undefined)
+      .setDescription(`**Channel:** ${newMessage.channel}`)
       .addFields(
         { name: 'Before', value: oldMessage.content.slice(0, 1024) || '*Empty*' },
         { name: 'After', value: newMessage.content.slice(0, 1024) || '*Empty*' }
       )
       .setTimestamp();
 
-    await channel.send({ embeds: [embed] }).catch(() => null);
+    const components = [buildMessageJumpRow(newMessage)].filter(Boolean);
+    if (newMessage.author?.id) components.push(buildUserIdRow(newMessage.author.id));
+
+    await channel.send({
+      embeds: [embed],
+      components: components.filter(Boolean),
+    }).catch(() => null);
   } catch (error) {
     console.error('[Audit:MessageUpdate]', error.message);
   }
@@ -51,18 +184,29 @@ async function onMessageDelete(message) {
     if (!message.content) return;
 
     const guild = message.guild;
-    if (!(await isModLogsEnabled(guild))) return;
-    const channel = await resolveModLogChannel(guild);
+    if (!(await isAuditLogsEnabled(guild))) return;
+    const channel = await resolveAuditLogChannel(guild);
     if (!channel) return;
 
     const embed = new EmbedBuilder()
       .setColor('#ED4245')
       .setTitle('🗑️ Message Deleted')
-      .setDescription(`**Author:** ${message.author} (${message.author.id})\n**Channel:** ${message.channel}`)
+      .setAuthor({
+        name: message.author.tag,
+        iconURL: getUserAvatar(message.author, 64) || undefined,
+      })
+      .setThumbnail(getUserAvatar(message.author, 256) || undefined)
+      .setDescription(`**Channel:** ${message.channel}`)
       .addFields({ name: 'Content', value: message.content.slice(0, 1024) || '*Empty*' })
       .setTimestamp();
 
-    await channel.send({ embeds: [embed] }).catch(() => null);
+    const components = [buildMessageJumpRow(message)].filter(Boolean);
+    if (message.author?.id) components.push(buildUserIdRow(message.author.id));
+
+    await channel.send({
+      embeds: [embed],
+      components: components.filter(Boolean),
+    }).catch(() => null);
   } catch (error) {
     console.error('[Audit:MessageDelete]', error.message);
   }
@@ -73,16 +217,18 @@ async function onChannelCreate(channel) {
   try {
     if (!channel.guild) return;
     const guild = channel.guild;
-    if (!(await isModLogsEnabled(guild))) return;
-    const logChannel = await resolveModLogChannel(guild);
+    if (!(await isAuditLogsEnabled(guild))) return;
+    const logChannel = await resolveAuditLogChannel(guild);
     if (!logChannel) return;
 
     const embed = new EmbedBuilder()
       .setColor('#57F287')
       .setTitle('📝 Channel Created')
-      .setDescription(`**Channel:** ${channel.name} (${channel.id})\n**Type:** ${CHANNEL_TYPE_NAMES[channel.type] || 'Unknown'}`)
+      .setThumbnail(getGuildIcon(channel.guild, 128) || undefined)
+      .setDescription(`**Channel:** ${channel.name}\n**Type:** ${CHANNEL_TYPE_NAMES[channel.type] || 'Unknown'}`)
       .setTimestamp();
 
+    await addActorField(embed, guild, AuditLogEvent.ChannelCreate, channel.id);
     await logChannel.send({ embeds: [embed] }).catch(() => null);
   } catch (error) {
     console.error('[Audit:ChannelCreate]', error.message);
@@ -94,8 +240,8 @@ async function onChannelUpdate(oldChannel, newChannel) {
   try {
     if (!newChannel.guild) return;
     const guild = newChannel.guild;
-    if (!(await isModLogsEnabled(guild))) return;
-    const logChannel = await resolveModLogChannel(guild);
+    if (!(await isAuditLogsEnabled(guild))) return;
+    const logChannel = await resolveAuditLogChannel(guild);
     if (!logChannel) return;
 
     const changes = [];
@@ -103,7 +249,7 @@ async function onChannelUpdate(oldChannel, newChannel) {
       changes.push({ name: 'Name', value: `\`${oldChannel.name}\` → \`${newChannel.name}\`` });
     }
     if (oldChannel.topic !== newChannel.topic) {
-      changes.push({ name: 'Topic', value: `\`${oldChannel.topic || 'None'}\` → \`${newChannel.topic || 'None'}\`` });
+      changes.push({ name: 'Description', value: `\`${oldChannel.topic || 'None'}\` → \`${newChannel.topic || 'None'}\`` });
     }
     if (oldChannel.parentId !== newChannel.parentId) {
       changes.push({ name: 'Category', value: `\`${oldChannel.parent?.name || 'None'}\` → \`${newChannel.parent?.name || 'None'}\`` });
@@ -126,10 +272,12 @@ async function onChannelUpdate(oldChannel, newChannel) {
     const embed = new EmbedBuilder()
       .setColor('#FAA61A')
       .setTitle('✏️ Channel Updated')
-      .setDescription(`**Channel:** ${newChannel.name} (${newChannel.id})`)
+      .setThumbnail(getGuildIcon(newChannel.guild, 128) || undefined)
+      .setDescription(`**Channel:** ${newChannel.name}`)
       .addFields(changes)
       .setTimestamp();
 
+    await addActorField(embed, guild, AuditLogEvent.ChannelUpdate, newChannel.id);
     await logChannel.send({ embeds: [embed] }).catch(() => null);
   } catch (error) {
     console.error('[Audit:ChannelUpdate]', error.message);
@@ -141,16 +289,18 @@ async function onChannelDelete(channel) {
   try {
     if (!channel.guild) return;
     const guild = channel.guild;
-    if (!(await isModLogsEnabled(guild))) return;
-    const logChannel = await resolveModLogChannel(guild);
+    if (!(await isAuditLogsEnabled(guild))) return;
+    const logChannel = await resolveAuditLogChannel(guild);
     if (!logChannel) return;
 
     const embed = new EmbedBuilder()
       .setColor('#ED4245')
       .setTitle('🗑️ Channel Deleted')
-      .setDescription(`**Channel:** ${channel.name} (${channel.id})\n**Type:** ${CHANNEL_TYPE_NAMES[channel.type] || 'Unknown'}`)
+      .setThumbnail(getGuildIcon(channel.guild, 128) || undefined)
+      .setDescription(`**Channel:** ${channel.name}\n**Type:** ${CHANNEL_TYPE_NAMES[channel.type] || 'Unknown'}`)
       .setTimestamp();
 
+    await addActorField(embed, guild, AuditLogEvent.ChannelDelete, channel.id);
     await logChannel.send({ embeds: [embed] }).catch(() => null);
   } catch (error) {
     console.error('[Audit:ChannelDelete]', error.message);
@@ -162,16 +312,18 @@ async function onRoleCreate(role) {
   try {
     if (!role.guild) return;
     const guild = role.guild;
-    if (!(await isModLogsEnabled(guild))) return;
-    const logChannel = await resolveModLogChannel(guild);
+    if (!(await isAuditLogsEnabled(guild))) return;
+    const logChannel = await resolveAuditLogChannel(guild);
     if (!logChannel) return;
 
     const embed = new EmbedBuilder()
       .setColor('#57F287')
       .setTitle('🎭 Role Created')
-      .setDescription(`**Role:** ${role.name} (${role.id})\n**Color:** ${role.hexColor}\n**Hoisted:** ${role.hoist ? 'Yes' : 'No'}\n**Mentionable:** ${role.mentionable ? 'Yes' : 'No'}`)
+      .setThumbnail(getGuildIcon(role.guild, 128) || undefined)
+      .setDescription(`**Role:** ${role.name}\n**Color:** ${role.hexColor}\n**Hoisted:** ${role.hoist ? 'Yes' : 'No'}\n**Mentionable:** ${role.mentionable ? 'Yes' : 'No'}`)
       .setTimestamp();
 
+    await addActorField(embed, guild, AuditLogEvent.RoleCreate, role.id);
     await logChannel.send({ embeds: [embed] }).catch(() => null);
   } catch (error) {
     console.error('[Audit:RoleCreate]', error.message);
@@ -183,8 +335,8 @@ async function onRoleUpdate(oldRole, newRole) {
   try {
     if (!newRole.guild) return;
     const guild = newRole.guild;
-    if (!(await isModLogsEnabled(guild))) return;
-    const logChannel = await resolveModLogChannel(guild);
+    if (!(await isAuditLogsEnabled(guild))) return;
+    const logChannel = await resolveAuditLogChannel(guild);
     if (!logChannel) return;
 
     const changes = [];
@@ -209,10 +361,12 @@ async function onRoleUpdate(oldRole, newRole) {
     const embed = new EmbedBuilder()
       .setColor('#FAA61A')
       .setTitle('✏️ Role Updated')
-      .setDescription(`**Role:** ${newRole.name} (${newRole.id})`)
+      .setThumbnail(getGuildIcon(newRole.guild, 128) || undefined)
+      .setDescription(`**Role:** ${newRole.name}`)
       .addFields(changes)
       .setTimestamp();
 
+    await addActorField(embed, guild, AuditLogEvent.RoleUpdate, newRole.id);
     await logChannel.send({ embeds: [embed] }).catch(() => null);
   } catch (error) {
     console.error('[Audit:RoleUpdate]', error.message);
@@ -224,16 +378,18 @@ async function onRoleDelete(role) {
   try {
     if (!role.guild) return;
     const guild = role.guild;
-    if (!(await isModLogsEnabled(guild))) return;
-    const logChannel = await resolveModLogChannel(guild);
+    if (!(await isAuditLogsEnabled(guild))) return;
+    const logChannel = await resolveAuditLogChannel(guild);
     if (!logChannel) return;
 
     const embed = new EmbedBuilder()
       .setColor('#ED4245')
       .setTitle('🗑️ Role Deleted')
-      .setDescription(`**Role:** ${role.name} (${role.id})`)
+      .setThumbnail(getGuildIcon(role.guild, 128) || undefined)
+      .setDescription(`**Role:** ${role.name}`)
       .setTimestamp();
 
+    await addActorField(embed, guild, AuditLogEvent.RoleDelete, role.id);
     await logChannel.send({ embeds: [embed] }).catch(() => null);
   } catch (error) {
     console.error('[Audit:RoleDelete]', error.message);
@@ -245,17 +401,26 @@ async function onGuildBanAdd(ban) {
   try {
     const guild = ban.guild;
     if (!guild) return;
-    if (!(await isModLogsEnabled(guild))) return;
-    const logChannel = await resolveModLogChannel(guild);
+    if (!(await isAuditLogsEnabled(guild))) return;
+    const logChannel = await resolveAuditLogChannel(guild);
     if (!logChannel) return;
 
     const embed = new EmbedBuilder()
       .setColor('#ED4245')
       .setTitle('🔨 Member Banned')
-      .setDescription(`**User:** ${ban.user.tag} (${ban.user.id})\n**Reason:** ${ban.reason || 'No reason provided'}`)
+      .setAuthor({
+        name: ban.user.tag,
+        iconURL: getUserAvatar(ban.user, 64) || undefined,
+      })
+      .setThumbnail(getUserAvatar(ban.user, 256) || undefined)
+      .setDescription(`**Reason:** ${ban.reason || 'No reason provided'}`)
       .setTimestamp();
 
-    await logChannel.send({ embeds: [embed] }).catch(() => null);
+    const components = [buildUserIdRow(ban.user?.id)].filter(Boolean);
+    await logChannel.send({
+      embeds: [embed],
+      components: components.filter(Boolean),
+    }).catch(() => null);
   } catch (error) {
     console.error('[Audit:GuildBanAdd]', error.message);
   }
@@ -266,17 +431,25 @@ async function onGuildBanRemove(ban) {
   try {
     const guild = ban.guild;
     if (!guild) return;
-    if (!(await isModLogsEnabled(guild))) return;
-    const logChannel = await resolveModLogChannel(guild);
+    if (!(await isAuditLogsEnabled(guild))) return;
+    const logChannel = await resolveAuditLogChannel(guild);
     if (!logChannel) return;
 
     const embed = new EmbedBuilder()
       .setColor('#57F287')
       .setTitle('🔓 Member Unbanned')
-      .setDescription(`**User:** ${ban.user.tag} (${ban.user.id})`)
+      .setAuthor({
+        name: ban.user.tag,
+        iconURL: getUserAvatar(ban.user, 64) || undefined,
+      })
+      .setThumbnail(getUserAvatar(ban.user, 256) || undefined)
       .setTimestamp();
 
-    await logChannel.send({ embeds: [embed] }).catch(() => null);
+    const components = [buildUserIdRow(ban.user?.id)].filter(Boolean);
+    await logChannel.send({
+      embeds: [embed],
+      components: components.filter(Boolean),
+    }).catch(() => null);
   } catch (error) {
     console.error('[Audit:GuildBanRemove]', error.message);
   }
@@ -288,8 +461,8 @@ async function onGuildMemberUpdate(oldMember, newMember) {
     const guild = newMember.guild;
     if (!guild) return;
     if (newMember.user.bot) return;
-    if (!(await isModLogsEnabled(guild))) return;
-    const logChannel = await resolveModLogChannel(guild);
+    if (!(await isAuditLogsEnabled(guild))) return;
+    const logChannel = await resolveAuditLogChannel(guild);
     if (!logChannel) return;
 
     const changes = [];
@@ -314,11 +487,19 @@ async function onGuildMemberUpdate(oldMember, newMember) {
     const embed = new EmbedBuilder()
       .setColor('#FAA61A')
       .setTitle('👤 Member Updated')
-      .setDescription(`**Member:** ${newMember.user.tag} (${newMember.user.id})`)
+      .setAuthor({
+        name: newMember.user.tag,
+        iconURL: getUserAvatar(newMember.user, 64) || undefined,
+      })
+      .setThumbnail(getUserAvatar(newMember.user, 256) || undefined)
       .addFields(changes)
       .setTimestamp();
 
-    await logChannel.send({ embeds: [embed] }).catch(() => null);
+    const components = [buildUserIdRow(newMember.user?.id)].filter(Boolean);
+    await logChannel.send({
+      embeds: [embed],
+      components: components.filter(Boolean),
+    }).catch(() => null);
   } catch (error) {
     console.error('[Audit:GuildMemberUpdate]', error.message);
   }
@@ -327,8 +508,8 @@ async function onGuildMemberUpdate(oldMember, newMember) {
 // ─── Guild Updated (name / icon / boost level) ──────────────
 async function onGuildUpdate(oldGuild, newGuild) {
   try {
-    if (!(await isModLogsEnabled(newGuild))) return;
-    const logChannel = await resolveModLogChannel(newGuild);
+    if (!(await isAuditLogsEnabled(newGuild))) return;
+    const logChannel = await resolveAuditLogChannel(newGuild);
     if (!logChannel) return;
 
     const changes = [];
@@ -350,9 +531,12 @@ async function onGuildUpdate(oldGuild, newGuild) {
     const embed = new EmbedBuilder()
       .setColor('#FAA61A')
       .setTitle('🖥️ Server Updated')
+      .setThumbnail(getGuildIcon(newGuild, 128) || undefined)
+      .setDescription('Server configuration was changed.')
       .addFields(changes)
       .setTimestamp();
 
+    await addActorField(embed, newGuild, AuditLogEvent.GuildUpdate);
     await logChannel.send({ embeds: [embed] }).catch(() => null);
   } catch (error) {
     console.error('[Audit:GuildUpdate]', error.message);
@@ -361,6 +545,7 @@ async function onGuildUpdate(oldGuild, newGuild) {
 
 // ─── Export as an array of event handlers ───────────────────
 module.exports = [
+  { name: 'guildAuditLogEntryCreate', once: false, execute: onGuildAuditLogEntryCreate },
   { name: 'messageUpdate', once: false, execute: onMessageUpdate },
   { name: 'messageDelete', once: false, execute: onMessageDelete },
   { name: 'channelCreate', once: false, execute: onChannelCreate },
