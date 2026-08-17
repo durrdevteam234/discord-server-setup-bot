@@ -280,7 +280,22 @@ client.once('ready', async () => {
   setInterval(() => pingDashboard(client).catch(() => null), 10 * 1000);
 
   console.log('💻 [DASHBOARD] Starting dashboard metrics...');
-  const dashboardUrl = process.env.DASHBOARD_URL || 'https://servermiser.pntr.dev/api/bot-stats';
+  const fallbackDashboardUrl = 'https://servermiser.pntr.dev/api/bot-stats';
+  const configuredDashboardUrl = process.env.DASHBOARD_URL;
+  const dashboardUrl = (() => {
+    if (!configuredDashboardUrl) return fallbackDashboardUrl;
+    try {
+      const url = new URL(configuredDashboardUrl);
+      if (url.hostname.toLowerCase().includes('onrender.com') && url.hostname.toLowerCase().includes('discord-server-setup-bot')) {
+        console.warn('⚠️ [DASHBOARD] Ignoring Render bot URL in DASHBOARD_URL and using the dashboard host instead.');
+        return fallbackDashboardUrl;
+      }
+      return configuredDashboardUrl;
+    } catch (error) {
+      console.warn('⚠️ [DASHBOARD] Invalid DASHBOARD_URL configured; falling back to the dashboard host.');
+      return fallbackDashboardUrl;
+    }
+  })();
   const statsApiKey = process.env.STATS_API_KEY;
 
   async function pushDashboardStats() {

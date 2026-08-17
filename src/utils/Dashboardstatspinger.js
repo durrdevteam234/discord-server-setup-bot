@@ -1,6 +1,31 @@
 const https = require('https');
 const database = require('./database');
 
+const DEFAULT_DASHBOARD_URL = 'https://servermiser.pntr.dev/api/bot-stats';
+
+function resolveDashboardUrl() {
+    const configuredUrl = process.env.DASHBOARD_URL;
+
+    if (!configuredUrl) {
+        return DEFAULT_DASHBOARD_URL;
+    }
+
+    try {
+        const url = new URL(configuredUrl);
+        const hostname = url.hostname.toLowerCase();
+
+        if (hostname.includes('onrender.com') && hostname.includes('discord-server-setup-bot')) {
+            console.warn('[Dashboard] Ignoring Render bot URL in DASHBOARD_URL and using the dashboard host instead.');
+            return DEFAULT_DASHBOARD_URL;
+        }
+
+        return configuredUrl;
+    } catch (error) {
+        console.warn('[Dashboard] Invalid DASHBOARD_URL configured; falling back to the dashboard host.');
+        return DEFAULT_DASHBOARD_URL;
+    }
+}
+
 /**
  * Pushes live bot telemetry to the ServerMiser dashboard's secured
  * POST /api/bot-stats endpoint, so the analytics page shows real numbers
@@ -67,8 +92,7 @@ async function pingDashboard(client) {
     console.log('[Dashboard Sync] Posting payload:', payloadObject);
 
     const payload = JSON.stringify(payloadObject);
-
-    const dashboardUrl = new URL(process.env.DASHBOARD_URL || 'https://servermiser.pntr.dev/api/bot-stats');
+    const dashboardUrl = new URL(resolveDashboardUrl());
 
     const options = {
         hostname: dashboardUrl.hostname,

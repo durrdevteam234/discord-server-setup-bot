@@ -76,8 +76,23 @@ module.exports = {
     console.log('💻 Launching internal metrics loop for your web dashboard...');
 
     // Full URL including the actual endpoint path — this must point to the dashboard backend,
-    // not the Render bot service itself. Override with DASHBOARD_URL in Render if needed.
-    const dashboardUrl = process.env.DASHBOARD_URL || 'https://servermiser.pntr.dev/api/bot-stats';
+    // not the Render bot service itself. If an old Render URL is still stuck in the env, ignore it.
+    const fallbackDashboardUrl = 'https://servermiser.pntr.dev/api/bot-stats';
+    const configuredDashboardUrl = process.env.DASHBOARD_URL;
+    const dashboardUrl = (() => {
+      if (!configuredDashboardUrl) return fallbackDashboardUrl;
+      try {
+        const url = new URL(configuredDashboardUrl);
+        if (url.hostname.toLowerCase().includes('onrender.com') && url.hostname.toLowerCase().includes('discord-server-setup-bot')) {
+          console.warn('[Dashboard] Ignoring Render bot URL in DASHBOARD_URL and using the dashboard host instead.');
+          return fallbackDashboardUrl;
+        }
+        return configuredDashboardUrl;
+      } catch (error) {
+        console.warn('[Dashboard] Invalid DASHBOARD_URL configured; falling back to the dashboard host.');
+        return fallbackDashboardUrl;
+      }
+    })();
     const apiKey = process.env.STATS_API_KEY;
 
     async function pushDashboardStats() {
