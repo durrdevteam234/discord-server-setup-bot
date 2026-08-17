@@ -43,6 +43,7 @@ module.exports = {
         if (actionOption === 'disable') {
             settings[guildId].auditChannelId = null;
             await db.writeData('settings.json', settings);
+            await db.findOneAndUpdate({ guildId }, { $set: { auditChannelId: null } }, { upsert: true }).catch(() => null);
 
             const msg = '🛑 Audit logs have been successfully disabled for this server.';
             return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
@@ -56,6 +57,7 @@ module.exports = {
 
             settings[guildId].auditChannelId = channelOption.id;
             await db.writeData('settings.json', settings);
+            await db.findOneAndUpdate({ guildId }, { $set: { auditChannelId: channelOption.id } }, { upsert: true }).catch(() => null);
 
             const msg = `✅ Audit logs have been successfully enabled and routed to ${channelOption}!`;
             return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);

@@ -90,7 +90,7 @@ if (fs.existsSync(commandsPath)) {
 }
 
 const eventsPath = path.join(__dirname, 'events');
-let readyEventHandler = null;
+const readyEventHandlers = [];
 if (fs.existsSync(eventsPath)) {
   const eventFiles = fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'));
   console.log(`📂 [LOADER] Loading ${eventFiles.length} event files from ${eventsPath}`);
@@ -107,7 +107,7 @@ if (fs.existsSync(eventsPath)) {
 
       if (event.name === 'ready' || event.name === 'clientReady') {
         console.log(` ✅ Loaded event: ${event.name} (once) - will execute inline`);
-        readyEventHandler = event;
+        readyEventHandlers.push(event);
         continue;
       }
 
@@ -280,7 +280,7 @@ client.once('ready', async () => {
   setInterval(() => pingDashboard(client).catch(() => null), 10 * 1000);
 
   console.log('💻 [DASHBOARD] Starting dashboard metrics...');
-  const dashboardUrl = process.env.DASHBOARD_URL || 'https://servermiser.pntr.dev/api/bot-stats';
+  const dashboardUrl = process.env.DASHBOARD_URL || 'https://discord-server-setup-bot-w22o.onrender.com/api/bot-stats';
   const statsApiKey = process.env.STATS_API_KEY;
 
   async function pushDashboardStats() {
@@ -349,12 +349,16 @@ client.once('ready', async () => {
   pushDashboardStats();
   setInterval(pushDashboardStats, 10 * 1000);
 
-  if (readyEventHandler && typeof readyEventHandler.execute === 'function') {
-    console.log('🔄 [READY EVENT] Executing ready.js module...');
-    try {
-      readyEventHandler.execute(client);
-    } catch (err) {
-      console.error('❌ [READY EVENT] Error executing ready.js:', err.message);
+  if (readyEventHandlers.length > 0) {
+    console.log(`🔄 [READY EVENT] Executing ${readyEventHandlers.length} ready handler(s)...`);
+    for (const readyEventHandler of readyEventHandlers) {
+      if (readyEventHandler && typeof readyEventHandler.execute === 'function') {
+        try {
+          readyEventHandler.execute(client);
+        } catch (err) {
+          console.error('❌ [READY EVENT] Error executing ready handler:', err.message);
+        }
+      }
     }
   }
 });

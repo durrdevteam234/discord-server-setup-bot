@@ -63,9 +63,9 @@ async function generateLevelUpCard(user, oldLevel, newLevel) {
         ctx.fillText(text, 450, y);
     };
 
-    drawCenteredText('CONGRATS!', 80, 'bold 40px LevelFont', '#FFFFFF');
-    drawCenteredText(`@${user.username}`, 130, 'bold 30px LevelFont', '#FFFFFF');
-    drawCenteredText(`Level ${oldLevel}  =>  Level ${newLevel}`, 200, 'bold 50px LevelFont', '#5865F2');
+    drawCenteredText('CONGRATS!', 80, 'bold 32px LevelFont', '#FFFFFF');
+    drawCenteredText(`@${user.username}`, 128, 'bold 24px LevelFont', '#FFFFFF');
+    drawCenteredText(`Level ${oldLevel}  =>  Level ${newLevel}`, 196, 'bold 42px LevelFont', '#5865F2');
 
     return new AttachmentBuilder(canvas.toBuffer('image/png'), { name: 'levelup.png' });
 }

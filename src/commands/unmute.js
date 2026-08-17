@@ -53,8 +53,9 @@ module.exports = {
         await db.writeData('mutes.json', mutes);
       }
 
-      const settings = (await db.readData('settings.json')) || {};
-      const currentGuildSettings = settings[guildId] || {};
+      const guildConfig = (await db.findOne({ guildId })) || {};
+      const legacySettings = (await db.readData('settings.json')) || {};
+      const currentGuildSettings = { ...(legacySettings[guildId] || {}), ...(guildConfig || {}) };
 
       if (currentGuildSettings.modLogsEnabled && currentGuildSettings.unifiedLogChannelId) {
         const modLogsChannel = guild.channels.cache.get(currentGuildSettings.unifiedLogChannelId) || await guild.channels.fetch(currentGuildSettings.unifiedLogChannelId).catch(() => null);

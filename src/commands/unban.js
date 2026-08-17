@@ -70,12 +70,13 @@ module.exports = {
       const user = banEntry.user;
       await guild.members.unban(user.id, reason);
 
-      const settings = (await db.readData('settings.json')) || {};
-      const currentGuildSettings = settings[guildId] || {};
-      
+      const guildConfig = (await db.findOne({ guildId })) || {};
+      const legacySettings = (await db.readData('settings.json')) || {};
+      const currentGuildSettings = { ...(legacySettings[guildId] || {}), ...(guildConfig || {}) };
+
       if (currentGuildSettings.modLogsEnabled && currentGuildSettings.unifiedLogChannelId) {
         const modLogsChannel = guild.channels.cache.get(currentGuildSettings.unifiedLogChannelId) || await guild.channels.fetch(currentGuildSettings.unifiedLogChannelId).catch(() => null);
-        
+
         if (modLogsChannel) {
           const embedLog = new EmbedBuilder()
             .setColor('#00FF00')
