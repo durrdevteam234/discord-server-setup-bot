@@ -1,4 +1,5 @@
 const { Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AuditLogEvent } = require('discord.js');
+const mongoose = require('mongoose');
 const { isModLogsEnabled, resolveModLogChannel, isAuditLogsEnabled, resolveAuditLogChannel } = require('../utils/auditLog');
 
 // ============================================================
@@ -543,6 +544,171 @@ async function onGuildUpdate(oldGuild, newGuild) {
   }
 }
 
+async function getInviteContext(guild, memberId) {
+  try {
+    const InviteJoin = mongoose.models.InviteJoin;
+    const InviteRecord = mongoose.models.InviteRecord;
+    if (!InviteJoin || !guild?.id) return null;
+
+    const joinRecord = await InviteJoin.findOne({ guildId: guild.id, userId: memberId }).sort({ joinedAt: -1 }).lean().catch(() => null);
+    if (!joinRecord) return null;
+
+    const inviterId = joinRecord.inviterId || null;
+    let inviterName = 'Unknown';
+    let inviterMention = 'Unknown';
+    let netInvites = 'N/A';
+
+    if (inviterId) {
+      const guildMember = guild.members.cache.get(inviterId) || await guild.members.fetch(inviterId).catch(() => null);
+      inviterName = guildMember?.user?.tag || inviterId;
+      inviterMention = guildMember ? `<@${inviterId}>` : `<@${inviterId}>`;
+
+      if (InviteRecord) {
+        const record = await InviteRecord.findOne({ guildId: guild.id, inviterId }).lean().catch(() => null);
+        if (record) {
+          netInvites = String((record.joins || 0) - (record.leaves || 0) - (record.fake || 0) + (record.bonusInvites || 0));
+        }
+      }
+    }
+
+    return {
+      inviterId,
+      inviterName,
+      inviterMention,
+      inviteCode: joinRecord.inviteCode || 'Unknown',
+      netInvites,
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
+async function onGuildMemberAdd(member) {
+  try {
+    if (!member?.guild) return;
+    if (!(await isAuditLogsEnabled(member.guild))) return;
+    const logChannel = await resolveAuditLogChannel(member.guild);
+    if (!logChannel) return;
+
+    const accountAgeDays = Math.max(0, Math.floor((Date.now() - member.user.createdTimestamp) / (1000 * 60 * 60 * 24)));
+    const inviteContext = await getInviteContext(member.guild, member.user.id);
+    const embed = new EmbedBuilder()
+      .setColor('#57F287')
+      .setTitle('👋 Member Joined')
+      .setAuthor({
+        name: member.user.tag,
+        iconURL: getUserAvatar(member.user, 64) || undefined,
+      })
+      .setThumbnail(getUserAvatar(member.user, 256) || undefined)
+      .setDescription(`${member.user} joined the server.`)
+      .addFields(
+        { name: 'User ID', value: member.user.id, inline: true },
+        { name: 'Account Age', value: `${accountAgeDays} day${accountAgeDays === 1 ? '' : 's'}`, inline: true },
+        { name: 'Bot Account', value: member.user.bot ? 'Yes' : 'No', inline: true }
+      )
+      .setTimestamp();
+
+    if (inviteContext) {
+      embed.addFields(
+        { name: 'Invited By', value: `${inviteContext.inviterMention} (${inviteContext.inviterName})`, inline: false },
+        { name: 'Invite Code', value: `\`${inviteContext.inviteCode}\``, inline: true },
+        { name: 'Net Invites', value: inviteContext.netInvites, inline: true }
+      );
+    }
+
+    await logChannel.send({ embeds: [embed], components: [buildUserIdRow(member.user.id)].filter(Boolean) }).catch(() => null);
+  } catch (error) {
+    console.error('[Audit:GuildMemberAdd]', error.message);
+  }
+}
+
+async function onGuildMemberRemove(member) {
+  try {
+    if (!member?.guild) return;
+    if (!(await isAuditLogsEnabled(member.guild))) return;
+    const logChannel = await resolveAuditLogChannel(member.guild);
+    if (!logChannel) return;
+
+    const inviteContext = await getInviteContext(member.guild, member.user.id);
+    const embed = new EmbedBuilder()
+      .setColor('#ED4245')
+      .setTitle('👋 Member Left')
+      .setAuthor({
+        name: member.user.tag,
+        iconURL: getUserAvatar(member.user, 64) || undefined,
+      })
+      .setThumbnail(getUserAvatar(member.user, 256) || undefined)
+      .setDescription(`${member.user} left the server.`)
+      .addFields(
+        { name: 'User ID', value: member.user.id, inline: true },
+        { name: 'Bot Account', value: member.user.bot ? 'Yes' : 'No', inline: true }
+      )
+      .setTimestamp();
+
+    if (inviteContext) {
+      embed.addFields(
+        { name: 'Invited By', value: `${inviteContext.inviterMention} (${inviteContext.inviterName})`, inline: false },
+        { name: 'Invite Code', value: `\`${inviteContext.inviteCode}\``, inline: true },
+        { name: 'Net Invites', value: inviteContext.netInvites, inline: true }
+      );
+    }
+
+    await logChannel.send({ embeds: [embed], components: [buildUserIdRow(member.user.id)].filter(Boolean) }).catch(() => null);
+  } catch (error) {
+    console.error('[Audit:GuildMemberRemove]', error.message);
+  }
+}
+
+async function onInviteCreate(invite) {
+  try {
+    if (!invite?.guild) return;
+    if (!(await isAuditLogsEnabled(invite.guild))) return;
+    const logChannel = await resolveAuditLogChannel(invite.guild);
+    if (!logChannel) return;
+
+    const embed = new EmbedBuilder()
+      .setColor('#5865F2')
+      .setTitle('📨 Invite Created')
+      .setDescription(`A new invite was created for ${invite.guild.name}.`)
+      .addFields(
+        { name: 'Code', value: `\`${invite.code}\``, inline: true },
+        { name: 'Inviter', value: invite.inviter ? `${invite.inviter.tag} (${invite.inviter.id})` : 'Unknown', inline: true },
+        { name: 'Uses', value: String(invite.uses ?? 0), inline: true },
+        { name: 'Max Uses', value: invite.maxUses && invite.maxUses > 0 ? String(invite.maxUses) : 'Unlimited', inline: true },
+        { name: 'Expires', value: invite.expiresAt ? `<t:${Math.floor(invite.expiresAt.getTime() / 1000)}:F>` : 'Never', inline: true }
+      )
+      .setTimestamp();
+
+    await logChannel.send({ embeds: [embed] }).catch(() => null);
+  } catch (error) {
+    console.error('[Audit:InviteCreate]', error.message);
+  }
+}
+
+async function onInviteDelete(invite) {
+  try {
+    if (!invite?.guild) return;
+    if (!(await isAuditLogsEnabled(invite.guild))) return;
+    const logChannel = await resolveAuditLogChannel(invite.guild);
+    if (!logChannel) return;
+
+    const embed = new EmbedBuilder()
+      .setColor('#ED4245')
+      .setTitle('📨 Invite Removed')
+      .setDescription(`An invite was deleted for ${invite.guild.name}.`)
+      .addFields(
+        { name: 'Code', value: `\`${invite.code}\``, inline: true },
+        { name: 'Inviter', value: invite.inviter ? `${invite.inviter.tag} (${invite.inviter.id})` : 'Unknown', inline: true },
+        { name: 'Uses', value: String(invite.uses ?? 0), inline: true }
+      )
+      .setTimestamp();
+
+    await logChannel.send({ embeds: [embed] }).catch(() => null);
+  } catch (error) {
+    console.error('[Audit:InviteDelete]', error.message);
+  }
+}
+
 // ─── Export as an array of event handlers ───────────────────
 module.exports = [
   { name: 'guildAuditLogEntryCreate', once: false, execute: onGuildAuditLogEntryCreate },
@@ -556,6 +722,10 @@ module.exports = [
   { name: 'roleDelete', once: false, execute: onRoleDelete },
   { name: 'guildBanAdd', once: false, execute: onGuildBanAdd },
   { name: 'guildBanRemove', once: false, execute: onGuildBanRemove },
+  { name: 'guildMemberAdd', once: false, execute: onGuildMemberAdd },
+  { name: 'guildMemberRemove', once: false, execute: onGuildMemberRemove },
   { name: 'guildMemberUpdate', once: false, execute: onGuildMemberUpdate },
   { name: 'guildUpdate', once: false, execute: onGuildUpdate },
+  { name: 'inviteCreate', once: false, execute: onInviteCreate },
+  { name: 'inviteDelete', once: false, execute: onInviteDelete },
 ];
