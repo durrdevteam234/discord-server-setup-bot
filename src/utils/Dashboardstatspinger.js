@@ -68,10 +68,12 @@ async function pingDashboard(client) {
 
     const payload = JSON.stringify(payloadObject);
 
+    const dashboardUrl = new URL(process.env.DASHBOARD_URL || 'https://servermiser.pntr.dev/api/bot-stats');
+
     const options = {
-        hostname: 'discord-server-setup-bot-w22o.onrender.com',
-        port: 443,
-        path: '/api/bot-stats',
+        hostname: dashboardUrl.hostname,
+        port: dashboardUrl.port || 443,
+        path: `${dashboardUrl.pathname}${dashboardUrl.search || ''}`,
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${apiKey}`,

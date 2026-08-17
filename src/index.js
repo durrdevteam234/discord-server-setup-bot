@@ -280,7 +280,7 @@ client.once('ready', async () => {
   setInterval(() => pingDashboard(client).catch(() => null), 10 * 1000);
 
   console.log('💻 [DASHBOARD] Starting dashboard metrics...');
-  const dashboardUrl = process.env.DASHBOARD_URL || 'https://discord-server-setup-bot-w22o.onrender.com/api/bot-stats';
+  const dashboardUrl = process.env.DASHBOARD_URL || 'https://servermiser.pntr.dev/api/bot-stats';
   const statsApiKey = process.env.STATS_API_KEY;
 
   async function pushDashboardStats() {
