@@ -102,9 +102,17 @@ module.exports = {
     // NOTE: not currently invoked directly — slash commands are routed
 
     async execute(interaction, client) {
-        // Permission check for admin commands
         const subcommandGroup = interaction.options.getSubcommandGroup(false);
         const subcommand = interaction.options.getSubcommand();
+
+        if (!subcommand && !subcommandGroup) {
+            return interaction.reply({
+                content: 'Use one of these: `/level rank`, `/level leaderboard`, `/level settings`, or `/level xp add` / `remove` / `set` / `reset`.',
+                ephemeral: true,
+            }).catch(() => null);
+        }
+
+        // Permission check for admin commands
         const adminCommands = ['settings', 'multiplier', 'xp'];
 
         if (adminCommands.includes(subcommand) || adminCommands.includes(subcommandGroup)) {

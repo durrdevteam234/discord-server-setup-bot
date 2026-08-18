@@ -179,6 +179,15 @@ module.exports = {
         }
 
         // ========================================================
+        // LEVELS MENU + MODAL ROUTER
+        // ========================================================
+        if (cid.startsWith('level_')) {
+            const cmd = activeClient.commands.get('level');
+            if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
+            return interaction.deferUpdate?.().catch(() => null);
+        }
+
+        // ========================================================
         // REACTION ROLES FALLBACK (buttons & selects not matched above)
         // ========================================================
         if (interaction.isButton() || interaction.isStringSelectMenu()) {
