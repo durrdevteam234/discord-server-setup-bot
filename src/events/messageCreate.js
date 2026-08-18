@@ -20,13 +20,23 @@ async function refreshStickyMessage(message, client) {
         const targetChannel = message.guild.channels.cache.get(sticky.channelId) || await message.guild.channels.fetch(sticky.channelId).catch(() => null);
         if (!targetChannel || !targetChannel.isTextBased?.()) return;
 
-        const previousSticky = await targetChannel.messages.fetch(sticky.messageId).catch(() => null);
+        // Verify the old sticky message actually exists before trying to delete it
+        let previousSticky;
+        try {
+            previousSticky = await targetChannel.messages.fetch(sticky.messageId);
+        } catch (e) {
+            // Message was already deleted, continue to post new sticky
+        }
+
+        // Delete the old sticky if it still exists
         if (previousSticky) {
             await previousSticky.delete().catch(() => null);
         }
 
-        const payload = sticky.style === 'embed'
-            ? {
+        // Rebuild the exact payload that was originally sent
+        let payload;
+        if (sticky.style === 'embed') {
+            payload = {
                 embeds: [
                     new discord.EmbedBuilder()
                         .setColor(0x5865F2)
@@ -34,20 +44,34 @@ async function refreshStickyMessage(message, client) {
                         .setFooter({ text: 'This is a sticky message' })
                 ],
                 allowedMentions: { parse: [] },
-            }
-            : {
+            };
+        } else {
+            // Plain message - use the exact stored content
+            payload = {
                 content: sticky.text || 'Sticky message',
                 allowedMentions: { parse: [] },
             };
+        }
 
-        const newSticky = await targetChannel.send(payload).catch(() => null);
-        if (!newSticky) return;
+        // Send the new sticky message
+        const newSticky = await targetChannel.send(payload).catch((err) => {
+            console.error('[sticky] Failed to send refresh message:', err.message);
+            return null;
+        });
+        
+        if (!newSticky) {
+            console.error('[sticky] Failed to create new sticky message for guild', message.guild.id);
+            return;
+        }
 
+        // Update the database with the new message ID
         await db.findOneAndUpdate(
             { guildId: message.guild.id },
-            { $set: { 'sticky.messageId': newSticky.id, 'sticky.channelId': targetChannel.id, 'sticky.updatedAt': new Date().toISOString() } },
+            { $set: { 'sticky.messageId': newSticky.id, 'sticky.updatedAt': new Date().toISOString() } },
             { upsert: true }
-        ).catch(() => null);
+        ).catch((err) => {
+            console.error('[sticky] Failed to update database:', err.message);
+        });
     } catch (error) {
         console.error('[sticky] Refresh failed:', error.message);
     }
