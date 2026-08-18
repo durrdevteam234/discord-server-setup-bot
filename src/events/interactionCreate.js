@@ -4,19 +4,26 @@ const { isAuditLogsEnabled, resolveAuditLogChannel } = require('../utils/auditLo
 
 const SETTINGS_TTL_MS = 30_000;
 const SETTINGS_TIMEOUT_MS = 3_000;
-let cachedSettings = null;
-let cachedSettingsAt = 0;
+const guildSettingsCache = new Map();
 
 async function getGuildSettings(guildId) {
+  if (!guildId) return {};
+
   const now = Date.now();
-  if (!cachedSettings || now - cachedSettingsAt > SETTINGS_TTL_MS) {
-    cachedSettings = await Promise.race([
-      db.readData('settings.json').catch(() => ({})) || {},
-      new Promise((_, reject) => setTimeout(() => reject(new Error('settings read timeout')), SETTINGS_TIMEOUT_MS)),
-    ]).catch(() => ({}));
-    cachedSettingsAt = now;
+  const cached = guildSettingsCache.get(guildId);
+
+  if (cached && now - cached.fetchedAt <= SETTINGS_TTL_MS) {
+    return cached.value || {};
   }
-  return cachedSettings[guildId] || {};
+
+  const allSettings = await Promise.race([
+    db.readData('settings.json').catch(() => ({})) || {},
+    new Promise((_, reject) => setTimeout(() => reject(new Error('settings read timeout')), SETTINGS_TIMEOUT_MS)),
+  ]).catch(() => ({}));
+
+  const guildSettings = allSettings[guildId] || {};
+  guildSettingsCache.set(guildId, { fetchedAt: now, value: guildSettings });
+  return guildSettings;
 }
 
 module.exports = {

@@ -6,6 +6,52 @@ const mongoose = require('mongoose');
 
 const xpCooldowns = new Map();
 
+async function refreshStickyMessage(message) {
+    try {
+        if (!message?.guild || !message.channel || message.author.bot || message.webhookId) return;
+
+        const guildConfig = await db.findOne({ guildId: message.guild.id }).catch(() => null) || {};
+        const sticky = guildConfig.sticky || {};
+
+        if (!sticky?.channelId || sticky.channelId !== message.channel.id || !sticky.messageId) return;
+        if (sticky.messageId === message.id) return;
+
+        const targetChannel = message.guild.channels.cache.get(sticky.channelId) || await message.guild.channels.fetch(sticky.channelId).catch(() => null);
+        if (!targetChannel || !targetChannel.isTextBased?.()) return;
+
+        const previousSticky = await targetChannel.messages.fetch(sticky.messageId).catch(() => null);
+        if (previousSticky) {
+            await previousSticky.delete().catch(() => null);
+        }
+
+        const payload = sticky.style === 'embed'
+            ? {
+                embeds: [
+                    new discord.EmbedBuilder()
+                        .setColor(0x5865F2)
+                        .setDescription(sticky.text || 'Sticky message')
+                        .setFooter({ text: 'This is a sticky message' })
+                ],
+                allowedMentions: { parse: [] },
+            }
+            : {
+                content: sticky.text || 'Sticky message',
+                allowedMentions: { parse: [] },
+            };
+
+        const newSticky = await targetChannel.send(payload).catch(() => null);
+        if (!newSticky) return;
+
+        await db.findOneAndUpdate(
+            { guildId: message.guild.id },
+            { $set: { 'sticky.messageId': newSticky.id, 'sticky.channelId': targetChannel.id, 'sticky.updatedAt': new Date().toISOString() } },
+            { upsert: true }
+        ).catch(() => null);
+    } catch (error) {
+        console.error('[sticky] Refresh failed:', error.message);
+    }
+}
+
 // XP needed to go from `level` to `level + 1`. Must match level.js's
 // xpNeededForLevel() so /level rank and the live XP engine agree.
 function xpNeededForLevel(level) {
@@ -20,6 +66,8 @@ module.exports = {
             // 1. Safety Gate: Completely ignore bots, webhooks, and empty contents
             if (!message || !message.author || message.author.bot || message.webhookId) return;
             if (!message.content) return;
+
+            await refreshStickyMessage(message);
 
             // ==========================================
             // 🛡️ BACKGROUND AUTOMOD CRITERIA MESSAGE SCANNER

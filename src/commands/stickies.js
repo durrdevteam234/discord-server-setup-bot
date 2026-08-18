@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags, EmbedBuilder } = require('discord.js');
 const database = require('../utils/database');
 
 const stickyTemplates = {
@@ -9,6 +9,40 @@ const stickyTemplates = {
   event: '🎉 Event Notice\n\nJoin us for upcoming events, giveaways, and community activities. Keep an eye on announcements for details.',
   custom: '📌 Sticky Message\n\nThis is a custom sticky. Update it any time from the admin control panel.'
 };
+
+function buildStickyBody(stickyType, customText) {
+  let baseText = stickyTemplates[stickyType] || stickyTemplates.custom;
+
+  if (stickyType === 'custom') {
+    baseText = customText ? `📌 Sticky Message\n\n${customText}` : stickyTemplates.custom;
+  } else if (customText) {
+    baseText = `${stickyTemplates[stickyType]}\n\n${customText}`;
+  }
+
+  return `${baseText}\n\n-# This is a sticky message`;
+}
+
+function buildStickyPayload(stickyType, customText, messageMode) {
+  const body = buildStickyBody(stickyType, customText);
+
+  if (messageMode === 'embed') {
+    const description = body.replace(/\n\n-# This is a sticky message$/, '');
+    return {
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setDescription(description)
+          .setFooter({ text: 'This is a sticky message' })
+      ],
+      allowedMentions: { parse: [] },
+    };
+  }
+
+  return {
+    content: body,
+    allowedMentions: { parse: [] },
+  };
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -31,6 +65,16 @@ module.exports = {
               { name: 'Announcements', value: 'announcements' },
               { name: 'Event', value: 'event' },
               { name: 'Custom', value: 'custom' }
+            )
+        )
+        .addStringOption((option) =>
+          option
+            .setName('style')
+            .setDescription('Choose whether the sticky is a plain message or an embed')
+            .setRequired(true)
+            .addChoices(
+              { name: 'Plain Message', value: 'plain' },
+              { name: 'Embed', value: 'embed' }
             )
         )
         .addChannelOption((option) =>
@@ -95,7 +139,7 @@ module.exports = {
 
       await database.findOneAndUpdate(
         { guildId },
-        { $unset: { 'sticky.channelId': '', 'sticky.messageId': '', 'sticky.type': '', 'sticky.text': '', 'sticky.createdAt': '' } },
+        { $unset: { 'sticky.channelId': '', 'sticky.messageId': '', 'sticky.type': '', 'sticky.text': '', 'sticky.createdAt': '', 'sticky.style': '' } },
         { upsert: true }
       ).catch(() => null);
 
@@ -107,13 +151,9 @@ module.exports = {
 
     const stickyType = interaction.options.getString('type');
     const customText = interaction.options.getString('text')?.trim();
-
-    let finalText = stickyTemplates[stickyType] || stickyTemplates.custom;
-    if (stickyType === 'custom') {
-      finalText = customText ? `📌 Sticky Message\n\n${customText}` : stickyTemplates.custom;
-    } else if (customText) {
-      finalText = `${stickyTemplates[stickyType]}\n\n${customText}`;
-    }
+    const messageMode = interaction.options.getString('style') || 'plain';
+    const finalPayload = buildStickyPayload(stickyType, customText, messageMode);
+    const finalText = messageMode === 'embed' ? null : finalPayload.content;
 
     const guildConfig = (await database.findOne({ guildId }).catch(() => null)) || {};
     const activeSticky = guildConfig.sticky || {};
@@ -128,22 +168,13 @@ module.exports = {
       }
     }
 
-    const stickyMessage = await targetChannel.send({
-      content: finalText,
-      allowedMentions: { parse: [] },
-    }).catch(() => null);
+    const stickyMessage = await targetChannel.send(finalPayload).catch(() => null);
 
     if (!stickyMessage) {
       return interaction.reply({
         content: '❌ I could not post the sticky message in that channel.',
         flags: [MessageFlags.Ephemeral],
       }).catch(() => null);
-    }
-
-    try {
-      await stickyMessage.pin();
-    } catch (error) {
-      console.warn('[stickies] Could not pin sticky message:', error.message);
     }
 
     await database.findOneAndUpdate(
@@ -153,7 +184,8 @@ module.exports = {
           'sticky.channelId': targetChannel.id,
           'sticky.messageId': stickyMessage.id,
           'sticky.type': stickyType,
-          'sticky.text': finalText,
+          'sticky.text': finalText || finalPayload.embeds[0].data.description,
+          'sticky.style': messageMode,
           'sticky.createdAt': new Date().toISOString(),
         }
       },
