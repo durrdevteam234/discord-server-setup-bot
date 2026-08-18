@@ -214,16 +214,30 @@ async function nextSuggestionNumber(guildId) {
 }
 
 async function getGuildChannelOptions(guild) {
-  const fetchedChannels = await guild.channels.fetch().catch(() => guild.channels.cache);
-  const channels = Array.from(fetchedChannels?.values?.() ?? fetchedChannels ?? [])
-    .filter(ch => ch && (ch.type === ChannelType.GuildText || ch.type === ChannelType.GuildAnnouncement))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  try {
+    const fetchedChannels = await guild.channels.fetch().catch(() => null);
+    const channelCollection = fetchedChannels || guild.channels.cache;
+    
+    // Convert Collection to array properly
+    const allChannels = channelCollection instanceof Map 
+      ? Array.from(channelCollection.values())
+      : Array.isArray(channelCollection) 
+        ? channelCollection 
+        : [];
+    
+    const channels = allChannels
+      .filter(ch => ch && ch.isTextBased?.())
+      .sort((a, b) => a.name.localeCompare(b.name));
 
-  return channels.slice(0, 25).map(ch => ({
-    label: `#${ch.name}`.slice(0, 100),
-    value: ch.id,
-    description: 'Suggestion channel',
-  }));
+    return channels.slice(0, 25).map(ch => ({
+      label: `#${ch.name}`.slice(0, 100),
+      value: ch.id,
+      description: 'Suggestion channel',
+    }));
+  } catch (error) {
+    console.error('[Suggestions] Channel fetch error:', error.message);
+    return [];
+  }
 }
 
 function buildSuggestionEmbed(entry, cfg, user) {
