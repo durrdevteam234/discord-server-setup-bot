@@ -9,6 +9,7 @@ const xpCooldowns = new Map();
 async function refreshStickyMessage(message) {
     try {
         if (!message?.guild || !message.channel || message.author.bot || message.webhookId) return;
+        if (message.author.id === client?.user?.id) return;
 
         const guildConfig = await db.findOne({ guildId: message.guild.id }).catch(() => null) || {};
         const sticky = guildConfig.sticky || {};
@@ -66,6 +67,7 @@ module.exports = {
             // 1. Safety Gate: Completely ignore bots, webhooks, and empty contents
             if (!message || !message.author || message.author.bot || message.webhookId) return;
             if (!message.content) return;
+            if (message.author.id === client?.user?.id) return;
 
             await refreshStickyMessage(message);
 
