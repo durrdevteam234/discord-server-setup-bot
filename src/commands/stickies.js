@@ -38,8 +38,14 @@ function buildStickyPayload(stickyType, customText, messageMode) {
     };
   }
 
+  // For plain messages: remove the "📌 Sticky Message" header if custom type
+  let plainContent = body;
+  if (stickyType === 'custom' && customText) {
+    plainContent = `${customText}\n\n-# This is a sticky message`;
+  }
+
   return {
-    content: body,
+    content: plainContent,
     allowedMentions: { parse: [] },
   };
 }
