@@ -85,6 +85,19 @@ async function onGuildAuditLogEntryCreate(guildAuditLogEntry, user) {
   try {
     if (!guildAuditLogEntry?.guild) return;
     const guild = guildAuditLogEntry.guild;
+    
+    // Skip events that have dedicated handlers (to avoid duplication)
+    const dedicatedHandlerActions = [
+      AuditLogEvent.ChannelCreate,
+      AuditLogEvent.ChannelUpdate,
+      AuditLogEvent.ChannelDelete,
+      AuditLogEvent.RoleCreate,
+      AuditLogEvent.RoleUpdate,
+      AuditLogEvent.RoleDelete,
+      AuditLogEvent.MessageDelete,
+    ];
+    if (dedicatedHandlerActions.includes(guildAuditLogEntry.action)) return;
+    
     if (!(await isModLogsEnabled(guild))) return;
     const logChannel = await resolveModLogChannel(guild);
     if (!logChannel) return;
