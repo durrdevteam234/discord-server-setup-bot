@@ -6,10 +6,10 @@ const mongoose = require('mongoose');
 
 const xpCooldowns = new Map();
 
-async function refreshStickyMessage(message) {
+async function refreshStickyMessage(message, client) {
     try {
         if (!message?.guild || !message.channel || message.author.bot || message.webhookId) return;
-        if (message.author.id === client?.user?.id) return;
+        if (client && message.author.id === client.user?.id) return;
 
         const guildConfig = await db.findOne({ guildId: message.guild.id }).catch(() => null) || {};
         const sticky = guildConfig.sticky || {};
@@ -69,7 +69,7 @@ module.exports = {
             if (!message.content) return;
             if (message.author.id === client?.user?.id) return;
 
-            await refreshStickyMessage(message);
+            await refreshStickyMessage(message, client);
 
             // ==========================================
             // 🛡️ BACKGROUND AUTOMOD CRITERIA MESSAGE SCANNER
