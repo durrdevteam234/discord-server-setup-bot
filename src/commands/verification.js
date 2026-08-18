@@ -31,6 +31,15 @@ const {
       tempMethod: { type: String, default: 'button' }
   });
   const VerificationModel = mongoose.models.VerificationRule || mongoose.model('VerificationRule', VerificationSchema);
+
+  async function getTextChannelsForSelection(guild) {
+    const fetchedChannels = await guild.channels.fetch().catch(() => guild.channels.cache);
+    const channels = Array.from((fetchedChannels?.values?.() ?? fetchedChannels ?? []) )
+      .filter(ch => ch && ch.type === ChannelType.GuildText)
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    return channels.slice(0, 25);
+  }
   
   module.exports = {
     data: new SlashCommandBuilder()
@@ -253,7 +262,7 @@ const {
       doc.wizardStep = 3;
       await doc.save();
 
-      const targetTextChannels = guild.channels.cache.filter(c => c.type === ChannelType.GuildText).first(24);
+      const targetTextChannels = await getTextChannelsForSelection(guild);
       
       const step3Embed = new EmbedBuilder()
         .setTitle(`${doc.tempRoleId ? '✏️' : '🛡️'} Step 3: Choose Deployment Channel Location`)
