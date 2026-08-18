@@ -204,6 +204,19 @@ async function getOrCreateConfig(guildId) {
   return cfg;
 }
 
+async function getGuildChannelOptions(guild) {
+  const fetchedChannels = await guild.channels.fetch().catch(() => guild.channels.cache);
+  const channels = Array.from(fetchedChannels?.values?.() ?? fetchedChannels ?? [])
+    .filter(ch => ch && (ch.type === ChannelType.GuildText || ch.type === ChannelType.GuildAnnouncement))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return channels.slice(0, 25).map(ch => ({
+    label: `#${ch.name}`.slice(0, 100),
+    value: ch.id,
+    description: 'Suggestion channel',
+  }));
+}
+
 async function nextSuggestionNumber(guildId) {
   const last = await SuggestionEntry
     .findOne({ guildId })
@@ -369,11 +382,13 @@ async function handleSetup(interaction) {
     .setColor('#5865F2')
     .setDescription('Select the **channel** where members will submit suggestions.\n\nTip: run `/suggestions setup #channel` to skip this wizard.');
 
+  const channelOptions = await getGuildChannelOptions(interaction.guild);
+
   const row = new ActionRowBuilder().addComponents(
-    new ChannelSelectMenuBuilder()
+    new StringSelectMenuBuilder()
       .setCustomId('suggestions_wizard_ch')
       .setPlaceholder('Choose the suggestions channel...')
-      .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+      .addOptions(channelOptions)
   );
 
   return interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
@@ -678,11 +693,13 @@ async function handleInteraction(interaction) {
       .setColor('#5865F2')
       .setDescription(`Submission channel: <#${channelId}>\n\nSelect a **staff review channel** where approvals/denials are announced, or press **Skip**.`);
 
+    const staffOptions = await getGuildChannelOptions(interaction.guild);
+
     const selectRow = new ActionRowBuilder().addComponents(
-      new ChannelSelectMenuBuilder()
+      new StringSelectMenuBuilder()
         .setCustomId('suggestions_wizard_staff')
         .setPlaceholder('Choose a staff channel...')
-        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+        .addOptions(staffOptions)
     );
     const skipRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
