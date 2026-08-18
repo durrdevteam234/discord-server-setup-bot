@@ -51,9 +51,9 @@ module.exports = {
         }
 
         // ========================================================
-        // C. TICKET SYSTEM
+        // C. TICKET SYSTEM (all ticket wizard / panel / history IDs)
         // ========================================================
-        if (cid.startsWith('ticket_system_')) {
+        if (cid.startsWith('ticket_')) {
             const cmd = activeClient.commands.get('ticket');
             if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
             return;
