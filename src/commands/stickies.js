@@ -26,7 +26,13 @@ function buildStickyPayload(stickyType, customText, messageMode) {
   const body = buildStickyBody(stickyType, customText);
 
   if (messageMode === 'embed') {
-    const description = body.replace(/\n\n-# This is a sticky message$/, '');
+    let description = body.replace(/\n\n-# This is a sticky message$/, '');
+    
+    // For custom stickies, remove the "📌 Sticky Message" header
+    if (stickyType === 'custom' && customText) {
+      description = customText;
+    }
+    
     return {
       embeds: [
         new EmbedBuilder()
