@@ -165,7 +165,17 @@ module.exports = {
     const customText = interaction.options.getString('text')?.trim();
     const messageMode = interaction.options.getString('style') || 'plain';
     const finalPayload = buildStickyPayload(stickyType, customText, messageMode);
-    const finalText = messageMode === 'embed' ? null : finalPayload.content;
+    
+    // Extract the text to store in database
+    let finalText;
+    if (messageMode === 'embed') {
+      // For embeds, extract the description from the embed builder
+      const embed = finalPayload.embeds[0];
+      finalText = embed?.data?.description || embed?.description || 'Sticky message';
+    } else {
+      // For plain messages, use the content
+      finalText = finalPayload.content;
+    }
 
     const guildConfig = (await database.findOne({ guildId }).catch(() => null)) || {};
     const activeSticky = guildConfig.sticky || {};
@@ -196,7 +206,7 @@ module.exports = {
           'sticky.channelId': targetChannel.id,
           'sticky.messageId': stickyMessage.id,
           'sticky.type': stickyType,
-          'sticky.text': finalText || finalPayload.embeds[0].data.description,
+          'sticky.text': finalText,
           'sticky.style': messageMode,
           'sticky.createdAt': new Date().toISOString(),
         }
