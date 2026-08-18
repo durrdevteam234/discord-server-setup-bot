@@ -364,6 +364,9 @@ async function handleSetup(interaction) {
   // Wizard — step 1: pick submission channel
   setupWizard.set(`${interaction.user.id}_${interaction.guildId}`, { step: 1 });
 
+  // Ensure all channels are cached/fetched before showing the menu
+  await interaction.guild.channels.fetch().catch(() => null);
+
   const embed = new EmbedBuilder()
     .setTitle('💡 Suggestions Setup — Step 1 / 4')
     .setColor('#5865F2')
@@ -672,6 +675,9 @@ async function handleInteraction(interaction) {
     session.channelId = channelId;
     session.step      = 2;
     setupWizard.set(key, session);
+
+    // Ensure all channels are cached before showing the staff channel menu
+    await interaction.guild.channels.fetch().catch(() => null);
 
     const embed = new EmbedBuilder()
       .setTitle('💡 Suggestions Setup — Step 2 / 4')
