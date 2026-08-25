@@ -55,13 +55,22 @@ module.exports = {
           if (targetChannel) {
             const template = serverSettings.joinMessage || '✨ Welcome to {server}, {user}! We are glad to have you here. ✨';
             const finalMessage = resolveMessage(template, member, guild);
-            if (serverSettings.welcomeImage) {
+            if (serverSettings.welcomeImage === true) {
               const image = await generateWelcomeImage({
                 username: member.displayName || member.user.username,
                 serverName: guild.name,
                 avatarURL: member.user.displayAvatarURL({ extension: 'png', size: 256 }),
               });
-              await targetChannel.send({ content: finalMessage, files: [new AttachmentBuilder(image, { name: 'welcome.png' })] }).catch(() => null);
+              if (serverSettings.welcomeEmbed !== false) {
+                const imageEmbed = new EmbedBuilder()
+                  .setColor('#8a6a2f')
+                  .setDescription(finalMessage)
+                  .setImage('attachment://welcome.png')
+                  .setTimestamp();
+                await targetChannel.send({ embeds: [imageEmbed], files: [new AttachmentBuilder(image, { name: 'welcome.png' })] }).catch(() => null);
+              } else {
+                await targetChannel.send({ content: finalMessage, files: [new AttachmentBuilder(image, { name: 'welcome.png' })] }).catch(() => null);
+              }
             } else if (serverSettings.welcomeEmbed !== false) {
               const embed = new EmbedBuilder()
                 .setColor('#00FF00')

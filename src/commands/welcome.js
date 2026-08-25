@@ -31,7 +31,7 @@ module.exports = {
       const leaveMessage = interaction.options.getString('leave_message') || null;
       let useEmbed = interaction.options.getBoolean('embed');
       if (useEmbed === null) useEmbed = true;
-      const useImage = interaction.options.getBoolean('image') || false;
+      const useImage = interaction.options.getBoolean('image') === true;
 
       if (!targetChannel || isEnabled === null) {
         const msg = '❌ Invalid Syntax! Use: `|welcome <#channel> <true/false> [join message] [leave message]`\n**Variables:** `{user}` `{server}` `{memberCount}`';
