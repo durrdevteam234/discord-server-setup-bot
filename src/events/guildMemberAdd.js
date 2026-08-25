@@ -77,6 +77,11 @@ module.exports = {
         await invitesCmd.handleMemberJoin(member, client).catch(() => null);
       }
 
+      const smartWelcomeCmd = client?.commands?.get('smartwelcome');
+      if (smartWelcomeCmd?.handleMemberJoin) {
+        await smartWelcomeCmd.handleMemberJoin(member, client).catch(() => null);
+      }
+
     } catch (error) {
       console.error('[GuildMemberAdd] Error:', error.message);
     }

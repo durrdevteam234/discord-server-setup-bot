@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { logAction = () => {} } = require('../utils/auditLog');
 const db = require('../utils/database'); // Restored your internal adapter mapping
+const { createCase } = require('../utils/moderationCases');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -76,11 +77,12 @@ module.exports = {
       }
 
       await logAction(guild, 'User Kicked', author, `User: ${user.username}, Reason: ${reason}`);
+      const moderationCase = await createCase({ guildId, action: 'kick', target: user, moderator: author, reason });
 
       const embed = new EmbedBuilder()
         .setColor('#FFA500')
         .setTitle('✅ User Kicked')
-        .setDescription(`${user.username} has been kicked.\nReason: ${reason}`);
+        .setDescription(`${user.username} has been kicked.\nReason: ${reason}\nCase: **#${moderationCase.caseNumber}**`);
 
       return isInteraction ? interaction.editReply({ embeds: [embed] }) : interaction.reply({ embeds: [embed] });
     } catch (error) {

@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { logAction } = require('../utils/auditLog');
 const db = require('../utils/database'); // Restored your dynamic helper model
+const { createCase } = require('../utils/moderationCases');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -76,11 +77,12 @@ module.exports = {
       }
 
       await logAction(guild, 'User Banned', author, `User: ${user.username}, Reason: ${reason}`);
+      const moderationCase = await createCase({ guildId, action: 'ban', target: user, moderator: author, reason });
 
       const embed = new EmbedBuilder()
         .setColor('#FF0000')
         .setTitle('✅ User Banned')
-        .setDescription(`${user.username} has been banned.\nReason: ${reason}`);
+        .setDescription(`${user.username} has been banned.\nReason: ${reason}\nCase: **#${moderationCase.caseNumber}**`);
 
       return isInteraction ? interaction.editReply({ embeds: [embed] }) : interaction.reply({ embeds: [embed] });
     } catch (error) {

@@ -172,6 +172,13 @@ module.exports = {
             return interaction.deferUpdate?.().catch(() => null);
         }
 
+        // SMART WELCOME INTEREST SELECTOR
+        if (cid.startsWith('smartwelcome_')) {
+            const cmd = activeClient.commands.get('smartwelcome');
+            if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
+            return interaction.deferUpdate?.().catch(() => null);
+        }
+
         // ========================================================
         // K. MODAL SAFETY NET (any remaining unmatched modals)
         // ========================================================
@@ -256,7 +263,7 @@ module.exports = {
 
         const coreUtilityCommands = [
             'setup', 'cute', 'fun-module', 'help', 'setup-audit',
-            'mod-logs-toggle', 'reactionroles', 'autorole', 'automodrule', 'honeypot',
+            'mod-logs-toggle', 'reactionroles', 'autorole', 'automodrule', 'honeypot', 'smartwelcome', 'cases', 'softban',
             'ticket', 'verification', 'leaderboard', 'rank', 'analytics',
             'selfvoice', 'autoresponder', 'capabilities', 'stickies', 'channels', 'rules',
             // new modules
