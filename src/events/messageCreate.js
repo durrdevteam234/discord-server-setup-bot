@@ -90,7 +90,6 @@ module.exports = {
         try {
             // 1. Safety Gate: Completely ignore bots, webhooks, and empty contents
             if (!message || !message.author || message.author.bot || message.webhookId) return;
-            if (!message.content) return;
             if (message.author.id === client?.user?.id) return;
 
             await refreshStickyMessage(message, client);
@@ -99,6 +98,35 @@ module.exports = {
             // 🛡️ BACKGROUND AUTOMOD CRITERIA MESSAGE SCANNER
             // ==========================================
             try {
+                const HoneypotModel = mongoose.models.Honeypot;
+                const honeypot = HoneypotModel && message.guild
+                    ? await HoneypotModel.findOne({ guildId: message.guild.id, channelId: message.channel.id, enabled: true })
+                    : null;
+                if (honeypot && !message.member?.permissions.has(discord.PermissionFlagsBits.ManageMessages)) {
+                    await message.delete().catch(() => null);
+                    if (honeypot.messageType === 'embed') {
+                        const warningEmbed = new discord.EmbedBuilder()
+                            .setColor(honeypot.embedColor || '#ED4245')
+                            .setTitle(honeypot.embedTitle || 'Honeypot triggered')
+                            .setDescription(honeypot.message);
+                        if (honeypot.embedFooter) warningEmbed.setFooter({ text: honeypot.embedFooter });
+                        await message.channel.send({ embeds: [warningEmbed] }).then(sent => setTimeout(() => sent.delete().catch(() => null), 4000));
+                    } else {
+                        await message.channel.send({ content: honeypot.message }).then(sent => setTimeout(() => sent.delete().catch(() => null), 4000));
+                    }
+                    const action = honeypot.action || 'ban';
+                    if (action === 'softban' && message.member?.bannable) {
+                        await message.member.ban({ deleteMessageSeconds: honeypot.deleteMessages === false ? 0 : 604800, reason: 'Honeypot trap triggered (softban)' }).catch(() => null);
+                        await message.guild.members.unban(message.author.id, 'Honeypot softban completed').catch(() => null);
+                    } else if (action === 'ban' && message.member?.bannable) {
+                        await message.member.ban({ deleteMessageSeconds: honeypot.deleteMessages === false ? 0 : 604800, reason: 'Honeypot trap triggered' }).catch(() => null);
+                    } else if (action === 'kick' && message.member?.kickable) {
+                        await message.member.kick('Honeypot trap triggered').catch(() => null);
+                    } else if (action === 'mute' && message.member?.moderatable) {
+                        await message.member.timeout(2419200000, 'Honeypot trap triggered').catch(() => null);
+                    }
+                    return;
+                }
                 const AutoModModel = mongoose.models.AutoModRule;
                 const recentMessages = global.recentMessagesMap || (global.recentMessagesMap = new Map());
                 const linkCooldowns = global.linkCooldownsMap || (global.linkCooldownsMap = new Map());
@@ -106,17 +134,17 @@ module.exports = {
                 const stickerCooldowns = global.stickerCooldownsMap || (global.stickerCooldownsMap = new Map());
 
                 if (AutoModModel && message.guild && !message.member?.permissions.has(discord.PermissionFlagsBits.ManageMessages)) {
-                    const automodConfig = await AutoModModel.findOne({ guildId: message.guild.id });
-                    if (automodConfig && automodConfig.rules && automodConfig.rules.size > 0) {
+                    const automodRules = await AutoModModel.find({ guildId: message.guild.id, enabled: true });
+                    if (automodRules.length > 0) {
 
                         let violatesFilter = null;
-                        const content = message.content;
+                        const content = message.content || '';
                         const contentLower = content.toLowerCase();
                         const normalizedContent = contentLower.replace(/[^a-z]/g, '');
                         const now = Date.now();
                         const userKey = `${message.guild.id}-${message.author.id}`;
 
-                        automodConfig.rules.forEach((rule) => {
+                        automodRules.forEach((rule) => {
                             if (!rule.enabled) return;
 
                             // 1. ALL CAPS
@@ -251,7 +279,7 @@ module.exports = {
                         } else {
                             if (violatesFilter.actions.includes('block_message')) {
                                 await message.delete().catch(() => null);
-                                await message.channel.send(`⚠️ ${message.author}, flagged by AutoMod filter: **${violatesFilter.ruleName}**!`).then(m => setTimeout(() => m.delete().catch(() => null), 4000));
+                                await message.channel.send({ content: `⚠️ ${message.author}, flagged by AutoMod filter: **${violatesFilter.ruleName}**!` }).then(m => setTimeout(() => m.delete().catch(() => null), 4000));
                             }
                             if (violatesFilter.actions.includes('timeout_user') && message.member?.moderatable) {
                                 await message.member.timeout(300000, `AutoMod Violation: ${violatesFilter.ruleName}`).catch(() => null);

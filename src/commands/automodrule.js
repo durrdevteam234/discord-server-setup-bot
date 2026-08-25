@@ -66,6 +66,7 @@ const {
         const doc = new AutoModModel({
           guildId,
           ruleId: ruleUniqueId,
+          filterType: 'pending',
           wizardActive: true,
           wizardStep: 1,
           wizardUserId: userId,
@@ -272,6 +273,7 @@ const {
 
        return interaction.editReply({ embeds: [step2Embed], components: [selectMenu] });
     }
+
     // STEP 2 RESOLUTION: SAVE ACTIONS MODIFIERS OR TRIGGER SKIP FINALIZE
     if ((interaction.customId === 'automod_wizard_step2' && interaction.isStringSelectMenu()) || interaction.customId === 'automod_wizard_skip_step2') {
         await interaction.deferUpdate().catch(() => null);

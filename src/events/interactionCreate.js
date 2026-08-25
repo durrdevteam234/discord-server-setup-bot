@@ -158,6 +158,20 @@ module.exports = {
             return interaction.deferUpdate().catch(() => null);
         }
 
+        // AUTO MOD RULE WIZARD
+        if (cid.startsWith('automod_')) {
+            const cmd = activeClient.commands.get('automodrule');
+            if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
+            return interaction.deferUpdate?.().catch(() => null);
+        }
+
+        // HONEYPOT WIZARD
+        if (cid.startsWith('honeypot_')) {
+            const cmd = activeClient.commands.get('honeypot');
+            if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
+            return interaction.deferUpdate?.().catch(() => null);
+        }
+
         // ========================================================
         // K. MODAL SAFETY NET (any remaining unmatched modals)
         // ========================================================
@@ -242,7 +256,7 @@ module.exports = {
 
         const coreUtilityCommands = [
             'setup', 'cute', 'fun-module', 'help', 'setup-audit',
-            'mod-logs-toggle', 'reactionroles', 'autorole', 'automodrule',
+            'mod-logs-toggle', 'reactionroles', 'autorole', 'automodrule', 'honeypot',
             'ticket', 'verification', 'leaderboard', 'rank', 'analytics',
             'selfvoice', 'autoresponder', 'capabilities', 'stickies', 'channels', 'rules',
             // new modules
