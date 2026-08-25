@@ -10,6 +10,7 @@ module.exports = {
     .addStringOption(option => option.setName('join_message').setDescription('Custom join message. Variables: {user} {server} {memberCount}').setRequired(false))
     .addStringOption(option => option.setName('leave_message').setDescription('Custom leave message. Variables: {user} {server} {memberCount}').setRequired(false))
     .addBooleanOption(option => option.setName('embed').setDescription('Send messages as embeds? (default: true)').setRequired(false))
+    .addBooleanOption(option => option.setName('image').setDescription('Send the custom chud welcome image instead of an embed').setRequired(false))
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
   name: 'welcome',
 
@@ -30,6 +31,7 @@ module.exports = {
       const leaveMessage = interaction.options.getString('leave_message') || null;
       let useEmbed = interaction.options.getBoolean('embed');
       if (useEmbed === null) useEmbed = true;
+      const useImage = interaction.options.getBoolean('image') || false;
 
       if (!targetChannel || isEnabled === null) {
         const msg = '❌ Invalid Syntax! Use: `|welcome <#channel> <true/false> [join message] [leave message]`\n**Variables:** `{user}` `{server}` `{memberCount}`';
@@ -50,6 +52,7 @@ module.exports = {
         welcomeChannelId: targetChannel.id,
         welcomeEnabled: isEnabled,
         welcomeEmbed: useEmbed,
+        welcomeImage: useImage,
       };
 
       // Only overwrite messages when the user actually supplied one,
@@ -69,7 +72,8 @@ module.exports = {
         .setDescription(
           `**Channel:** ${targetChannel}\n` +
           `**System Enabled:** \`${isEnabled}\`\n` +
-          `**Use Embed:** \`${useEmbed}\`\n\n` +
+          `**Use Embed:** \`${useEmbed}\`\n` +
+          `**Use Image:** \`${useImage}\`\n\n` +
           `**Join Message:**\n\`${savedJoin}\`\n\n` +
           `**Leave Message:**\n\`${savedLeave}\`\n\n` +
           `**Available Variables:**\n\`{user}\` — mentions the member\n\`{server}\` — server name\n\`{memberCount}\` — current member count`
