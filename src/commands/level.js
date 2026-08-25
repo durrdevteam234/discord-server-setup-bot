@@ -10,8 +10,8 @@ const path = require('path');
 // fixes text silently failing to render on minimal hosts like Render.
 try {
     const registered = GlobalFonts.registerFromPath(
-        path.join(__dirname, '..', 'assets', 'fonts', 'LevelFont.ttf'),
-        'LevelFont'
+        path.join(__dirname, '..', 'assets', 'fonts', 'La Femina.ttf'),
+        'La Femina'
     );
     console.log('[Leveling] Card font registered:', registered);
 } catch (fontError) {
@@ -63,9 +63,9 @@ async function generateLevelUpCard(user, oldLevel, newLevel) {
         ctx.fillText(text, 450, y);
     };
 
-    drawCenteredText('CONGRATS!', 80, 'bold 32px LevelFont', '#FFFFFF');
-    drawCenteredText(`@${user.username}`, 128, 'bold 24px LevelFont', '#FFFFFF');
-    drawCenteredText(`Level ${oldLevel}  =>  Level ${newLevel}`, 196, 'bold 42px LevelFont', '#5865F2');
+    drawCenteredText('CONGRATS!', 80, 'bold 32px "La Femina"', '#FFFFFF');
+    drawCenteredText(`@${user.username}`, 128, 'bold 24px "La Femina"', '#FFFFFF');
+    drawCenteredText(`Level ${oldLevel}  =>  Level ${newLevel}`, 196, 'bold 42px "La Femina"', '#5865F2');
 
     return new AttachmentBuilder(canvas.toBuffer('image/png'), { name: 'levelup.png' });
 }
