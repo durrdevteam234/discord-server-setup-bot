@@ -7,6 +7,7 @@ const path = require('path');
 const express = require('express');
 const { pingBotList } = require('./utils/botListPinger');
 const database = require('./utils/database');
+const { startTopbotStats } = require('./utils/topbotStats');
 
 const { syncCommandsToBotNexus, pushStatsToBotNexus } = require('./sync-botnexus-commands');
 const { pingDashboard } = require('./utils/Dashboardstatspinger');
@@ -278,6 +279,7 @@ client.once('ready', async () => {
   pingDashboard(client).catch(() => null);
   setInterval(sendStatsUpdate, 10 * 1000);
   setInterval(() => pingDashboard(client).catch(() => null), 10 * 1000);
+  startTopbotStats(client);
 
   console.log('💻 [DASHBOARD] Starting dashboard metrics...');
   const fallbackDashboardUrl = 'https://servermiser.pntr.dev/api/bot-stats';

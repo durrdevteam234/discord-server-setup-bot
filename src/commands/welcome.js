@@ -31,7 +31,7 @@ module.exports = {
       const leaveMessage = interaction.options.getString('leave_message') || null;
       let useEmbed = interaction.options.getBoolean('embed');
       if (useEmbed === null) useEmbed = true;
-      const useImage = interaction.options.getBoolean('image') === true;
+      const imageOption = interaction.options.getBoolean('image');
 
       if (!targetChannel || isEnabled === null) {
         const msg = '❌ Invalid Syntax! Use: `|welcome <#channel> <true/false> [join message] [leave message]`\n**Variables:** `{user}` `{server}` `{memberCount}`';
@@ -46,6 +46,9 @@ module.exports = {
       // ========================================================
       const settings = (await readData('settings.json')) || {};
       const existing = settings[guildId] || {};
+      const useImage = imageOption === null
+        ? existing.welcomeImage === true || ['true', 'yes', 'on', '1'].includes(String(existing.welcomeImage).toLowerCase())
+        : imageOption;
 
       const updated = {
         ...existing,
