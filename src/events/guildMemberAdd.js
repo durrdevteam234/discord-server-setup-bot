@@ -1,7 +1,6 @@
 const { Events, EmbedBuilder } = require('discord.js');
 const { readData } = require('../utils/database');
 const mongoose = require('mongoose');
-const { AttachmentBuilder } = require('discord.js');
 const { generateWelcomeImage } = require('../utils/welcomeImage');
 
 function resolveMessage(template, member, guild) {
@@ -55,7 +54,8 @@ module.exports = {
           if (targetChannel) {
             const template = serverSettings.joinMessage || '✨ Welcome to {server}, {user}! We are glad to have you here. ✨';
             const finalMessage = resolveMessage(template, member, guild);
-            if (serverSettings.welcomeImage === true) {
+            const imageEnabled = serverSettings.welcomeImage === true || serverSettings.welcomeImage === 'true';
+            if (imageEnabled) {
               const image = await generateWelcomeImage({
                 username: member.displayName || member.user.username,
                 serverName: guild.name,
@@ -67,9 +67,13 @@ module.exports = {
                   .setDescription(finalMessage)
                   .setImage('attachment://welcome.png')
                   .setTimestamp();
-                await targetChannel.send({ embeds: [imageEmbed], files: [new AttachmentBuilder(image, { name: 'welcome.png' })] }).catch(() => null);
+                await targetChannel.send({ embeds: [imageEmbed], files: [{ attachment: image, name: 'welcome.png' }] }).catch(error => {
+                  console.error(`[GuildMemberAdd] Welcome image embed failed in guild ${guild.id}:`, error.message);
+                });
               } else {
-                await targetChannel.send({ content: finalMessage, files: [new AttachmentBuilder(image, { name: 'welcome.png' })] }).catch(() => null);
+                await targetChannel.send({ content: finalMessage, files: [{ attachment: image, name: 'welcome.png' }] }).catch(error => {
+                  console.error(`[GuildMemberAdd] Plain welcome image failed in guild ${guild.id}:`, error.message);
+                });
               }
             } else if (serverSettings.welcomeEmbed !== false) {
               const embed = new EmbedBuilder()

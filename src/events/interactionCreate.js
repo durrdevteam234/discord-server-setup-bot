@@ -179,6 +179,13 @@ module.exports = {
             return interaction.deferUpdate?.().catch(() => null);
         }
 
+        // OWNER GUILD LIST INVITE CONTROLS
+        if (cid.startsWith('guilds_')) {
+            const cmd = activeClient.commands.get('guilds');
+            if (cmd?.handleInteraction) return await cmd.handleInteraction(interaction, activeClient);
+            return interaction.deferUpdate?.().catch(() => null);
+        }
+
         // ========================================================
         // K. MODAL SAFETY NET (any remaining unmatched modals)
         // ========================================================
