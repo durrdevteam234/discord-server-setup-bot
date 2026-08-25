@@ -1,6 +1,6 @@
 const { Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AuditLogEvent } = require('discord.js');
 const mongoose = require('mongoose');
-const { isModLogsEnabled, resolveModLogChannel, isAuditLogsEnabled, resolveAuditLogChannel } = require('../utils/auditLog');
+const { isAuditLogsEnabled, resolveAuditLogChannel } = require('../utils/auditLog');
 
 // ============================================================
 // CONSOLIDATED AUDIT LOG EVENT HANDLERS
@@ -724,7 +724,6 @@ async function onInviteDelete(invite) {
 
 // ─── Export as an array of event handlers ───────────────────
 module.exports = [
-  { name: 'guildAuditLogEntryCreate', once: false, execute: onGuildAuditLogEntryCreate },
   { name: 'messageUpdate', once: false, execute: onMessageUpdate },
   { name: 'messageDelete', once: false, execute: onMessageDelete },
   { name: 'channelCreate', once: false, execute: onChannelCreate },
