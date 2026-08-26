@@ -107,6 +107,11 @@ module.exports = {
                     const honeypotChannel = message.guild.channels.cache.get(honeypot.channelId)
                         || await message.guild.channels.fetch(honeypot.channelId).catch(() => null)
                         || message.channel;
+                    const botMember = message.guild.members.me || await message.guild.members.fetchMe().catch(() => null);
+                    const channelPermissions = honeypotChannel?.permissionsFor?.(botMember);
+                    if (channelPermissions && !channelPermissions.has(discord.PermissionFlagsBits.SendMessages)) {
+                        console.error(`[Honeypot] Bot cannot send messages in channel ${honeypotChannel.id}: missing SendMessages permission.`);
+                    }
                     await message.delete().catch(() => null);
                     const action = honeypot.action || 'ban';
                     if (action === 'softban' && message.member?.bannable) {
@@ -131,6 +136,11 @@ module.exports = {
                             console.error(`[Honeypot] Failed to send embed warning in channel ${honeypotChannel.id}:`, error.message);
                             return null;
                         });
+                        if (!warningMessage) {
+                            await honeypotChannel.send({ content: honeypot.message || 'This channel is monitored.', allowedMentions: { parse: [] } }).catch(error => {
+                                console.error(`[Honeypot] Plain-text fallback also failed in channel ${honeypotChannel.id}:`, error.message);
+                            });
+                        }
                     } else {
                         const warningMessage = await honeypotChannel.send({ content: honeypot.message || 'This channel is monitored.', allowedMentions: { parse: [] } }).catch(error => {
                             console.error(`[Honeypot] Failed to send warning in channel ${honeypotChannel.id}:`, error.message);
