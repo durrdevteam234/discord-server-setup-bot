@@ -57,27 +57,23 @@ module.exports = {
             const imageEnabled = serverSettings.welcomeImage === true
               || ['true', 'yes', 'on', '1'].includes(String(serverSettings.welcomeImage).toLowerCase());
             if (imageEnabled) {
-              try {
-                const image = await generateWelcomeImage({
-                  username: member.displayName || member.user.username,
-                  serverName: guild.name,
-                  avatarURL: member.user.displayAvatarURL({ extension: 'png', size: 256 }),
+              const image = await generateWelcomeImage({
+                username: member.displayName || member.user.username,
+                serverName: guild.name,
+                avatarURL: member.user.displayAvatarURL({ extension: 'png', size: 256 }),
+              });
+              if (serverSettings.welcomeEmbed !== false) {
+                const imageEmbed = new EmbedBuilder()
+                  .setColor('#8a6a2f')
+                  .setDescription(finalMessage)
+                  .setImage('attachment://welcome.png')
+                  .setTimestamp();
+                await targetChannel.send({ embeds: [imageEmbed], files: [{ attachment: image, name: 'welcome.png' }] }).catch(error => {
+                  console.error(`[GuildMemberAdd] Welcome image embed failed in guild ${guild.id}:`, error.message);
                 });
-                const message = serverSettings.welcomeEmbed !== false
-                  ? {
-                    embeds: [new EmbedBuilder()
-                      .setColor('#8a6a2f')
-                      .setDescription(finalMessage)
-                      .setImage('attachment://welcome.png')
-                      .setTimestamp()],
-                    files: [{ attachment: image, name: 'welcome.png' }],
-                  }
-                  : { content: finalMessage, files: [{ attachment: image, name: 'welcome.png' }] };
-                await targetChannel.send(message);
-              } catch (error) {
-                console.error(`[GuildMemberAdd] Welcome image failed in guild ${guild.id}:`, error.message);
-                await targetChannel.send(finalMessage).catch(sendError => {
-                  console.error(`[GuildMemberAdd] Welcome fallback failed in guild ${guild.id}:`, sendError.message);
+              } else {
+                await targetChannel.send({ content: finalMessage, files: [{ attachment: image, name: 'welcome.png' }] }).catch(error => {
+                  console.error(`[GuildMemberAdd] Plain welcome image failed in guild ${guild.id}:`, error.message);
                 });
               }
             } else if (serverSettings.welcomeEmbed !== false) {

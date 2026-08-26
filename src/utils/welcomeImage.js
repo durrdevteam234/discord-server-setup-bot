@@ -62,7 +62,7 @@ async function loadAvatar(avatarURL) {
   }
 }
 
-async function generateWelcomeImage({ username, serverName, avatarURL }) {
+async function generateWelcomeImage({ username, serverName, avatarURL, variant = 'join' }) {
   const canvas = createCanvas(WIDTH, HEIGHT);
   const ctx = canvas.getContext('2d');
   const [chud, heart, avatar] = await Promise.all([
@@ -99,9 +99,9 @@ async function generateWelcomeImage({ username, serverName, avatarURL }) {
   ctx.drawImage(chud, -sideWidth * 0.22, HEIGHT - sideHeight, sideWidth, sideHeight);
   ctx.restore();
 
-  const topHeight = HEIGHT * 0.42;
+  const topHeight = HEIGHT * 0.95;
   const topWidth = topHeight * (chud.width / chud.height);
-  ctx.drawImage(chud, WIDTH / 2 - topWidth / 2, -topHeight * 0.3, topWidth, topHeight);
+  ctx.drawImage(chud, WIDTH / 2 - topWidth / 2, HEIGHT - topHeight, topWidth, topHeight);
 
   const avatarX = WIDTH / 2;
   const avatarY = 190;
@@ -125,12 +125,13 @@ async function generateWelcomeImage({ username, serverName, avatarURL }) {
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  const isLeave = variant === 'leave';
   ctx.fillStyle = '#3f2f14';
   ctx.font = font(52, 'bold');
   ctx.fillText(String(username).slice(0, 32), WIDTH / 2, 390);
   ctx.fillStyle = '#5c4726';
   ctx.font = font(38);
-  ctx.fillText(`Welcome to ${String(serverName).slice(0, 42)}`, WIDTH / 2, 460);
+  ctx.fillText(isLeave ? `${String(username).slice(0, 32)} has left ${String(serverName).slice(0, 32)}` : `Welcome to ${String(serverName).slice(0, 42)}`, WIDTH / 2, 460);
 
   return canvas.toBuffer('image/png');
 }

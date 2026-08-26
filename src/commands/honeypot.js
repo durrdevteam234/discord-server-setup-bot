@@ -180,7 +180,8 @@ module.exports = {
       if (body.length < 15) return interaction.reply({ content: 'The message body must be at least 15 characters long.', ephemeral: true });
       if (!session.channelId) return interaction.reply({ content: 'Choose a honeypot channel first.', ephemeral: true });
       const messageType = interaction.customId.endsWith('_embed') ? 'embed' : 'plain';
-      const color = interaction.fields.getTextInputValue('color')?.trim() || '#ED4245';
+      const getField = (fieldId) => interaction.fields.fields.get(fieldId)?.value?.trim() || '';
+      const color = getField('color') || '#ED4245';
       const document = await Honeypot.findOneAndUpdate(
         { guildId: interaction.guildId },
         {
@@ -190,9 +191,9 @@ module.exports = {
           deleteMessages: session.deleteMessages !== false,
           messageType,
           message: body,
-          embedTitle: messageType === 'embed' ? interaction.fields.getTextInputValue('title')?.trim() || null : null,
+          embedTitle: messageType === 'embed' ? getField('title') || null : null,
           embedColor: /^#[0-9a-f]{6}$/i.test(color) ? color : '#ED4245',
-          embedFooter: messageType === 'embed' ? interaction.fields.getTextInputValue('footer')?.trim() || null : null,
+          embedFooter: messageType === 'embed' ? getField('footer') || null : null,
           setupUserId: interaction.user.id,
         },
         { upsert: true, new: true, setDefaultsOnInsert: true }

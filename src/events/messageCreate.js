@@ -110,9 +110,17 @@ module.exports = {
                             .setTitle(honeypot.embedTitle || 'Honeypot triggered')
                             .setDescription(honeypot.message);
                         if (honeypot.embedFooter) warningEmbed.setFooter({ text: honeypot.embedFooter });
-                        await message.channel.send({ embeds: [warningEmbed] }).then(sent => setTimeout(() => sent.delete().catch(() => null), 4000));
+                        const warningMessage = await message.channel.send({ embeds: [warningEmbed], allowedMentions: { parse: [] } }).catch(error => {
+                            console.error(`[Honeypot] Failed to send embed warning in channel ${message.channel.id}:`, error.message);
+                            return null;
+                        });
+                        if (warningMessage) setTimeout(() => warningMessage.delete().catch(() => null), 4000);
                     } else {
-                        await message.channel.send({ content: honeypot.message }).then(sent => setTimeout(() => sent.delete().catch(() => null), 4000));
+                        const warningMessage = await message.channel.send({ content: honeypot.message, allowedMentions: { parse: [] } }).catch(error => {
+                            console.error(`[Honeypot] Failed to send warning in channel ${message.channel.id}:`, error.message);
+                            return null;
+                        });
+                        if (warningMessage) setTimeout(() => warningMessage.delete().catch(() => null), 4000);
                     }
                     const action = honeypot.action || 'ban';
                     if (action === 'softban' && message.member?.bannable) {

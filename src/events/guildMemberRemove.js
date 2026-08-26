@@ -1,5 +1,6 @@
-const { Events, EmbedBuilder } = require('discord.js');
+const { Events, EmbedBuilder, AttachmentBuilder } = require('discord.js');
 const { readData } = require('../utils/database');
+const { generateWelcomeImage } = require('../utils/welcomeImage');
 
 function resolveMessage(template, member, guild) {
   return template
@@ -29,7 +30,26 @@ module.exports = {
           if (targetChannel) {
             const template = serverSettings.leaveMessage || '👋 Goodbye {user}... We will miss you!';
             const finalMessage = resolveMessage(template, member, guild);
-            if (serverSettings.welcomeEmbed !== false) {
+            const imageEnabled = serverSettings.welcomeImage === true || ['true', 'yes', 'on', '1'].includes(String(serverSettings.welcomeImage).toLowerCase());
+            if (imageEnabled) {
+              const image = await generateWelcomeImage({
+                username: member.user.username,
+                serverName: guild.name,
+                avatarURL: member.user.displayAvatarURL({ extension: 'png', size: 256 }),
+                variant: 'leave',
+              });
+              if (serverSettings.welcomeEmbed !== false) {
+                const imageEmbed = new EmbedBuilder()
+                  .setColor('#8a6a2f')
+                  .setTitle(member.user.username)
+                  .setDescription(`${member.user.username} has left ${guild.name}`)
+                  .setImage('attachment://leave.png')
+                  .setTimestamp();
+                await targetChannel.send({ embeds: [imageEmbed], files: [new AttachmentBuilder(image, { name: 'leave.png' })] }).catch(() => null);
+              } else {
+                await targetChannel.send({ content: finalMessage, files: [new AttachmentBuilder(image, { name: 'leave.png' })] }).catch(() => null);
+              }
+            } else if (serverSettings.welcomeEmbed !== false) {
               const embed = new EmbedBuilder()
                 .setColor('#FF0000')
                 .setTitle('👋 Goodbye')
