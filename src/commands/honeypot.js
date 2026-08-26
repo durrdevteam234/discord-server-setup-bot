@@ -95,6 +95,9 @@ module.exports = {
 
     const subcommand = interaction.options.getSubcommand();
     if (subcommand === 'disable' || subcommand === 'delete') {
+      if (subcommand === 'disable' && !interaction.member?.permissions.has(PermissionFlagsBits.Administrator)) {
+        return interaction.reply({ content: 'Only an Administrator can disable the honeypot.', ephemeral: true });
+      }
       const result = subcommand === 'disable'
         ? await Honeypot.findOneAndUpdate({ guildId: interaction.guildId }, { enabled: false })
         : await Honeypot.deleteOne({ guildId: interaction.guildId });

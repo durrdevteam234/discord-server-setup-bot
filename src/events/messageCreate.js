@@ -100,28 +100,14 @@ module.exports = {
             try {
                 const HoneypotModel = mongoose.models.Honeypot;
                 const honeypot = HoneypotModel && message.guild
-                    ? await HoneypotModel.findOne({ guildId: message.guild.id, channelId: message.channel.id, enabled: true })
+                    ? await HoneypotModel.findOne({ guildId: message.guild.id, channelId: message.channel.id })
                     : null;
-                if (honeypot && !message.member?.permissions.has(discord.PermissionFlagsBits.ManageMessages)) {
+                const honeypotEnabled = honeypot?.enabled === true || ['true', 'yes', 'on', '1'].includes(String(honeypot?.enabled).toLowerCase());
+                if (honeypot && honeypotEnabled && !message.member?.permissions.has(discord.PermissionFlagsBits.ManageMessages)) {
+                    const honeypotChannel = message.guild.channels.cache.get(honeypot.channelId)
+                        || await message.guild.channels.fetch(honeypot.channelId).catch(() => null)
+                        || message.channel;
                     await message.delete().catch(() => null);
-                    if (honeypot.messageType === 'embed') {
-                        const warningEmbed = new discord.EmbedBuilder()
-                            .setColor(honeypot.embedColor || '#ED4245')
-                            .setTitle(honeypot.embedTitle || 'Honeypot triggered')
-                            .setDescription(honeypot.message);
-                        if (honeypot.embedFooter) warningEmbed.setFooter({ text: honeypot.embedFooter });
-                        const warningMessage = await message.channel.send({ embeds: [warningEmbed], allowedMentions: { parse: [] } }).catch(error => {
-                            console.error(`[Honeypot] Failed to send embed warning in channel ${message.channel.id}:`, error.message);
-                            return null;
-                        });
-                        if (warningMessage) setTimeout(() => warningMessage.delete().catch(() => null), 4000);
-                    } else {
-                        const warningMessage = await message.channel.send({ content: honeypot.message, allowedMentions: { parse: [] } }).catch(error => {
-                            console.error(`[Honeypot] Failed to send warning in channel ${message.channel.id}:`, error.message);
-                            return null;
-                        });
-                        if (warningMessage) setTimeout(() => warningMessage.delete().catch(() => null), 4000);
-                    }
                     const action = honeypot.action || 'ban';
                     if (action === 'softban' && message.member?.bannable) {
                         await message.member.ban({ deleteMessageSeconds: honeypot.deleteMessages === false ? 0 : 604800, reason: 'Honeypot trap triggered (softban)' }).catch(() => null);
@@ -132,6 +118,24 @@ module.exports = {
                         await message.member.kick('Honeypot trap triggered').catch(() => null);
                     } else if (action === 'mute' && message.member?.moderatable) {
                         await message.member.timeout(2419200000, 'Honeypot trap triggered').catch(() => null);
+                    }
+
+                    // Send after ban/softban so Discord's message deletion window cannot remove the warning.
+                    if (honeypot.messageType === 'embed') {
+                        const warningEmbed = new discord.EmbedBuilder()
+                            .setColor(honeypot.embedColor || '#ED4245')
+                            .setTitle(honeypot.embedTitle || 'Honeypot triggered')
+                            .setDescription(honeypot.message || 'This channel is monitored.');
+                        if (honeypot.embedFooter) warningEmbed.setFooter({ text: honeypot.embedFooter });
+                        const warningMessage = await honeypotChannel.send({ embeds: [warningEmbed], allowedMentions: { parse: [] } }).catch(error => {
+                            console.error(`[Honeypot] Failed to send embed warning in channel ${honeypotChannel.id}:`, error.message);
+                            return null;
+                        });
+                    } else {
+                        const warningMessage = await honeypotChannel.send({ content: honeypot.message || 'This channel is monitored.', allowedMentions: { parse: [] } }).catch(error => {
+                            console.error(`[Honeypot] Failed to send warning in channel ${honeypotChannel.id}:`, error.message);
+                            return null;
+                        });
                     }
                     return;
                 }
