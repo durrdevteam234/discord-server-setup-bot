@@ -17,6 +17,7 @@ const mongoose = require('mongoose');
 const honeypotSchema = new mongoose.Schema({
   guildId: { type: String, required: true, unique: true },
   channelId: { type: String, required: true },
+  logChannelId: { type: String, default: null },
   enabled: { type: Boolean, default: true },
   action: { type: String, enum: ['ban', 'kick', 'softban', 'mute', 'delete_message'], default: 'ban' },
   deleteMessages: { type: Boolean, default: true },
@@ -79,6 +80,17 @@ function buildDeleteMessagesRow() {
   );
 }
 
+function buildLogChannelRow() {
+  return new ActionRowBuilder().addComponents(
+    new ChannelSelectMenuBuilder()
+      .setCustomId('honeypot_log_channel')
+      .setPlaceholder('Choose the honeypot log channel...')
+      .setChannelTypes(ChannelType.GuildText)
+      .setMinValues(1)
+      .setMaxValues(1)
+  );
+}
+
 module.exports = {
   name: 'honeypot',
   data: new SlashCommandBuilder()
@@ -108,7 +120,7 @@ module.exports = {
     }
 
     const existing = await Honeypot.findOne({ guildId: interaction.guildId });
-    setupSessions.set(sessionKey(interaction), { channelId: existing?.channelId || null });
+    setupSessions.set(sessionKey(interaction), { channelId: existing?.channelId || null, logChannelId: existing?.logChannelId || null });
     const channelRow = new ActionRowBuilder().addComponents(
       new ChannelSelectMenuBuilder()
         .setCustomId('honeypot_channel')
@@ -152,7 +164,16 @@ module.exports = {
       session.deleteMessages = interaction.values[0] === 'true';
       setupSessions.set(key, session);
       return interaction.update({
-        embeds: [new EmbedBuilder().setTitle('Honeypot Setup: Warning Message').setColor('#F1C40F').setDescription('Choose the warning format sent immediately before the action.')],
+        embeds: [new EmbedBuilder().setTitle('Honeypot Setup: Logging Channel').setColor('#F1C40F').setDescription('Choose where honeypot actions should be logged. This can be a separate staff-only channel.')],
+        components: [buildLogChannelRow()],
+      });
+    }
+
+    if (interaction.customId === 'honeypot_log_channel' && interaction.isChannelSelectMenu()) {
+      session.logChannelId = interaction.values[0];
+      setupSessions.set(key, session);
+      return interaction.update({
+        embeds: [new EmbedBuilder().setTitle('Honeypot Setup: Warning Message').setColor('#F1C40F').setDescription('Choose the warning format sent in the honeypot channel.')],
         components: [buildMessageTypeRow()],
       });
     }
@@ -189,6 +210,7 @@ module.exports = {
         { guildId: interaction.guildId },
         {
           channelId: session.channelId,
+          logChannelId: session.logChannelId,
           enabled: true,
           action: session.action || 'ban',
           deleteMessages: session.deleteMessages !== false,
@@ -203,7 +225,7 @@ module.exports = {
       );
       setupSessions.delete(key);
       return interaction.update({
-        content: `Honeypot enabled in <#${document.channelId}>. Messages from non-staff members will trigger **${document.action}**.`,
+        content: `Honeypot enabled in <#${document.channelId}>. Logs will be sent to ${document.logChannelId ? `<#${document.logChannelId}>` : 'the trap channel'}. Messages from non-staff members will trigger **${document.action}**.`,
         embeds: [],
         components: [],
       }).catch(() => interaction.reply({ content: `Honeypot enabled in <#${document.channelId}>.`, ephemeral: true }));

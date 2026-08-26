@@ -147,6 +147,24 @@ module.exports = {
                             return null;
                         });
                     }
+                    const logChannel = honeypot.logChannelId
+                        ? (message.guild.channels.cache.get(honeypot.logChannelId) || await message.guild.channels.fetch(honeypot.logChannelId).catch(() => null))
+                        : honeypotChannel;
+                    if (logChannel && logChannel.id !== honeypotChannel.id) {
+                        await logChannel.send({
+                            embeds: [new discord.EmbedBuilder()
+                                .setColor('#ED4245')
+                                .setTitle('Honeypot Triggered')
+                                .setDescription(`<@${message.author.id}> triggered the honeypot in <#${honeypot.channelId}>.`)
+                                .addFields(
+                                    { name: 'Action', value: action, inline: true },
+                                    { name: 'User ID', value: message.author.id, inline: true },
+                                    { name: 'Message', value: message.content.slice(0, 1024) || 'No text content' }
+                                )
+                                .setTimestamp()],
+                            allowedMentions: { parse: [] },
+                        }).catch(error => console.error(`[Honeypot] Failed to send log in channel ${logChannel.id}:`, error.message));
+                    }
                     return;
                 }
                 const AutoModModel = mongoose.models.AutoModRule;
