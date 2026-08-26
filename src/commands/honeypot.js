@@ -202,7 +202,11 @@ module.exports = {
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
       setupSessions.delete(key);
-      return interaction.reply({ content: `Honeypot enabled in <#${document.channelId}>. Messages from non-staff members will be deleted and the author banned.`, ephemeral: true });
+      return interaction.update({
+        content: `Honeypot enabled in <#${document.channelId}>. Messages from non-staff members will trigger **${document.action}**.`,
+        embeds: [],
+        components: [],
+      }).catch(() => interaction.reply({ content: `Honeypot enabled in <#${document.channelId}>.`, ephemeral: true }));
     }
   },
 };
