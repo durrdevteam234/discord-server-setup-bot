@@ -7,7 +7,6 @@
  Gubby,
  Nuntu,
  Moosa,
- Azul,
  Hoshi,
  Cosy,
  Purple Cone,
