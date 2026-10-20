@@ -17,54 +17,59 @@ module.exports = {
       const guild = member.guild;
 
       // ── Leave Message ────────────────────────────────────────────
-      const settings = (await readData('settings.json')) || {};
-      const serverSettings = settings[guild.id] || {};
-      if (serverSettings.welcomeEnabled !== false) {
-        const channelId = serverSettings.welcomeChannelId;
-        if (channelId) {
-          // Cache first, fall back to a live fetch (cache can be empty
-          // right after a Render restart / cold start).
-          const targetChannel =
-            guild.channels.cache.get(channelId) ||
-            (await guild.channels.fetch(channelId).catch(() => null));
-          if (targetChannel) {
-            const template = serverSettings.leaveMessage || '👋 Goodbye {user}... We will miss you!';
-            const finalMessage = resolveMessage(template, member, guild);
-            const imageEnabled = serverSettings.welcomeImage === true || ['true', 'yes', 'on', '1'].includes(String(serverSettings.welcomeImage).toLowerCase());
-            if (imageEnabled) {
-              const image = await generateWelcomeImage({
-                username: member.user.username,
-                serverName: guild.name,
-                avatarURL: member.user.displayAvatarURL({ extension: 'png', size: 256 }),
-                variant: 'leave',
-              });
-              if (serverSettings.welcomeEmbed !== false) {
-                const imageEmbed = new EmbedBuilder()
-                  .setColor('#8a6a2f')
-                  .setTitle(member.user.username)
-                  .setDescription(`${member.user.username} has left ${guild.name}`)
-                  .setImage('attachment://leave.png')
+      try {
+        const settings = (await readData('settings.json')) || {};
+        const serverSettings = settings[guild.id] || {};
+        if (serverSettings.welcomeEnabled !== false) {
+          const channelId = serverSettings.welcomeChannelId;
+          if (channelId) {
+            // Cache first, fall back to a live fetch (cache can be empty
+            // right after a Render restart / cold start).
+            const targetChannel =
+              guild.channels.cache.get(channelId) ||
+              (await guild.channels.fetch(channelId).catch(() => null));
+            if (targetChannel) {
+              const template = serverSettings.leaveMessage || '👋 Goodbye {user}... We will miss you!';
+              const finalMessage = resolveMessage(template, member, guild);
+              const imageEnabled = serverSettings.welcomeImage === true || ['true', 'yes', 'on', '1'].includes(String(serverSettings.welcomeImage).toLowerCase());
+              if (imageEnabled) {
+                const image = await generateWelcomeImage({
+                  username: member.user.username,
+                  serverName: guild.name,
+                  avatarURL: member.user.displayAvatarURL({ extension: 'png', size: 256 }),
+                  variant: 'leave',
+                });
+                if (serverSettings.welcomeEmbed !== false) {
+                  const imageEmbed = new EmbedBuilder()
+                    .setColor('#8a6a2f')
+                    .setTitle(member.user.username)
+                    .setDescription(`${member.user.username} has left ${guild.name}`)
+                    .setImage('attachment://leave.png')
+                    .setTimestamp();
+                  await targetChannel.send({ embeds: [imageEmbed], files: [new AttachmentBuilder(image, { name: 'leave.png' })] }).catch(() => null);
+                } else {
+                  await targetChannel.send({ content: finalMessage, files: [new AttachmentBuilder(image, { name: 'leave.png' })] }).catch(() => null);
+                }
+              } else if (serverSettings.welcomeEmbed !== false) {
+                const embed = new EmbedBuilder()
+                  .setColor('#FF0000')
+                  .setTitle('👋 Goodbye')
+                  .setDescription(finalMessage)
+                  .setThumbnail(member.user.displayAvatarURL({ size: 128 }))
+                  .setFooter({ text: `Member Count: ${guild.memberCount}` })
                   .setTimestamp();
-                await targetChannel.send({ embeds: [imageEmbed], files: [new AttachmentBuilder(image, { name: 'leave.png' })] }).catch(() => null);
+                await targetChannel.send({ embeds: [embed] }).catch(() => null);
               } else {
-                await targetChannel.send({ content: finalMessage, files: [new AttachmentBuilder(image, { name: 'leave.png' })] }).catch(() => null);
+                await targetChannel.send(finalMessage).catch(() => null);
               }
-            } else if (serverSettings.welcomeEmbed !== false) {
-              const embed = new EmbedBuilder()
-                .setColor('#FF0000')
-                .setTitle('👋 Goodbye')
-                .setDescription(finalMessage)
-                .setThumbnail(member.user.displayAvatarURL({ size: 128 }))
-                .setFooter({ text: `Member Count: ${guild.memberCount}` })
-                .setTimestamp();
-              await targetChannel.send({ embeds: [embed] }).catch(() => null);
             } else {
-              await targetChannel.send(finalMessage).catch(() => null);
+              console.warn(`[GuildMemberRemove] Configured welcome channel ${channelId} not found in guild ${guild.id}`);
             }
-          } else {
-            console.warn(`[GuildMemberRemove] Configured welcome channel ${channelId} not found in guild ${guild.id}`);
           }
         }
+
+      } catch (error) {
+        console.error('[GuildMemberRemove] Leave message failed:', error.message);
       }
 
       // ── Invite Tracking ──────────────────────────────────────────

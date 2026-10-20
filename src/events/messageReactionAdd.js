@@ -18,6 +18,11 @@ module.exports = {
             return;
         }
 
+        const reactionRolesCmd = botClient.commands.get('reactionroles');
+        if (reactionRolesCmd && typeof reactionRolesCmd.handleReaction === 'function') {
+            await reactionRolesCmd.handleReaction(reaction, user, true).catch(() => null);
+        }
+
         const starboardCmd = botClient.commands.get('starboard');
         if (starboardCmd && typeof starboardCmd.handleReaction === 'function') {
             await starboardCmd.handleReaction(reaction, user, true, botClient).catch(() => null);

@@ -10,15 +10,7 @@ module.exports = {
   name: 'warnings',
 
   async execute(interaction, client) {
-    // Standardize checking layer to see if it is a real interaction or text mock
-    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options && !interaction.isMock ? true : false);
-
-    if (isInteraction) {
-      await interaction.deferReply().catch(() => null);
-    } else {
-      // Safely monitor prefix status updates to prevent multiple text outputs
-      interaction.processingMessage = await interaction.reply('⏳ Querying collection histories...').catch(() => null);
-    }
+    await interaction.deferReply().catch(() => null);
 
     const guild = interaction.guild;
     const memberExecutor = interaction.member;
@@ -26,7 +18,7 @@ module.exports = {
 
     if (!memberExecutor.permissions.has(PermissionFlagsBits.ModerateMembers)) {
       const msg = '❌ You need Moderate Members permission!';
-      return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+      return interaction.editReply({ content: msg });
     }
 
     try {
@@ -34,7 +26,7 @@ module.exports = {
 
       if (!user) {
         const msg = '❌ Please mention a valid user or provide a valid user ID.';
-        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+        return interaction.editReply({ content: msg });
       }
 
       // 🌟 ADAPTER RECONSTRUCTION: Safely parsing historical records out of your setup array maps
@@ -43,7 +35,7 @@ module.exports = {
 
       if (userWarnings.length === 0) {
         const msg = `✅ **${user.username}** has no active warnings on this server!`;
-        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply({ content: msg });
+        return interaction.editReply({ content: msg });
       }
       
       const embed = new EmbedBuilder()
@@ -61,14 +53,13 @@ module.exports = {
         });
       });
 
-      return isInteraction ? interaction.editReply({ embeds: [embed] }) : interaction.reply({ embeds: [embed] });
+      return interaction.editReply({ embeds: [embed] });
     } catch (error) {
       console.error('Warnings error:', error);
       const msg = `❌ Error fetching warnings: ${error.message}`;
-      return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+      return interaction.editReply({ content: msg });
     }
   },
 
-  // 🌟 FIXED: Target index 0 of the string array and map tracking status overrides cleanly
   
 };

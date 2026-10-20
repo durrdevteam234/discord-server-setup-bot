@@ -31,9 +31,11 @@ function buildLabels(style, totalMembers, totalHumans, totalBots) {
 async function getMemberCounts(guild) {
   const totalMembers = guild.memberCount || 0;
 
+  // With the GuildMembers intent the cache stays complete once it has been
+  // filled, so only fetch the whole member list when the cache is short.
   let totalBots = 0;
   try {
-    const members = await guild.members.fetch();
+    const members = guild.members.cache.size >= totalMembers ? guild.members.cache : await guild.members.fetch();
     totalBots = members.filter((m) => m.user.bot).size || 0;
   } catch (err) {
     totalBots = guild.members.cache.filter((m) => m.user.bot).size || 0;
@@ -91,6 +93,23 @@ async function runLiveAnalyticsSync(guild) {
   }
 }
 
+// Discord allows 2 renames per channel every 10 minutes. Syncing on every member
+// join/leave queued renames faster than that, so syncs are coalesced to at most
+// one per guild every 5 minutes.
+const SYNC_INTERVAL_MS = 5 * 60 * 1000;
+const lastSync = new Map();
+const pendingSync = new Map();
+
+function scheduleSync(guild) {
+  if (!guild || pendingSync.has(guild.id)) return;
+  const delay = Math.max(0, (lastSync.get(guild.id) || 0) + SYNC_INTERVAL_MS - Date.now());
+  pendingSync.set(guild.id, setTimeout(async () => {
+    pendingSync.delete(guild.id);
+    lastSync.set(guild.id, Date.now());
+    await runLiveAnalyticsSync(guild);
+  }, delay));
+}
+
 async function preloadGuildMembers(client) {
   if (!client?.guilds?.cache) return;
 
@@ -102,9 +121,10 @@ async function preloadGuildMembers(client) {
 async function refreshAllAnalyticsGuilds(client) {
   if (!client?.guilds?.cache) return;
 
-  for (const guild of client.guilds.cache.values()) {
-    await runLiveAnalyticsSync(guild);
-  }
+  const AnalyticsModel = mongoose.models.AnalyticsRule;
+  if (!AnalyticsModel) return;
+  const docs = await AnalyticsModel.find({ enabled: true }, { guildId: 1 }).lean().catch(() => []);
+  for (const doc of docs) scheduleSync(client.guilds.cache.get(doc.guildId));
 }
 
 module.exports = [
@@ -112,7 +132,6 @@ module.exports = [
     name: Events.ClientReady,
     once: true,
     async execute(client) {
-      await preloadGuildMembers(client);
       await refreshAllAnalyticsGuilds(client);
       setInterval(() => refreshAllAnalyticsGuilds(client).catch(() => null), 60 * 1000);
     },
@@ -121,14 +140,14 @@ module.exports = [
     name: Events.GuildMemberAdd,
     once: false,
     async execute(member) {
-      await runLiveAnalyticsSync(member.guild);
+      scheduleSync(member.guild);
     },
   },
   {
     name: Events.GuildMemberRemove,
     once: false,
     async execute(member) {
-      await runLiveAnalyticsSync(member.guild);
+      scheduleSync(member.guild);
     },
   },
   {
@@ -136,7 +155,7 @@ module.exports = [
     once: false,
     async execute(oldGuild, newGuild) {
       if (oldGuild.premiumSubscriptionCount !== newGuild.premiumSubscriptionCount) {
-        await runLiveAnalyticsSync(newGuild);
+        scheduleSync(newGuild);
       }
     },
   },
@@ -144,14 +163,14 @@ module.exports = [
     name: Events.RoleCreate,
     once: false,
     async execute(role) {
-      await runLiveAnalyticsSync(role.guild);
+      scheduleSync(role.guild);
     },
   },
   {
     name: Events.RoleDelete,
     once: false,
     async execute(role) {
-      await runLiveAnalyticsSync(role.guild);
+      scheduleSync(role.guild);
     },
   },
 ];

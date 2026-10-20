@@ -24,38 +24,71 @@ function getModel(fileName) {
   return modelCache[collectionName];
 }
 
+// Remembers what each readData() result looked like when it was loaded, so
+// writeData() only touches keys the caller actually changed or removed.
+// Writing every key and deleting everything not in the object meant a failed
+// read (which returns {}) wiped the whole collection on the next write, and two
+// overlapping writes deleted each other's new entries.
+const loadedSnapshots = new WeakMap();
+const failedReads = new WeakSet();
+
 async function readData(fileName) {
   try {
     const Model = getModel(fileName);
     const docs = await Model.find().lean();
     const result = {};
+    const snapshot = new Map();
     for (const doc of docs) {
       result[doc._id] = doc.value;
+      snapshot.set(String(doc._id), JSON.stringify(doc.value));
     }
+    loadedSnapshots.set(result, snapshot);
     return result;
   } catch (error) {
     console.error(`Error reading ${fileName} from MongoDB:`, error.message);
-    return {};
+    const empty = {};
+    failedReads.add(empty);
+    return empty;
   }
 }
 
 async function writeData(fileName, data) {
+  if (failedReads.has(data)) {
+    console.error(`Refusing to write ${fileName}: it was loaded from a failed read and would overwrite real data.`);
+    return;
+  }
   try {
     const Model = getModel(fileName);
+    const snapshot = loadedSnapshots.get(data);
     const keys = Object.keys(data);
 
-    const bulkOps = keys.map((key) => ({
-      updateOne: {
-        filter: { _id: key },
-        update: { $set: { value: data[key] } },
-        upsert: true,
-      },
-    }));
+    const bulkOps = [];
+    for (const key of keys) {
+      const serialized = JSON.stringify(data[key]);
+      if (serialized === undefined) continue;
+      if (snapshot && snapshot.get(key) === serialized) continue;
+      bulkOps.push({
+        updateOne: {
+          filter: { _id: key },
+          update: { $set: { value: data[key] } },
+          upsert: true,
+        },
+      });
+    }
+
+    if (snapshot) {
+      const removed = [...snapshot.keys()].filter((key) => !Object.prototype.hasOwnProperty.call(data, key));
+      if (removed.length > 0) bulkOps.push({ deleteMany: { filter: { _id: { $in: removed } } } });
+    }
 
     if (bulkOps.length > 0) {
       await Model.bulkWrite(bulkOps);
     }
-    await Model.deleteMany({ _id: { $nin: keys } });
+
+    if (snapshot) {
+      for (const key of keys) snapshot.set(key, JSON.stringify(data[key]));
+      for (const key of [...snapshot.keys()]) if (!Object.prototype.hasOwnProperty.call(data, key)) snapshot.delete(key);
+    }
   } catch (error) {
     console.error(`Error writing to ${fileName} in MongoDB:`, error.message);
   }
@@ -138,7 +171,35 @@ async function findOne(query = {}) {
  * findOne() returns), so callers like `updatedConfig.levelConfig?.channelId`
  * continue to work unchanged.
  */
+// Applies the update with MongoDB's own operators on value.<path>, so concurrent
+// updates to different fields of the same guild don't overwrite each other (the
+// read-modify-write below rewrites the whole document). Falls back to it when
+// MongoDB can't apply the update in place, e.g. setting a field inside a value that
+// is currently null, or pushing onto something that isn't an array.
 async function findOneAndUpdate(query = {}, update = {}, options = {}) {
+  if (!query.guildId) {
+    console.error('[database] findOneAndUpdate currently only supports guildId-keyed documents.');
+    return null;
+  }
+  const native = {};
+  for (const op of ['$set', '$unset', '$push', '$pull']) {
+    const fields = update[op];
+    if (!fields || Object.keys(fields).length === 0) continue;
+    native[op] = {};
+    for (const [path, value] of Object.entries(fields)) native[op][`value.${path}`] = op === '$unset' ? '' : value;
+  }
+  const guildId = String(query.guildId);
+  if (Object.keys(native).length === 0) return findOne({ guildId });
+  try {
+    const Model = getModel(GUILD_CONFIG_COLLECTION);
+    const doc = await Model.findOneAndUpdate({ _id: guildId }, native, { upsert: true, new: true }).lean();
+    return { guildId, ...(doc?.value || {}) };
+  } catch (error) {
+    return legacyFindOneAndUpdate(query, update, options);
+  }
+}
+
+async function legacyFindOneAndUpdate(query = {}, update = {}, options = {}) {
   try {
     if (!query.guildId) {
       console.error('[database] findOneAndUpdate currently only supports guildId-keyed documents.');
@@ -198,8 +259,15 @@ async function findOneAndUpdate(query = {}, update = {}, options = {}) {
   }
 }
 
+// /cute saves its style on the guild config document (cuteStyle), so read it from there.
+async function getCuteStyle(guildId) {
+  if (!guildId) return 'off';
+  const config = await findOne({ guildId });
+  return config?.cuteStyle || 'off';
+}
+
 // Export the new global fallback along with your existing schema methods
-module.exports = { readData, writeData, getModel, findOne, findOneAndUpdate };
+module.exports = { readData, writeData, getModel, findOne, findOneAndUpdate, getCuteStyle };
 
 // ============================================================
 // ANALYTICS HELPERS (added for the ServerMiser dashboard)

@@ -35,21 +35,12 @@ module.exports = {
   name: 'cat',
 
   async execute(interaction) {
-    const settings = db.readData('settings.json') || {};
-    const currentGuildSettings = settings[interaction.guildId] || {};
-
-    if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false) {
-      return interaction.reply({ 
-        content: '❌ The Fun Module is currently disabled on this server!', 
-        flags: [MessageFlags.Ephemeral] 
-      }).catch(() => null);
-    }
     
     const randomFact = CAT_FACTS[Math.floor(Math.random() * CAT_FACTS.length)];
     const randomGif = CAT_GIFS[Math.floor(Math.random() * CAT_GIFS.length)];
     
     let cuteStyle = 'off';
-    try { const cuteData = db.readData('cute.json') || {}; cuteStyle = cuteData[interaction.guildId] || 'off'; } catch (e) {}
+    try { cuteStyle = await db.getCuteStyle(interaction.guildId); } catch (e) {}
     const isCuteActive = cuteStyle !== 'off';
 
     const embed = new EmbedBuilder()

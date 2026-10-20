@@ -84,7 +84,10 @@ module.exports = {
 
         // Build response text
         const template = responder.responses[Math.floor(Math.random() * responder.responses.length)] || '';
-        const rendered = parseVariables(template, message, { trigger: responder.trigger });
+        // {args} was documented but never filled in: pass the text after the trigger.
+        const triggerText = String(responder.trigger || '');
+        const args = content.toLowerCase().startsWith(triggerText.toLowerCase()) ? content.slice(triggerText.length).trim() : '';
+        const rendered = parseVariables(template, message, { trigger: responder.trigger, args });
 
         // Optionally delete the trigger message
         if (responder.deleteTrigger) {
@@ -100,9 +103,16 @@ module.exports = {
 
         // Deliver
         if (rendered) {
-          const payload = responder.useEmbed
-            ? { embeds: [new EmbedBuilder().setColor(responder.embedColor || '#5865F2').setTitle(responder.embedTitle || null).setDescription(rendered)] }
-            : { content: rendered };
+          // {message} and {args} echo what the member typed, so only allow pings for users
+          // and for roles the admin wrote into the template itself. Otherwise anyone could
+          // make the bot ping @everyone by including it in their message.
+          const templateRoles = [...template.matchAll(/<@&(\d+)>/g)].map((m) => m[1]);
+          const payload = {
+            ...(responder.useEmbed
+              ? { embeds: [new EmbedBuilder().setColor(responder.embedColor || '#5865F2').setTitle(responder.embedTitle || null).setDescription(rendered)] }
+              : { content: rendered }),
+            allowedMentions: { parse: ['users'], roles: templateRoles },
+          };
 
           if (responder.replyMode === 'dm') {
             await message.author.send(payload).catch(() => null);

@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { outranks } = require('../utils/hierarchy');
 const { logAction } = require('../utils/auditLog');
 const db = require('../utils/database'); // Restored your internal adapter mapping
 const { createCase } = require('../utils/moderationCases');
@@ -13,24 +14,16 @@ module.exports = {
   name: 'warn',
 
   async execute(interaction, client) {
-    // Standardize checking layer to see if it is a real interaction or text mock
-    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options && !interaction.isMock ? true : false);
-
-    if (isInteraction) {
-      await interaction.deferReply().catch(() => null);
-    } else {
-      // Safely monitor prefix status updates to prevent multiple text outputs
-      interaction.processingMessage = await interaction.reply('⏳ Writing infraction to cluster logs...').catch(() => null);
-    }
+    await interaction.deferReply().catch(() => null);
 
     const guild = interaction.guild;
-    const author = isInteraction ? interaction.user : interaction.author; 
+    const author = interaction.user;
     const memberExecutor = interaction.member;
     const guildId = interaction.guildId;
 
     if (!memberExecutor.permissions.has(PermissionFlagsBits.ModerateMembers)) {
       const msg = '❌ You need Moderate Members permission to issue warnings!';
-      return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+      return interaction.editReply({ content: msg });
     }
 
     try {
@@ -39,18 +32,23 @@ module.exports = {
 
       if (!user) {
         const msg = '❌ Please mention a valid user or provide a valid user ID.';
-        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+        return interaction.editReply({ content: msg });
       }
 
       const member = await guild.members.fetch({ user: user.id, force: true }).catch(() => null);
       if (!member) {
         const msg = '❌ This user is not in the server! You cannot warn someone who is not here.';
-        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+        return interaction.editReply({ content: msg });
+      }
+
+      if (!outranks(memberExecutor, member)) {
+        const msg = '❌ You cannot warn someone with an equal or higher role than yours.';
+        return interaction.editReply({ content: msg });
       }
 
       if (!reason) {
-        const msg = '❌ Please provide a reason for the warning. Use: `|warn @user <reason>`';
-        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+        const msg = '❌ Please provide a reason for the warning.';
+        return interaction.editReply({ content: msg });
       }
 
       // 🌟 ADAPTER OPERATION: Safely updating through your custom json/mongodb schema wrapper
@@ -70,27 +68,6 @@ module.exports = {
       // DM the user safely
       await user.send(`⚠️ You have been warned in **${guild.name}**.\n**Reason:** ${reason}`).catch(() => null);
 
-      const guildConfig = (await db.findOne({ guildId })) || {};
-      const legacySettings = (await db.readData('settings.json')) || {};
-      const currentGuildSettings = { ...(legacySettings[guildId] || {}), ...(guildConfig || {}) };
-
-      if (currentGuildSettings.modLogsEnabled && currentGuildSettings.unifiedLogChannelId) {
-        const modLogsChannel = guild.channels.cache.get(currentGuildSettings.unifiedLogChannelId) || await guild.channels.fetch(currentGuildSettings.unifiedLogChannelId).catch(() => null);
-
-        if (modLogsChannel) {
-          const embedLog = new EmbedBuilder()
-            .setColor('#FFD700')
-            .setTitle('🛡️ Unified Moderation: User Warned')
-            .addFields(
-              { name: 'Target User', value: `${user.username} (${user.id})`, inline: true },
-              { name: 'Responsible Staff', value: `${author.username}`, inline: true },
-              { name: 'Total Infractions', value: totalWarnings.toString(), inline: true },
-              { name: 'Reason Given', value: reason }
-            )
-            .setTimestamp();
-          await modLogsChannel.send({ embeds: [embedLog] }).catch(() => null);
-        }
-      }
 
       await logAction(guild, 'User Warned', author, `User: ${user.username}, Reason: ${reason}`);
       const moderationCase = await createCase({ guildId, action: 'warn', target: user, moderator: author, reason });
@@ -100,14 +77,13 @@ module.exports = {
         .setTitle('⚠️ User Warned')
         .setDescription(`${user.username} has been warned.\nReason: ${reason}\nTotal warnings: **${totalWarnings}**\nCase: **#${moderationCase.caseNumber}**`);
 
-      return isInteraction ? interaction.editReply({ embeds: [embed] }) : interaction.reply({ embeds: [embed] });
+      return interaction.editReply({ embeds: [embed] });
     } catch (error) {
       console.error('Warn error:', error);
       const msg = `❌ Error running warning system: ${error.message}`;
-      return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+      return interaction.editReply({ content: msg });
     }
   },
 
-  // 🌟 FIXED: Implemented clean argument text parsing index and status update redirects
   
 };

@@ -38,24 +38,11 @@ module.exports = {
       await interaction.deferReply({ ephemeral: true }).catch(() => null);
     }
 
-    // 📡 DYNAMIC ADAPTER PARAMETER RESOLUTION
-    let status = null;
-    let channel = null;
-
-    if (interaction.options && typeof interaction.options.getChannel === 'function') {
-      // PROCESSED VIA NATIVE APPLICATION SLASH OPTIONS
-      status = interaction.options.getString('status');
-      channel = interaction.options.getChannel('channel');
-    } else {
-      // PROCESSED VIA PREFIX MOCK EMULATOR ADAPTER FLOWS
-      const rawTextArgs = interaction.options?.getString('status') || '';
-      const parsedArray = rawTextArgs.split(/ +/);
-      status = parsedArray[0] ? parsedArray[0].toLowerCase() : null;
-      channel = guild.channels.cache.get(parsedArray[1]?.replace(/[^0-9]/g, '')) || interaction.channel || null;
-    }
+    const status = interaction.options.getString('status');
+    const channel = interaction.options.getChannel('channel');
 
     if (status !== 'on' && status !== 'off') {
-      const usageNotice = '❌ **Invalid syntax:** Use `|mod-logs-toggle <on|off> [#channel]`';
+      const usageNotice = '❌ Choose `on` or `off` for the status.';
       return interaction.deferred || interaction.replied ? interaction.editReply({ content: usageNotice }) : interaction.reply({ content: usageNotice, ephemeral: true });
     }
 

@@ -34,22 +34,13 @@ module.exports = {
 
     async execute(interaction) {
         // 1. Unified database architecture lookup
-        const mainSettings = db.readData('settings.json') || {};
-        const currentGuildSettings = mainSettings[interaction.guildId] || {};
-
-        if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false) {
-            return interaction.reply({ 
-                content: '🔒 The **Fun Module** features have been globally disabled by an administrator.', 
-                flags: [MessageFlags.Ephemeral] 
-            }).catch(() => null);
-        }
 
         // 2. Perform randomization calculation
         const chosenFlavor = FLAVORS[Math.floor(Math.random() * FLAVORS.length)];
         
         // 3. Dynamic Font Style Layout Extraction
         let cuteStyle = 'off';
-        try { const cuteData = db.readData('cute.json') || {}; cuteStyle = cuteData[interaction.guildId] || 'off'; } catch (e) {}
+        try { cuteStyle = await db.getCuteStyle(interaction.guildId); } catch (e) {}
         const isCuteActive = cuteStyle !== 'off';
 
         // 4. Construct high-quality embed response

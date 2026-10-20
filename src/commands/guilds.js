@@ -32,7 +32,7 @@ module.exports = {
     .setDMPermission(false),
 
   async execute(interaction, client) {
-    const userId = interaction.user?.id || interaction.author?.id; // Simplified user ID check
+    const userId = interaction.user.id;
 
     if (userId !== OWNER_ID) {
       return interaction.reply({ content: "❌ Error: This command can only be used by the Bot Owner!", ephemeral: true }).catch(() => null);

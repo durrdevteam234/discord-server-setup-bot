@@ -771,7 +771,7 @@ async function handleInteraction(interaction) {
     const embed = new EmbedBuilder()
       .setTitle('✅ Suggestions Module Active!')
       .setColor('#57F287')
-      .setDescription('Setup complete. Members can now run `/suggestions submit` or `|suggestions submit`.')
+      .setDescription('Setup complete. Members can now run `/suggestions submit`.')
       .addFields(
         { name: 'Submission Channel', value: `<#${session.channelId}>`,                              inline: true },
         { name: 'Staff Channel',      value: session.staffChannelId ? `<#${session.staffChannelId}>` : 'None', inline: true },
@@ -818,7 +818,7 @@ async function handleInteraction(interaction) {
 // ─── Vote Button Handler ──────────────────────────────────────────────────────
 
 async function handleVoteButton(interaction, direction, number) {
-  const entry = await SuggestionEntry.findOne({ guildId: interaction.guildId, suggestionNumber: number });
+  let entry = await SuggestionEntry.findOne({ guildId: interaction.guildId, suggestionNumber: number });
   if (!entry) {
     return interaction.reply({ content: '❌ Suggestion not found.', ephemeral: true });
   }
@@ -831,34 +831,19 @@ async function handleVoteButton(interaction, direction, number) {
     return interaction.reply({ content: "❌ You can't vote on your own suggestion.", ephemeral: true });
   }
 
-  const upSet   = new Set(entry.upvotes);
-  const downSet = new Set(entry.downvotes);
-  let replyText;
-
-  if (direction === 'up') {
-    if (upSet.has(userId)) {
-      upSet.delete(userId);
-      replyText = '↩️ Removed your upvote.';
-    } else {
-      upSet.add(userId);
-      downSet.delete(userId);
-      replyText = '👍 You upvoted this suggestion.';
-    }
-  } else {
-    if (downSet.has(userId)) {
-      downSet.delete(userId);
-      replyText = '↩️ Removed your downvote.';
-    } else {
-      downSet.add(userId);
-      upSet.delete(userId);
-      replyText = '👎 You downvoted this suggestion.';
-    }
-  }
-
-  entry.upvotes   = [...upSet];
-  entry.downvotes = [...downSet];
-  entry.updatedAt = new Date();
-  await entry.save();
+  // Atomic vote updates: loading the arrays, editing them and saving the document
+  // back lost votes when several people clicked at once.
+  const mine = direction === 'up' ? 'upvotes' : 'downvotes';
+  const other = direction === 'up' ? 'downvotes' : 'upvotes';
+  const alreadyVoted = entry[mine].includes(userId);
+  const update = alreadyVoted
+    ? { $pull: { [mine]: userId }, $set: { updatedAt: new Date() } }
+    : { $addToSet: { [mine]: userId }, $pull: { [other]: userId }, $set: { updatedAt: new Date() } };
+  const updated = await SuggestionEntry.findOneAndUpdate({ _id: entry._id }, update, { new: true });
+  if (updated) entry = updated;
+  const replyText = alreadyVoted
+    ? (direction === 'up' ? '↩️ Removed your upvote.' : '↩️ Removed your downvote.')
+    : (direction === 'up' ? '👍 You upvoted this suggestion.' : '👎 You downvoted this suggestion.');
 
   // Update the embed votes field
   const author = cfg.anonymousMode

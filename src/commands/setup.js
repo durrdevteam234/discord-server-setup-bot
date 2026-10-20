@@ -38,8 +38,10 @@ async function handleBackup(interaction) {
 async function handleRestore(interaction) {
   const name = interaction.options.getString('name').trim().toLowerCase();
   const section = interaction.options.getString('section');
+  // Restoring many roles/channels takes longer than Discord's 3-second reply window.
+  await interaction.deferReply({ ephemeral: true });
   const template = await SetupTemplate.findOne({ guildId: interaction.guildId, name });
-  if (!template) return interaction.reply({ content: `Setup template **${name}** was not found.`, ephemeral: true });
+  if (!template) return interaction.editReply({ content: `Setup template **${name}** was not found.` });
   const snapshot = template.snapshot || {};
   let restored = [];
   if (section === 'config' && snapshot.config) {
@@ -71,7 +73,7 @@ async function handleRestore(interaction) {
     }
     restored.push('channels');
   }
-  return interaction.reply({ content: restored.length ? `Restored **${restored.join(', ')}** from setup template **${name}**.` : 'Nothing was restored from that template.', ephemeral: true });
+  return interaction.editReply({ content: restored.length ? `Restored **${restored.join(', ')}** from setup template **${name}**.` : 'Nothing was restored from that template.' });
 }
 
 module.exports = {
@@ -119,49 +121,42 @@ module.exports = {
   name: 'setup',
 
   async execute(interaction, client) {
-    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : false;
     const memberExecutor = interaction.member;
 
     if (!memberExecutor.permissions.has(PermissionFlagsBits.Administrator) && 
         !memberExecutor.permissions.has(PermissionFlagsBits.ManageGuild)) {
       const msg = '❌ You need **Administrator** or **Manage Server** permissions to use the setup configurations!';
-      return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
+      return interaction.reply({ content: msg, ephemeral: true });
     }
 
-    if (isInteraction) {
-      const subcommand = interaction.options.getSubcommand();
-      if (subcommand === 'backup') return handleBackup(interaction);
-      if (subcommand === 'restore') return handleRestore(interaction);
+    const subcommand = interaction.options.getSubcommand();
+    if (subcommand === 'backup') return handleBackup(interaction);
+    // Provisioning creates an Administrator role (and can delete every channel), and
+    // restore can recreate roles with any saved permissions, so both need Administrator,
+    // not just Manage Server.
+    if (!memberExecutor.permissions.has(PermissionFlagsBits.Administrator)) {
+      return interaction.reply({ content: '❌ Provisioning and restoring templates require **Administrator**.', ephemeral: true });
     }
+    if (subcommand === 'restore') return handleRestore(interaction);
+    await interaction.deferReply({ ephemeral: true });
 
-    if (isInteraction) {
-      await interaction.deferReply({ ephemeral: true });
-    } else {
-      await interaction.reply('⏳ Initializing configuration routine...').catch(() => null);
-    }
+    const template = interaction.options.getString('template');
 
-    const template = isInteraction 
-      ? interaction.options.getString('template') 
-      : interaction.options.getString('template');
-      
-    const clear = isInteraction 
-      ? (interaction.options.getBoolean('clear') || false) 
-      : interaction.options.getBoolean('clear');
-      
+    const clear = interaction.options.getBoolean('clear') || false;
+
     const guild = interaction.guild;
     const callerUser = interaction.user;
 
     try {
-      const guildConfig = await database.findOne({ guildId: guild.id }).catch(() => null) || {};
+      const guildConfig = (await database.findOne({ guildId: guild.id }).catch(() => null)) || {};
       let cuteStyle = 'off';
       try { cuteStyle = guildConfig.cuteStyle || 'off'; } catch (_) {}
-      
+
       const isCuteActive = cuteStyle !== 'off';
 
       if (clear) {
         const clearMsg = '🗑️ Clearing existing channels...';
-        if (isInteraction) await interaction.editReply(clearMsg);
-        else await interaction.channel.send(clearMsg).catch(() => null);
+        await interaction.editReply(clearMsg);
 
         for (const channel of guild.channels.cache.values()) {
           if (channel.id === interaction.channelId || channel.id === interaction.channel?.id) continue; 
@@ -181,8 +176,7 @@ module.exports = {
       const staffCatName = formatCute('Staff Only', cuteStyle, '🔒');
 
       const catMsg = '📁 Provisioning secure category shells...';
-      if (isInteraction) await interaction.editReply(catMsg);
-      else await interaction.channel.send(catMsg).catch(() => null);
+      await interaction.editReply(catMsg);
 
       // 👥 1. INSTANTIATE SYSTEM ROLES STACK (Muted role entirely dropped as requested)
       const adminRole = await guild.roles.create({ name: 'System Administrator', color: '#FF0000', permissions: [PermissionFlagsBits.Administrator] });
@@ -286,7 +280,7 @@ module.exports = {
           { id: memberRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.Speak] }
         ]
       });
-      
+
       const systemsCategory = await guild.channels.create({ 
         name: botCatName, 
         type: ChannelType.GuildCategory,
@@ -317,9 +311,8 @@ module.exports = {
         ]
       });
       const chanMsg = '📢 Initializing layout generation matrices...';
-      if (isInteraction) await interaction.editReply(chanMsg);
-      else await interaction.channel.send(chanMsg).catch(() => null);
-      
+      await interaction.editReply(chanMsg);
+
       // Seed base system infrastructure nodes across categories
       const channels = {
         // Important Shell Layer
@@ -447,17 +440,12 @@ module.exports = {
           { name: 'Permissions Matrix', value: '🟢 Corrected Split Logic Verified' }
         );
 
-      if (isInteraction) {
-        await interaction.editReply({ embeds: [embed] }).catch(() => null);
-      } else {
-        await interaction.channel.send({ embeds: [embed] }).catch(() => null);
-      }
+      await interaction.editReply({ embeds: [embed] }).catch(() => null);
 
       if (clear) {
-        const originChannel = guild.channels.cache.get(interaction.channelId) || await guild.channels.fetch(interaction.channelId).catch(() => null);
+        const originChannel = guild.channels.cache.get(interaction.channelId) || (await guild.channels.fetch(interaction.channelId).catch(() => null));
         if (originChannel) await originChannel.delete().catch(() => null);
       }
-
     } catch (error) {
       console.error('Setup failed:', error);
 
@@ -466,11 +454,7 @@ module.exports = {
         await database.incrementCounter('totalSetups');
       } catch (e) {}
 
-      if (isInteraction) {
-        await interaction.editReply(`❌ Setup failed: ${error.message}`).catch(() => null);
-      } else {
-        await interaction.channel.send(`❌ Setup failed: ${error.message}`).catch(() => null);
-      }
+      await interaction.editReply(`❌ Setup failed: ${error.message}`).catch(() => null);
     }
   },
 

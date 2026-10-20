@@ -28,14 +28,22 @@ module.exports = {
     const subcommand = interaction.options.getSubcommand();
     if (subcommand === 'search') {
       const query = interaction.options.getString('query').trim();
-      const numeric = Number(query.replace(/^#/, ''));
-      const filter = Number.isInteger(numeric) && numeric > 0
+      // User IDs are all digits too, so only short numbers count as case numbers.
+      const caseQuery = query.replace(/^#/, '');
+      const numeric = /^\d{1,9}$/.test(caseQuery) ? Number(caseQuery) : NaN;
+      const filter = numeric > 0
         ? { guildId: interaction.guildId, caseNumber: numeric }
         : { guildId: interaction.guildId, $or: [{ targetId: query }, { targetTag: new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') }] };
       const records = await ModerationCase.find(filter).sort({ createdAt: -1 }).limit(25).lean();
       if (!records.length) return interaction.reply({ content: 'No matching moderation cases found.', ephemeral: true });
       const embed = new EmbedBuilder().setTitle('Moderation Case Search').setColor('#5865F2');
-      embed.setDescription(records.map(record => `**Case #${record.caseNumber}** | ${record.action.toUpperCase()} | <@${record.targetId}>\n${record.reason}\n<t:${Math.floor(new Date(record.createdAt).getTime() / 1000)}:R>`).join('\n\n'));
+      const lines = records.map(record => `**Case #${record.caseNumber}** | ${record.action.toUpperCase()} | <@${record.targetId}>\n${String(record.reason).slice(0, 300)}\n<t:${Math.floor(new Date(record.createdAt).getTime() / 1000)}:R>`);
+      let description = '';
+      for (const line of lines) {
+        if (description.length + line.length + 2 > 4000) break;
+        description += (description ? '\n\n' : '') + line;
+      }
+      embed.setDescription(description);
       return interaction.reply({ embeds: [embed], ephemeral: true });
     }
 

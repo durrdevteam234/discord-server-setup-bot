@@ -31,12 +31,7 @@ module.exports = {
   name: 'cute',
 
   async execute(interaction) {
-    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : false;
-
-    // 🌟 FIX: Instantly extend the Discord token lifetime to 15 minutes
-    if (isInteraction) {
-      await interaction.deferReply({ ephemeral: true }).catch(() => null);
-    }
+    await interaction.deferReply({ ephemeral: true }).catch(() => null);
 
     const memberExecutor = interaction.member;
     const guildId = interaction.guildId;
@@ -44,7 +39,7 @@ module.exports = {
     if (!memberExecutor.permissions.has(PermissionFlagsBits.Administrator) && 
         !memberExecutor.permissions.has(PermissionFlagsBits.ManageGuild)) {
       const msg = '❌ You need **Administrator** or **Manage Server** permissions to use this configuration!';
-      return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+      return interaction.editReply({ content: msg });
     }
 
     try {
@@ -92,12 +87,10 @@ module.exports = {
         );
 
       // 🌟 FIX: Complete deferred token cycle with editReply
-      return isInteraction ? interaction.editReply({ embeds: [embed] }) : interaction.reply({ embeds: [embed] });
+      return interaction.editReply({ embeds: [embed] });
     } catch (error) {
       console.error('Cute command configuration error:', error);
-      return isInteraction 
-        ? interaction.editReply({ content: `❌ Config Error: ${error.message}` }).catch(() => null)
-        : interaction.reply({ content: `❌ Config Error: ${error.message}` }).catch(() => null);
+      return interaction.editReply({ content: `❌ Config Error: ${error.message}` }).catch(() => null);
     }
   },
 

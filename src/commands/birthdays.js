@@ -20,6 +20,7 @@ const BirthdayConfigSchema = new mongoose.Schema({
   announcementTemplate: { type: String, default: '{mentions} 🎂 Happy Birthday! 🎉' },
   announcementTime: { type: String, default: '09:00' },
   enabled: { type: Boolean, default: true },
+  lastAnnouncedDate: { type: String, default: null },
 });
 
 const BirthdayEntrySchema = new mongoose.Schema({
@@ -85,6 +86,11 @@ function getAge(birthYear, month, day) {
   return age;
 }
 
+function toMinutes(hhmm) {
+  const [h, m] = String(hhmm || '00:00').split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
 function utcHHMM() {
   const now = new Date();
   const hh = String(now.getUTCHours()).padStart(2, '0');
@@ -95,6 +101,51 @@ function utcHHMM() {
 function todayUTCMonthDay() {
   const now = new Date();
   return { month: now.getUTCMonth() + 1, day: now.getUTCDate() };
+}
+
+// Accepts "UTC", "UTC+5", "UTC-8", "UTC+5:30" (GMT works too) or an IANA name like
+// "America/New_York". Returns null for anything else.
+function parseTimezone(input) {
+  const value = String(input ?? 'UTC').trim();
+  const offset = value.match(/^(?:UTC|GMT)?\s*(?:([+-])(\d{1,2})(?::?(\d{2}))?)?$/i);
+  if (offset && (offset[1] || /^(UTC|GMT)$/i.test(value))) {
+    const minutes = offset[1] ? (Number(offset[2]) * 60 + Number(offset[3] || 0)) * (offset[1] === '-' ? -1 : 1) : 0;
+    if (Math.abs(minutes) > 14 * 60) return null;
+    return { offsetMinutes: minutes };
+  }
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value });
+    return { zone: value };
+  } catch {
+    return null;
+  }
+}
+
+// Today's month/day in the member's own timezone. The timezone used to be saved
+// and shown but ignored, so everyone's birthday followed UTC.
+function localMonthDay(timezone, now = new Date()) {
+  const tz = parseTimezone(timezone) || { offsetMinutes: 0 };
+  if (tz.zone) {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz.zone, month: 'numeric', day: 'numeric' }).formatToParts(now);
+    return { month: Number(parts.find((p) => p.type === 'month').value), day: Number(parts.find((p) => p.type === 'day').value) };
+  }
+  const shifted = new Date(now.getTime() + tz.offsetMinutes * 60000);
+  return { month: shifted.getUTCMonth() + 1, day: shifted.getUTCDate() };
+}
+
+// Entries whose birthday is today in their own timezone. Any timezone is within a
+// day of UTC, so only yesterday/today/tomorrow (UTC) need to be loaded.
+async function findTodaysBirthdays(guildId) {
+  const now = Date.now();
+  const days = [-1, 0, 1].map((d) => {
+    const date = new Date(now + d * 86400000);
+    return { month: date.getUTCMonth() + 1, day: date.getUTCDate() };
+  });
+  const candidates = await BirthdayEntry.find({ guildId, $or: days });
+  return candidates.filter((entry) => {
+    const local = localMonthDay(entry.timezone);
+    return local.month === entry.month && local.day === entry.day;
+  });
 }
 
 function buildAnnouncementEmbed(entries, members, config) {
@@ -133,8 +184,16 @@ async function runBirthdayAnnouncement(guild, config, client) {
   const channel = guild.channels.cache.get(config.channelId);
   if (!channel) return;
 
-  const { month, day } = todayUTCMonthDay();
-  const entries = await BirthdayEntry.find({ guildId: guild.id, month, day });
+  // Take yesterday's birthday role back first. The 24h removal timer below is lost
+  // whenever the bot restarts, which left people with the role forever.
+  const entries = await findTodaysBirthdays(guild.id);
+  const birthdayRole = config.roleId ? guild.roles.cache.get(config.roleId) : null;
+  if (birthdayRole) {
+    const todayIds = new Set(entries.map((e) => e.userId));
+    for (const holder of birthdayRole.members.values()) {
+      if (!todayIds.has(holder.id)) await holder.roles.remove(birthdayRole).catch(() => null);
+    }
+  }
   if (!entries.length) return;
 
   const members = (
@@ -186,8 +245,12 @@ function startScheduler(client) {
       return;
     }
 
+    // Announce once the time has passed and record the date on the config, instead
+    // of only during the exact minute: a slow loop or a restart at that minute used
+    // to skip the day, and an in-memory record re-announced after restarts.
     for (const config of configs) {
-      if (config.announcementTime !== currentTime) continue;
+      if (toMinutes(currentTime) < toMinutes(config.announcementTime)) continue;
+      if (config.lastAnnouncedDate === nowDate) continue;
       const key = `${config.guildId}_${year}_${month}_${day}`;
       if (global.__birthdayAnnounced.has(key)) continue;
 
@@ -195,6 +258,8 @@ function startScheduler(client) {
       if (!guild) continue;
 
       global.__birthdayAnnounced.add(key);
+      config.lastAnnouncedDate = nowDate;
+      await config.save().catch(() => null);
       await runBirthdayAnnouncement(guild, config, client).catch(() => null);
     }
   }, 60 * 1000);
@@ -327,7 +392,10 @@ async function execute(interaction) {
     const month = interaction.options.getInteger('month');
     const day = interaction.options.getInteger('day');
     const year = interaction.options.getInteger('year') ?? null;
-    const timezone = interaction.options.getString('timezone') ?? 'UTC';
+    const timezone = (interaction.options.getString('timezone') ?? 'UTC').trim();
+    if (!parseTimezone(timezone)) {
+      return interaction.editReply('❌ Use a timezone like `UTC`, `UTC+5`, `UTC-8`, `UTC+5:30` or `America/New_York`.');
+    }
 
     if (!isValidBirthday(month, day)) {
       return interaction.editReply('❌ That date is invalid (e.g. February 30 doesn\'t exist).');
@@ -391,8 +459,7 @@ async function execute(interaction) {
 
   // ── today ─────────────────────────────────────────────────────────────────
   if (sub === 'today') {
-    const { month, day } = todayUTCMonthDay();
-    const entries = await BirthdayEntry.find({ guildId: guild.id, month, day });
+    const entries = await findTodaysBirthdays(guild.id);
 
     if (!entries.length) {
       return interaction.editReply('No birthdays today! 😔');
@@ -409,7 +476,7 @@ async function execute(interaction) {
 
     const embed = new EmbedBuilder()
       .setColor('#FF69B4')
-      .setTitle(`🎂 Birthdays Today — ${MONTH_NAMES[month - 1]} ${day}`)
+      .setTitle(`🎂 Birthdays Today — ${MONTH_NAMES[todayUTCMonthDay().month - 1]} ${todayUTCMonthDay().day} (UTC)`)
       .setDescription(lines.join('\n'));
 
     return interaction.editReply({ embeds: [embed] });
@@ -685,7 +752,7 @@ async function handleInteraction(interaction, client) {
         { name: 'Channel',    value: `<#${session.channelId}>`,                              inline: true },
         { name: 'Role',       value: session.roleId ? `<@&${session.roleId}>` : 'None',      inline: true },
         { name: 'Time (UTC)', value: session.announcementTime,                               inline: true },
-        { name: 'Next Steps', value: '• Members: `/birthdays set` or `|birthdays set`\n• View upcoming: `/birthdays upcoming`\n• `/birthdays set-time` to adjust time\n• `/birthdays toggle` to pause/resume' }
+        { name: 'Next Steps', value: '• Members: `/birthdays set`\n• View upcoming: `/birthdays upcoming`\n• `/birthdays set-time` to adjust time\n• `/birthdays toggle` to pause/resume' }
       );
     return interaction.update({ embeds: [embed], components: [] }).catch(() => null);
   }

@@ -42,21 +42,20 @@ const {
     name: 'automodrule',
   
     async execute(interaction, client) {
-       const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : false;
       const guild = interaction.guild;
       if (!guild) return;
       const guildId = guild.id;
       const userId = interaction.user.id;
-  
+
       if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild) && 
           !interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
         const lockMsg = '❌ **Access Denied:** You need `Manage Server` or `Administrator` privileges.';
-        return isInteraction ? interaction.reply({ content: lockMsg, ephemeral: true }) : interaction.reply(lockMsg);
+        return interaction.reply({ content: lockMsg, ephemeral: true });
       }
-  
-      if (isInteraction) await interaction.deferReply({ ephemeral: true }).catch(() => null);
-      const commandName = isInteraction ? interaction.options.getSubcommand() : interaction.content?.split(/ +/)?.[1]?.toLowerCase();
-  
+
+      await interaction.deferReply({ ephemeral: true }).catch(() => null);
+      const commandName = interaction.options.getSubcommand();
+
       // ==========================================
       // MODULE FLOW A: SETUP WIZARD IGNITION
       // ==========================================
@@ -98,43 +97,39 @@ const {
             ])
         );
   
-        return isInteraction 
-          ? interaction.editReply({ embeds: [step1Embed], components: [selectRow] }) 
-          : interaction.reply({ embeds: [step1Embed], components: [selectRow] });
+        return interaction.editReply({ embeds: [step1Embed], components: [selectRow] });
       }
-    // ==========================================
-    // MODULE FLOW B: EDIT SKIPPABLE WIZARD
-    // ==========================================
-    if (commandName === 'edit') {
-        const activeRules = await AutoModModel.find({ guildId, wizardActive: false }).catch(() => null);
-        if (!activeRules || activeRules.length === 0) {
-          const noRuleErr = '❌ **Configuration Error:** No active AutoMod rules discovered inside this server context.';
-          return isInteraction ? interaction.editReply(noRuleErr) : interaction.reply(noRuleErr);
+      // ==========================================
+      // MODULE FLOW B: EDIT SKIPPABLE WIZARD
+      // ==========================================
+      if (commandName === 'edit') {
+          const activeRules = await AutoModModel.find({ guildId, wizardActive: false }).catch(() => null);
+          if (!activeRules || activeRules.length === 0) {
+            const noRuleErr = '❌ **Configuration Error:** No active AutoMod rules discovered inside this server context.';
+            return interaction.editReply(noRuleErr);
+          }
+    
+          const editSelectionEmbed = new EmbedBuilder()
+            .setTitle('✏️ Edit AutoMod Configuration Grid')
+            .setDescription('Select the existing live background protection rule node you want to modify from the dropdown menu underneath:')
+            .setColor('#E67E22');
+    
+          const targetOptions = activeRules.map(rule => ({
+              label: `${rule.filterType.toUpperCase()} Filter`.slice(0, 24),
+              description: `Fingerprint Snowflake reference ID: ${rule.ruleId.slice(-8)}`,
+              value: rule.ruleId
+          }));
+    
+          const selectMenu = new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+              .setCustomId('automod_edit_select_target')
+              .setPlaceholder('Choose an existing rules framework node...')
+              .addOptions(targetOptions)
+          );
+    
+          return interaction.editReply({ embeds: [editSelectionEmbed], components: [selectMenu] });
         }
-  
-        const editSelectionEmbed = new EmbedBuilder()
-          .setTitle('✏️ Edit AutoMod Configuration Grid')
-          .setDescription('Select the existing live background protection rule node you want to modify from the dropdown menu underneath:')
-          .setColor('#E67E22');
-  
-        const targetOptions = activeRules.map(rule => ({
-            label: `${rule.filterType.toUpperCase()} Filter`.slice(0, 24),
-            description: `Fingerprint Snowflake reference ID: ${rule.ruleId.slice(-8)}`,
-            value: rule.ruleId
-        }));
-  
-        const selectMenu = new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId('automod_edit_select_target')
-            .setPlaceholder('Choose an existing rules framework node...')
-            .addOptions(targetOptions)
-        );
-  
-        return isInteraction 
-          ? interaction.editReply({ embeds: [editSelectionEmbed], components: [selectMenu] }) 
-          : interaction.reply({ embeds: [editSelectionEmbed], components: [selectMenu] });
-      }
-  
+
       // ==========================================
       // MODULE FLOW C: SAFE DOUBLE-CHECK DELETION
       // ==========================================
@@ -142,7 +137,7 @@ const {
         const activeRules = await AutoModModel.find({ guildId, wizardActive: false }).catch(() => null);
         if (!activeRules || activeRules.length === 0) {
           const noRuleErr = '❌ **Configuration Error:** No active AutoMod rules exist to purge.';
-          return isInteraction ? interaction.editReply(noRuleErr) : interaction.reply(noRuleErr);
+          return interaction.editReply(noRuleErr);
         }
   
         const deleteEmbed = new EmbedBuilder()
@@ -162,9 +157,7 @@ const {
             .addOptions(targetOptions)
         );
   
-        return isInteraction 
-          ? interaction.editReply({ embeds: [deleteEmbed], components: [selectMenu] }) 
-          : interaction.reply({ embeds: [deleteEmbed], components: [selectMenu] });
+        return interaction.editReply({ embeds: [deleteEmbed], components: [selectMenu] });
       }
     },
   // ========================================================

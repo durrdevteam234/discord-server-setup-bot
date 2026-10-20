@@ -25,16 +25,11 @@ module.exports = {
         ),
 
     async execute(interaction) {
-        const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : false;
-
-        // Extend interaction token lifetime right away to stop timeout crashes
-        if (isInteraction) {
-            await interaction.deferReply().catch(() => null);
-        }
+        await interaction.deferReply().catch(() => null);
 
         const guildId = interaction.guildId;
-        const actionOption = isInteraction ? interaction.options.getString('action') : interaction.options.getString('action');
-        const channelOption = isInteraction ? interaction.options.getChannel('channel') : interaction.options.getChannel('channel');
+        const actionOption = interaction.options.getString('action');
+        const channelOption = interaction.options.getChannel('channel');
 
         // Fetch current active server settings through your specific dynamic adapter format
         const settings = (await db.readData('settings.json')) || {};
@@ -46,13 +41,13 @@ module.exports = {
             await db.findOneAndUpdate({ guildId }, { $set: { auditChannelId: null } }, { upsert: true }).catch(() => null);
 
             const msg = '🛑 Audit logs have been successfully disabled for this server.';
-            return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+            return interaction.editReply({ content: msg });
         }
 
         if (actionOption === 'enable') {
             if (!channelOption) {
                 const msg = '❌ Please specify a target channel to send logs to! Usage: `/setup-audit action:Enable Logs channel:#channel`';
-                return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+                return interaction.editReply({ content: msg });
             }
 
             settings[guildId].auditChannelId = channelOption.id;
@@ -60,7 +55,7 @@ module.exports = {
             await db.findOneAndUpdate({ guildId }, { $set: { auditChannelId: channelOption.id } }, { upsert: true }).catch(() => null);
 
             const msg = `✅ Audit logs have been successfully enabled and routed to ${channelOption}!`;
-            return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+            return interaction.editReply({ content: msg });
         }
     },
 

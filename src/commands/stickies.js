@@ -10,6 +10,21 @@ const stickyTemplates = {
   custom: '📌 Sticky Message\n\nThis is a custom sticky. Update it any time from the admin control panel.'
 };
 
+// Stickies are stored per channel under stickies.<channelId>. Older configs kept a
+// single server-wide sticky under `sticky`, which is still honoured for its channel.
+function stickyForChannel(guildConfig, channelId) {
+  const sticky = guildConfig.stickies?.[channelId];
+  if (sticky?.messageId) return sticky;
+  if (guildConfig.sticky?.channelId === channelId && guildConfig.sticky.messageId) return guildConfig.sticky;
+  return null;
+}
+
+function stickyUnset(guildConfig, channelId) {
+  const unset = { [`stickies.${channelId}`]: '' };
+  if (guildConfig.sticky?.channelId === channelId) unset.sticky = '';
+  return unset;
+}
+
 function buildStickyBody(stickyType, customText) {
   let baseText = stickyTemplates[stickyType] || stickyTemplates.custom;
 
@@ -57,6 +72,7 @@ function buildStickyPayload(stickyType, customText, messageMode) {
 }
 
 module.exports = {
+  stickyForChannel,
   data: new SlashCommandBuilder()
     .setName('stickies')
     .setDescription('Deploy and manage a single sticky message per channel.')
@@ -137,24 +153,13 @@ module.exports = {
 
     if (subcommand === 'clear') {
       const guildConfig = (await database.findOne({ guildId }).catch(() => null)) || {};
-      const sticky = guildConfig.sticky || {};
-
-      if (sticky.channelId && sticky.messageId) {
-        const previousChannel = interaction.guild.channels.cache.get(sticky.channelId) || await interaction.guild.channels.fetch(sticky.channelId).catch(() => null);
-        if (previousChannel && previousChannel.isTextBased?.()) {
-          const previousSticky = await previousChannel.messages.fetch(sticky.messageId).catch(() => null);
-          if (previousSticky) {
-            await previousSticky.delete().catch(() => null);
-          }
-        }
+      const sticky = stickyForChannel(guildConfig, targetChannel.id);
+      if (!sticky) {
+        return interaction.reply({ content: `❌ There is no active sticky in ${targetChannel}.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
       }
-
-      await database.findOneAndUpdate(
-        { guildId },
-        { $unset: { 'sticky.channelId': '', 'sticky.messageId': '', 'sticky.type': '', 'sticky.text': '', 'sticky.createdAt': '', 'sticky.style': '' } },
-        { upsert: true }
-      ).catch(() => null);
-
+      const previousSticky = await targetChannel.messages.fetch(sticky.messageId).catch(() => null);
+      if (previousSticky) await previousSticky.delete().catch(() => null);
+      await database.findOneAndUpdate({ guildId }, { $unset: stickyUnset(guildConfig, targetChannel.id) }).catch(() => null);
       return interaction.reply({
         content: `✅ The active sticky in ${targetChannel} has been removed.`,
         flags: [MessageFlags.Ephemeral],
@@ -178,44 +183,37 @@ module.exports = {
     }
 
     const guildConfig = (await database.findOne({ guildId }).catch(() => null)) || {};
-    const activeSticky = guildConfig.sticky || {};
-
-    if (activeSticky.channelId && activeSticky.messageId) {
-      const previousChannel = interaction.guild.channels.cache.get(activeSticky.channelId) || await interaction.guild.channels.fetch(activeSticky.channelId).catch(() => null);
-      if (previousChannel && previousChannel.isTextBased?.()) {
-        const previousSticky = await previousChannel.messages.fetch(activeSticky.messageId).catch(() => null);
-        if (previousSticky) {
-          await previousSticky.delete().catch(() => null);
-        }
-      }
+    const activeSticky = stickyForChannel(guildConfig, targetChannel.id);
+    if (activeSticky) {
+      const previousSticky = await targetChannel.messages.fetch(activeSticky.messageId).catch(() => null);
+      if (previousSticky) await previousSticky.delete().catch(() => null);
     }
-
     const stickyMessage = await targetChannel.send(finalPayload).catch(() => null);
-
     if (!stickyMessage) {
       return interaction.reply({
         content: '❌ I could not post the sticky message in that channel.',
         flags: [MessageFlags.Ephemeral],
       }).catch(() => null);
     }
-
+    const legacyUnset = stickyUnset(guildConfig, targetChannel.id);
+    delete legacyUnset[`stickies.${targetChannel.id}`];
     await database.findOneAndUpdate(
       { guildId },
       {
         $set: {
-          'sticky.channelId': targetChannel.id,
-          'sticky.messageId': stickyMessage.id,
-          'sticky.type': stickyType,
-          'sticky.text': finalText,
-          'sticky.style': messageMode,
-          'sticky.createdAt': new Date().toISOString(),
-        }
-      },
-      { upsert: true }
+          [`stickies.${targetChannel.id}`]: {
+            messageId: stickyMessage.id,
+            type: stickyType,
+            text: finalText,
+            style: messageMode,
+            createdAt: new Date().toISOString(),
+          },
+        },
+        ...(Object.keys(legacyUnset).length ? { $unset: legacyUnset } : {}),
+      }
     ).catch(() => null);
-
     return interaction.reply({
-      content: `✅ Sticky deployed to ${targetChannel}. The previous sticky was deleted automatically.`,
+      content: `✅ Sticky deployed to ${targetChannel}. Any previous sticky in that channel was replaced.`,
       flags: [MessageFlags.Ephemeral],
     }).catch(() => null);
   },

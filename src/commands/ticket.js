@@ -83,7 +83,7 @@ module.exports = {
     }
 
     const subcommand = interaction.options.getSubcommand();
-    const guildConfig = await database.findOne({ guildId }).catch(() => null) || {};
+    const guildConfig = (await database.findOne({ guildId }).catch(() => null)) || {};
     let cuteStyle = 'off';
     try { cuteStyle = guildConfig.cuteStyle || 'off'; } catch (_) {}
 
@@ -269,7 +269,7 @@ module.exports = {
     const guildId = interaction.guildId;
     const user = interaction.user;
 
-    const guildConfig = await database.findOne({ guildId }).catch(() => null) || {};
+    const guildConfig = (await database.findOne({ guildId }).catch(() => null)) || {};
     let cuteStyle = 'off';
     try { cuteStyle = guildConfig.cuteStyle || 'off'; } catch (_) {}
 
@@ -590,7 +590,10 @@ module.exports = {
           const ticketThread = await panelChannel.threads.create({
             name: threadName,
             autoArchiveDuration: 1440, // 24 hours
-            type: 'PRIVATE_THREAD'
+            // discord.js v14 needs the enum; the old 'PRIVATE_THREAD' string was
+            // ignored and every ticket became a public thread.
+            type: ChannelType.PrivateThread,
+            invitable: false
           }).catch(err => {
             console.error('Thread creation error:', err);
             return null;
@@ -667,6 +670,8 @@ module.exports = {
             topic: `Ticket #${ticketNumber} opened by ${user.tag}`,
             permissionOverwrites: [
               { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+              // Without this the bot can't see the channel it just created unless it has Administrator.
+              { id: guild.members.me.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels] },
               { id: user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ReadMessageHistory] },
               { id: ticketConfig.staffRoleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages] }
             ],

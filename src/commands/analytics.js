@@ -125,22 +125,21 @@ const {
     startAnalyticsRefresher,
   
     async execute(interaction, client) {
-      const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : false;
       const guild = interaction.guild;
       if (!guild) return;
       const guildId = guild.id;
       const memberExecutor = interaction.member;
-  
+
       if (!memberExecutor.permissions.has(PermissionFlagsBits.ManageGuild) && 
           !memberExecutor.permissions.has(PermissionFlagsBits.Administrator)) {
         const lockMsg = '❌ **Access Denied:** You need `Manage Server` or `Administrator` privileges.';
-        return isInteraction ? interaction.reply({ content: lockMsg, ephemeral: true }) : interaction.reply(lockMsg);
+        return interaction.reply({ content: lockMsg, ephemeral: true });
       }
-  
-      if (isInteraction) await interaction.deferReply({ ephemeral: true }).catch(() => null);
-      const doc = await AnalyticsModel.findOne({ guildId }).catch(() => null) || new AnalyticsModel({ guildId });
-      const commandName = isInteraction ? interaction.options.getSubcommand() : interaction.content?.split(/ +/)[1]?.toLowerCase();
-  
+
+      await interaction.deferReply({ ephemeral: true }).catch(() => null);
+      const doc = (await AnalyticsModel.findOne({ guildId }).catch(() => null)) || new AnalyticsModel({ guildId });
+      const commandName = interaction.options.getSubcommand();
+
       // ==========================================
       // MODULE FLOW A: SETUP COUNTER SYSTEM
       // ==========================================
@@ -179,37 +178,35 @@ const {
           .setDescription(`Successfully created your stats tracking layout pinned cleanly at position \`0\` of your server list.\n\n🔄 **Auto-Refresh:** These counters update automatically every **1 minute** — you don't need to run \`/analytics update\` yourself. That command is still there if you ever want to force an immediate refresh.`)
           .setColor('#2ECC71');
   
-        return isInteraction ? interaction.editReply({ embeds: [successEmbed] }) : interaction.reply({ embeds: [successEmbed] });
+        return interaction.editReply({ embeds: [successEmbed] });
       }
-    // ==========================================
-    // MODULE FLOW B: EDIT COUNTER CONFIGURATIONS
-    // ==========================================
-    if (commandName === 'edit') {
-        if (!doc.enabled || !doc.categoryId) {
-          const err = '❌ **Error:** No analytics setup was found to edit. Run `/analytics setup` first.';
-          return isInteraction ? interaction.editReply(err) : interaction.reply(err);
+      // ==========================================
+      // MODULE FLOW B: EDIT COUNTER CONFIGURATIONS
+      // ==========================================
+      if (commandName === 'edit') {
+          if (!doc.enabled || !doc.categoryId) {
+            const err = '❌ **Error:** No analytics setup was found to edit. Run `/analytics setup` first.';
+            return interaction.editReply(err);
+          }
+    
+          doc.wizardActive = true;
+          doc.wizardStep = 1;
+          doc.wizardUserId = interaction.user.id;
+          await doc.save();
+    
+          const editEmbed = new EmbedBuilder()
+            .setTitle('✏️ Edit Stats Channels: Step 1')
+            .setDescription(`Would you like to change the category wrapper name? Current name is **📊 SERVER STATS**.\n\nClick **Change Name** to input modifications, or click the **Skip This Step** button to preserve it.`)
+            .setColor('#E67E22');
+    
+          const buttonsRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`analytics_edit_action_modify_${interaction.user.id}`).setLabel('Change Name Layout').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId(`analytics_edit_action_skip_${interaction.user.id}`).setLabel('Skip This Step').setStyle(ButtonStyle.Secondary)
+          );
+    
+          return interaction.editReply({ embeds: [editEmbed], components: [buttonsRow] });
         }
-  
-        doc.wizardActive = true;
-        doc.wizardStep = 1;
-        doc.wizardUserId = interaction.user.id;
-        await doc.save();
-  
-        const editEmbed = new EmbedBuilder()
-          .setTitle('✏️ Edit Stats Channels: Step 1')
-          .setDescription(`Would you like to change the category wrapper name? Current name is **📊 SERVER STATS**.\n\nClick **Change Name** to input modifications, or click the **Skip This Step** button to preserve it.`)
-          .setColor('#E67E22');
-  
-        const buttonsRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId(`analytics_edit_action_modify_${interaction.user.id}`).setLabel('Change Name Layout').setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId(`analytics_edit_action_skip_${interaction.user.id}`).setLabel('Skip This Step').setStyle(ButtonStyle.Secondary)
-        );
-  
-        return isInteraction 
-          ? interaction.editReply({ embeds: [editEmbed], components: [buttonsRow] }) 
-          : interaction.reply({ embeds: [editEmbed], components: [buttonsRow] });
-      }
-  
+
       // ==========================================
       // MODULE FLOW C: PURGE COUNTERS FROM SERVER
       // ==========================================
@@ -228,18 +225,16 @@ const {
           new ButtonBuilder().setCustomId('analytics_delete_cancel').setLabel('Cancel Operation').setStyle(ButtonStyle.Secondary)
         );
   
-        return isInteraction 
-          ? interaction.editReply({ embeds: [confirmEmbed], components: [buttonsRow] }) 
-          : interaction.reply({ embeds: [confirmEmbed], components: [buttonsRow] });
+        return interaction.editReply({ embeds: [confirmEmbed], components: [buttonsRow] });
       }
-  
+
       // ==========================================
       // MODULE FLOW D: FORCE UPDATE REFRESH LOOP
       // ==========================================
       if (commandName === 'update') {
         if (!doc.enabled || !doc.categoryId) {
           const err = '❌ **Error:** No active layouts configured. Run `/analytics setup` first.';
-          return isInteraction ? interaction.editReply(err) : interaction.reply(err);
+          return interaction.editReply(err);
         }
   
         const { totalMembers, totalBots, totalHumans } = await getMemberCounts(guild);
@@ -250,7 +245,7 @@ const {
         const bc = guild.channels.cache.get(doc.botsChannelId); if (bc) await bc.setName(botsLabel).catch(() => null);
 
         const updateMsg = '🔄 **Counters Refreshed:** Live analytics tracking nodes updated successfully. (These also auto-refresh every 1 minute on their own.)';
-        return isInteraction ? interaction.editReply({ content: updateMsg }) : interaction.reply(updateMsg);
+        return interaction.editReply({ content: updateMsg });
       }
     },
   // ========================================================

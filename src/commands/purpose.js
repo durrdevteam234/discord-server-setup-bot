@@ -1,10 +1,9 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { readData } = require('../utils/database');
+const { getCuteStyle } = require('../utils/database');
 
 // Central configuration renderer used by both execution modes
-function generatePurposeEmbed(client, guildId) {
-  const cuteData = readData('cute.json') || {};
-  const currentStyle = cuteData[guildId];
+async function generatePurposeEmbed(client, guildId) {
+  const currentStyle = await getCuteStyle(guildId);
   const isCute = currentStyle && currentStyle !== 'off';
 
   const botUser = client.user;
@@ -46,22 +45,11 @@ module.exports = {
   // Gateway A: /purpose
   async execute(interaction) {
     try {
-      const embed = generatePurposeEmbed(interaction.client, interaction.guildId);
+      const embed = await generatePurposeEmbed(interaction.client, interaction.guildId);
       await interaction.reply({ embeds: [embed] });
     } catch (error) {
       console.error('Purpose Slash command failed:', error);
       await interaction.reply({ content: `❌ Error: ${error.message}`, ephemeral: true });
-    }
-  },
-
-  // Gateway B: |purpose fallback
-  async runPrefix(message, args) {
-    try {
-      const embed = generatePurposeEmbed(message.client, message.guild.id);
-      await message.reply({ embeds: [embed] });
-    } catch (error) {
-      console.error('Purpose Prefix command failed:', error);
-      await message.reply({ content: `❌ Error: ${error.message}` });
     }
   }
 };

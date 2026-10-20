@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { outranks } = require('../utils/hierarchy');
 const { logAction } = require('../utils/auditLog');
 const db = require('../utils/database'); // Restored your internal adapter mapping
 const { createCase } = require('../utils/moderationCases');
@@ -18,24 +19,16 @@ module.exports = {
   name: 'mute',
 
   async execute(interaction, client) {
-    // Correct checking layer to see if it is a real interaction or text mock
-    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options && !interaction.isMock ? true : false);
-
-    if (isInteraction) {
-      await interaction.deferReply().catch(() => null);
-    } else {
-      // Keep track of the initial processing status message for text commands
-      interaction.processingMessage = await interaction.reply('⏳ Processing mute transaction...').catch(() => null);
-    }
+    await interaction.deferReply().catch(() => null);
 
     const guild = interaction.guild;
-    const author = isInteraction ? interaction.user : interaction.author; 
+    const author = interaction.user;
     const memberExecutor = interaction.member;
     const guildId = interaction.guildId;
 
     if (!memberExecutor.permissions.has(PermissionFlagsBits.ModerateMembers)) {
       const msg = '❌ You need Moderate Members permission!';
-      return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+      return interaction.editReply({ content: msg });
     }
 
     try {
@@ -45,18 +38,18 @@ module.exports = {
 
       if (!user) {
         const msg = '❌ Please mention a valid user or provide a valid user ID.';
-        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+        return interaction.editReply({ content: msg });
       }
 
       const member = await guild.members.fetch({ user: user.id, force: true }).catch(() => null);
       if (!member) {
         const msg = '❌ This user is not in the server! You cannot mute someone who is not here.';
-        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+        return interaction.editReply({ content: msg });
       }
 
       if (!durationInput) {
         const msg = '❌ Please specify a duration. Example: `30m`, `4h`, `5d`, `2w`';
-        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+        return interaction.editReply({ content: msg });
       }
 
       const durationRegex = /^(\d+)([mhdw])$/i;
@@ -64,7 +57,7 @@ module.exports = {
 
       if (!match) {
         const msg = '❌ Invalid format! Use numbers followed by unit: `m` (minutes), `h` (hours), `d` (days), `w` (weeks).';
-        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+        return interaction.editReply({ content: msg });
       }
 
       const amount = parseInt(match[1], 10);
@@ -81,12 +74,12 @@ module.exports = {
 
       if (durationMs < MIN_MS || durationMs > MAX_MS) {
         const msg = '❌ Duration must be between **1 minute (1m)** and **28 days (28d)**!';
-        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+        return interaction.editReply({ content: msg });
       }
 
-      if (!member.moderatable) {
+      if (!member.moderatable || !outranks(memberExecutor, member)) {
         const msg = '❌ I cannot mute this user! Their roles might be higher than mine or yours.';
-        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+        return interaction.editReply({ content: msg });
       }
 
       await member.timeout(durationMs, reason);
@@ -96,27 +89,6 @@ module.exports = {
       mutes[guildId][user.id] = { muteEnd: Date.now() + durationMs, reason };
       await db.writeData('mutes.json', mutes);
 
-      const guildConfig = (await db.findOne({ guildId })) || {};
-      const legacySettings = (await db.readData('settings.json')) || {};
-      const currentGuildSettings = { ...(legacySettings[guildId] || {}), ...(guildConfig || {}) };
-
-      if (currentGuildSettings.modLogsEnabled && currentGuildSettings.unifiedLogChannelId) {
-        const modLogsChannel = guild.channels.cache.get(currentGuildSettings.unifiedLogChannelId) || await guild.channels.fetch(currentGuildSettings.unifiedLogChannelId).catch(() => null);
-
-        if (modLogsChannel) {
-          const embedLog = new EmbedBuilder()
-            .setColor('#FFFF00')
-            .setTitle('🛡️ Unified Moderation: User Muted')
-            .addFields(
-              { name: 'Target User', value: `${user.username} (${user.id})`, inline: true },
-              { name: 'Responsible Staff', value: `${author.username}`, inline: true },
-              { name: 'Mute Duration', value: durationInput.toLowerCase(), inline: true },
-              { name: 'Reason Given', value: reason }
-            )
-            .setTimestamp();
-          await modLogsChannel.send({ embeds: [embedLog] }).catch(() => null);
-        }
-      }
 
       await logAction(guild, 'User Muted', author, `User: ${user.username}, Duration: ${durationInput}, Reason: ${reason}`);
       const moderationCase = await createCase({ guildId, action: 'mute', target: user, moderator: author, reason });
@@ -126,14 +98,13 @@ module.exports = {
         .setTitle('✅ User Muted')
         .setDescription(`${user.username} has been muted for ${durationInput.toLowerCase()}.\nReason: ${reason}\nCase: **#${moderationCase.caseNumber}**`);
 
-      return isInteraction ? interaction.editReply({ embeds: [embed] }) : interaction.reply({ embeds: [embed] });
+      return interaction.editReply({ embeds: [embed] });
     } catch (error) {
       console.error('Mute error:', error);
       const msg = `❌ Error muting user: ${error.message}`;
-      return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+      return interaction.editReply({ content: msg });
     }
   },
 
-  // 🌟 FIXED: Added correct input selectors and state tracking redirects
   
 };

@@ -37,9 +37,8 @@ const {
     );
   }
   
-  // Shared removal logic used by the direct-index path, the wizard, and the
-  // prefix path — keeps the warnings.json mutation + mod-logs + auditLog
-  // wiring in exactly one place.
+  // Shared removal logic used by the direct-index path and the wizard — keeps
+  // the warnings.json mutation + auditLog wiring in exactly one place.
   async function removeWarning(guild, moderator, targetUser, index) {
     const warnings = (await db.readData('warnings.json')) || {};
     const guildId = guild.id;
@@ -56,28 +55,6 @@ const {
     const remaining = userWarnings.length;
   
     // Unified mod-logs channel (same settings.json pattern as warn.js)
-    const guildConfig = (await db.findOne({ guildId })) || {};
-    const legacySettings = (await db.readData('settings.json')) || {};
-    const currentGuildSettings = { ...(legacySettings[guildId] || {}), ...(guildConfig || {}) };
-    if (currentGuildSettings.modLogsEnabled && currentGuildSettings.unifiedLogChannelId) {
-      const modLogsChannel =
-        guild.channels.cache.get(currentGuildSettings.unifiedLogChannelId) ||
-        (await guild.channels.fetch(currentGuildSettings.unifiedLogChannelId).catch(() => null));
-  
-      if (modLogsChannel) {
-        const embedLog = new EmbedBuilder()
-          .setColor('#00FF00')
-          .setTitle('🛡️ Unified Moderation: Warning Removed')
-          .addFields(
-            { name: 'Target User', value: `${targetUser.username} (${targetUser.id})`, inline: true },
-            { name: 'Responsible Staff', value: `${moderator.username}`, inline: true },
-            { name: 'Remaining Infractions', value: remaining.toString(), inline: true },
-            { name: 'Removed Reason', value: removed?.reason || 'No reason on record' }
-          )
-          .setTimestamp();
-        await modLogsChannel.send({ embeds: [embedLog] }).catch(() => null);
-      }
-    }
   
     await logAction(
       guild,
@@ -110,31 +87,25 @@ const {
     name: 'unwarn',
   
     async execute(interaction, client) {
-      const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options && !interaction.isMock ? true : false);
-  
-      if (isInteraction) {
-        await interaction.deferReply().catch(() => null);
-      } else {
-        interaction.processingMessage = await interaction.reply('⏳ Looking up infraction history...').catch(() => null);
-      }
-  
+      await interaction.deferReply().catch(() => null);
+
       const guild = interaction.guild;
-      const author = isInteraction ? interaction.user : interaction.author;
+      const author = interaction.user;
       const memberExecutor = interaction.member;
       const guildId = interaction.guildId;
-  
+
       if (!memberExecutor.permissions.has(PermissionFlagsBits.ModerateMembers)) {
         const msg = '❌ You need Moderate Members permission to remove warnings!';
-        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+        return interaction.editReply({ content: msg });
       }
-  
+
       try {
         const user = interaction.options.getUser('user');
         const rawIndex = typeof interaction.options.getInteger === 'function' ? interaction.options.getInteger('index') : null;
   
         if (!user) {
           const msg = '❌ Please mention a valid user or provide a valid user ID.';
-          return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+          return interaction.editReply({ content: msg });
         }
   
         const warnings = (await db.readData('warnings.json')) || {};
@@ -142,7 +113,7 @@ const {
   
         if (userWarnings.length === 0) {
           const msg = `✅ **${user.username}** has no warnings to remove on this server.`;
-          return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply({ content: msg });
+          return interaction.editReply({ content: msg });
         }
   
         // --------------------------------------------------------
@@ -154,7 +125,7 @@ const {
   
           if (!result.ok) {
             const msg = `❌ ${result.reason} **${user.username}** currently has ${userWarnings.length} warning(s).`;
-            return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+            return interaction.editReply({ content: msg });
           }
   
           const embed = new EmbedBuilder()
@@ -166,7 +137,7 @@ const {
               `Remaining warnings: **${result.remaining}**`
             );
   
-          return isInteraction ? interaction.editReply({ embeds: [embed] }) : interaction.reply({ embeds: [embed] });
+          return interaction.editReply({ embeds: [embed] });
         }
   
         // --------------------------------------------------------
@@ -184,9 +155,7 @@ const {
         const cancelRow = buildCancelRow();
   
         const payload = { embeds: [embed], components: [row, cancelRow] };
-        const response = isInteraction
-          ? await interaction.editReply(payload).catch(() => null)
-          : await interaction.reply(payload).catch(() => null);
+        const response = await interaction.editReply(payload).catch(() => null);
   
         if (!response || typeof response.createMessageComponentCollector !== 'function') return;
   
@@ -230,14 +199,13 @@ const {
         collector.on('end', (_collected, reason) => {
           if (reason === 'time') {
             const timeoutPayload = { content: '⌛ Warning removal wizard timed out.', embeds: [], components: [] };
-            if (isInteraction) interaction.editReply(timeoutPayload).catch(() => null);
-            else response.edit(timeoutPayload).catch(() => null);
+            interaction.editReply(timeoutPayload).catch(() => null);
           }
         });
       } catch (error) {
         console.error('Unwarn error:', error);
         const msg = `❌ Error removing warning: ${error.message}`;
-        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+        return interaction.editReply({ content: msg });
       }
     },
   

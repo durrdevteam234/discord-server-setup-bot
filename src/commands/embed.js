@@ -219,6 +219,18 @@ function loadDataIntoSession(session, data) {
   session.fields       = data.fields       || [];
 }
 
+// The target must be in this server, and the member must be able to post there
+// themselves. The send modal looked up typed IDs across every server the bot is in,
+// so an embed could be posted into a channel in a different server.
+function canPostIn(interaction, channel) {
+  return Boolean(
+    channel
+    && channel.guildId === interaction.guildId
+    && channel.isTextBased?.()
+    && channel.permissionsFor(interaction.member)?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages])
+  );
+}
+
 async function requireManageMessages(interaction) {
   if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageMessages)) {
     await interaction.reply({
@@ -241,41 +253,17 @@ async function requireManageGuild(interaction) {
   return true;
 }
 
-function isPrefixMode(interaction) {
-  return typeof interaction.isChatInputCommand === 'function' && interaction.isChatInputCommand() === false;
-}
-
-function parsePrefixArgs(interaction) {
-  const raw = String(interaction.content || '');
-  const tokens = raw.trim().split(/\s+/);
-  const sub = tokens[1] ? tokens[1].toLowerCase() : null;
-  const rawArgs = tokens.slice(2).join(' ').trim();
-
-  let targetChannel = interaction.channel;
-  if (interaction.mentions?.channels?.size > 0) {
-    targetChannel = interaction.mentions.channels.first();
-  }
-
-  return { sub, rawArgs, targetChannel };
-}
 // ─── Subcommand Handlers ─────────────────────────────────────────────────────
 
 async function handleCreate(interaction) {
-  if (!await requireManageMessages(interaction)) return;
-  if (isPrefixMode(interaction)) {
-    return interaction.reply({
-      content: '⚠️ Visual UI Modals are only available via slash commands. Please run `/embed create` to open the canvas designer.',
-    }).catch(() => null);
-  }
+  if (!(await requireManageMessages(interaction))) return;
   await interaction.showModal(buildCreateModal()).catch(() => null);
 }
 
 async function handleEdit(interaction) {
-  if (!await requireManageMessages(interaction)) return;
+  if (!(await requireManageMessages(interaction))) return;
 
-  const messageId = isPrefixMode(interaction) 
-    ? parsePrefixArgs(interaction).rawArgs.trim() 
-    : interaction.options.getString('message_id');
+  const messageId = interaction.options.getString('message_id');
 
   if (!messageId) {
     return interaction.reply({ content: '❌ Please provide a valid target message ID.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
@@ -312,9 +300,12 @@ async function handleEdit(interaction) {
 }
 
 async function handleSend(interaction) {
-  if (!await requireManageMessages(interaction)) return;
+  if (!(await requireManageMessages(interaction))) return;
 
-  const targetChannel = isPrefixMode(interaction) ? parsePrefixArgs(interaction).targetChannel : interaction.options.getChannel('channel');
+  const targetChannel = interaction.options.getChannel('channel');
+  if (!canPostIn(interaction, targetChannel)) {
+    return interaction.reply({ content: '❌ You can only send embeds to text channels in this server that you can post in.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
+  }
   const session = getSession(interaction.user.id, interaction.guildId);
 
   if (!hasSessionContent(session)) {
@@ -335,22 +326,20 @@ async function handleSend(interaction) {
     }
   }
 
-  await targetChannel.send({ embeds: [embed] }).catch(() => null);
+  const sent = await targetChannel.send({ embeds: [embed] }).catch(() => null);
+  if (!sent) return interaction.reply({ content: `❌ I couldn't send to <#${targetChannel.id}>. Check my permissions there.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
   await interaction.reply({ content: `✅ Embed sent to <#${targetChannel.id}>.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
 }
 
 async function handleFieldAdd(interaction) {
-  if (!await requireManageMessages(interaction)) return;
-  if (isPrefixMode(interaction)) {
-    return interaction.reply({ content: '❌ Visual UI Modals are only available via slash commands. Please run `/embed field add`.' }).catch(() => null);
-  }
+  if (!(await requireManageMessages(interaction))) return;
   await interaction.showModal(buildFieldAddModal()).catch(() => null);
 }
 
 async function handleFieldRemove(interaction) {
-  if (!await requireManageMessages(interaction)) return;
+  if (!(await requireManageMessages(interaction))) return;
 
-  const index = isPrefixMode(interaction) ? parseInt(parsePrefixArgs(interaction).rawArgs, 10) : interaction.options.getInteger('index');
+  const index = interaction.options.getInteger('index');
   const session = getSession(interaction.user.id, interaction.guildId);
 
   if (!Array.isArray(session.fields) || session.fields.length === 0) {
@@ -366,23 +355,23 @@ async function handleFieldRemove(interaction) {
 }
 
 async function handleImage(interaction) {
-  if (!await requireManageMessages(interaction)) return;
-  const url = isPrefixMode(interaction) ? parsePrefixArgs(interaction).rawArgs.trim() : interaction.options.getString('url');
+  if (!(await requireManageMessages(interaction))) return;
+  const url = interaction.options.getString('url');
   const session = getSession(interaction.user.id, interaction.guildId);
   session.imageUrl = url;
   await interaction.reply({ content: `✅ Image URL set.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
 }
 
 async function handleThumbnail(interaction) {
-  if (!await requireManageMessages(interaction)) return;
-  const url = isPrefixMode(interaction) ? parsePrefixArgs(interaction).rawArgs.trim() : interaction.options.getString('url');
+  if (!(await requireManageMessages(interaction))) return;
+  const url = interaction.options.getString('url');
   const session = getSession(interaction.user.id, interaction.guildId);
   session.thumbnailUrl = url;
   await interaction.reply({ content: `✅ Thumbnail URL set.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
 }
 async function handleColor(interaction) {
-  if (!await requireManageMessages(interaction)) return;
-  const raw = isPrefixMode(interaction) ? parsePrefixArgs(interaction).rawArgs.trim() : interaction.options.getString('hex');
+  if (!(await requireManageMessages(interaction))) return;
+  const raw = interaction.options.getString('hex');
   const color = parseHex(raw);
   if (color === null) {
     return interaction.reply({ content: '❌ Invalid hex color. Use format `#FF0000`.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
@@ -393,16 +382,12 @@ async function handleColor(interaction) {
 }
 
 async function handleFooter(interaction) {
-  if (!await requireManageMessages(interaction)) return;
-  
+  if (!(await requireManageMessages(interaction))) return;
+
   let text, iconUrl = null;
-  if (isPrefixMode(interaction)) {
-    text = parsePrefixArgs(interaction).rawArgs.trim();
-  } else {
-    text = interaction.options.getString('text');
-    iconUrl = interaction.options.getString('icon_url') || null;
-  }
-  
+  text = interaction.options.getString('text');
+  iconUrl = interaction.options.getString('icon_url') || null;
+
   if (!text) {
     return interaction.reply({ content: '❌ Footer text string is required.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
   }
@@ -413,16 +398,12 @@ async function handleFooter(interaction) {
 }
 
 async function handleAuthor(interaction) {
-  if (!await requireManageMessages(interaction)) return;
-  
+  if (!(await requireManageMessages(interaction))) return;
+
   let name, iconUrl = null, url = null;
-  if (isPrefixMode(interaction)) {
-    name = parsePrefixArgs(interaction).rawArgs.trim();
-  } else {
-    name = interaction.options.getString('name');
-    iconUrl = interaction.options.getString('icon_url') || null;
-    url = interaction.options.getString('url') || null;
-  }
+  name = interaction.options.getString('name');
+  iconUrl = interaction.options.getString('icon_url') || null;
+  url = interaction.options.getString('url') || null;
 
   if (!name) {
     return interaction.reply({ content: '❌ Author name string is required.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
@@ -434,7 +415,7 @@ async function handleAuthor(interaction) {
 }
 
 async function handlePreview(interaction) {
-  if (!await requireManageMessages(interaction)) return;
+  if (!(await requireManageMessages(interaction))) return;
   const session = getSession(interaction.user.id, interaction.guildId);
 
   if (!hasSessionContent(session)) {
@@ -451,15 +432,15 @@ async function handlePreview(interaction) {
 }
 
 async function handleClear(interaction) {
-  if (!await requireManageMessages(interaction)) return;
+  if (!(await requireManageMessages(interaction))) return;
   clearSession(interaction.user.id, interaction.guildId);
   await interaction.reply({ content: '✅ Session cleared.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
 }
 
 async function handleTemplateSave(interaction) {
-  if (!await requireManageGuild(interaction)) return;
+  if (!(await requireManageGuild(interaction))) return;
   
-  const name = isPrefixMode(interaction) ? parsePrefixArgs(interaction).rawArgs.trim() : interaction.options.getString('name');
+  const name = interaction.options.getString('name');
 
   if (!name) {
     return interaction.reply({ content: '❌ Please specify a unique identifier name for this template preset.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
@@ -488,9 +469,9 @@ async function handleTemplateSave(interaction) {
 }
 
 async function handleTemplateLoad(interaction) {
-  if (!await requireManageGuild(interaction)) return;
+  if (!(await requireManageGuild(interaction))) return;
   
-  const name = isPrefixMode(interaction) ? parsePrefixArgs(interaction).rawArgs.trim() : interaction.options.getString('name');
+  const name = interaction.options.getString('name');
 
   if (!name) {
     return interaction.reply({ content: '❌ Please specify a template name to recall from storage.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
@@ -511,7 +492,7 @@ async function handleTemplateLoad(interaction) {
 }
 
 async function handleTemplateList(interaction) {
-  if (!await requireManageMessages(interaction)) return;
+  if (!(await requireManageMessages(interaction))) return;
 
   const templates = await EmbedTemplate.find({ guildId: interaction.guildId }).sort({ name: 1 }).catch(() => null);
   if (!templates?.length) {
@@ -533,9 +514,9 @@ async function handleTemplateList(interaction) {
 }
 
 async function handleTemplateDelete(interaction) {
-  if (!await requireManageGuild(interaction)) return;
+  if (!(await requireManageGuild(interaction))) return;
   
-  const name = isPrefixMode(interaction) ? parsePrefixArgs(interaction).rawArgs.trim() : interaction.options.getString('name');
+  const name = interaction.options.getString('name');
 
   if (!name) {
     return interaction.reply({ content: '❌ Please provide a template name to permanently wipe.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
@@ -618,8 +599,8 @@ async function handleInteraction(interaction) {
     
     const channelId = raw.trim().replace(/[<#>]/g, '');
     const targetChannel = await interaction.client.channels.fetch(channelId).catch(() => null);
-    if (!targetChannel?.isTextBased()) {
-      return interaction.reply({ content: '❌ Could not find that channel.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
+    if (!canPostIn(interaction, targetChannel)) {
+      return interaction.reply({ content: '❌ Use a text channel in this server that you can post in.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
     }
 
     const session = getSession(user.id, guildId);
@@ -642,7 +623,8 @@ async function handleInteraction(interaction) {
       }
     }
 
-    await targetChannel.send({ embeds: [embed] }).catch(() => null);
+    const sent = await targetChannel.send({ embeds: [embed] }).catch(() => null);
+    if (!sent) return interaction.reply({ content: `❌ I couldn't send to <#${targetChannel.id}>. Check my permissions there.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
     await interaction.reply({ content: `✅ Embed successfully sent to <#${targetChannel.id}>.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
     return;
   }
@@ -663,24 +645,9 @@ async function handleInteraction(interaction) {
 
 async function execute(interaction) {
   let group, sub;
-  
-  if (isPrefixMode(interaction)) {
-    const parsed = parsePrefixArgs(interaction);
-    const tokens = String(interaction.content || '').trim().split(/\s+/);
-    
-    if (parsed.sub === 'field') {
-      group = 'field';
-      sub = tokens[2] ? tokens[2].toLowerCase() : null;
-    } else if (parsed.sub === 'template') {
-      group = 'template';
-      sub = tokens[2] ? tokens[2].toLowerCase() : null;
-    } else {
-      sub = parsed.sub;
-    }
-  } else {
-    group = interaction.options.getSubcommandGroup(false);
-    sub   = interaction.options.getSubcommand();
-  }
+
+  group = interaction.options.getSubcommandGroup(false);
+  sub   = interaction.options.getSubcommand();
 
   if (group === 'field') {
     if (sub === 'add')    return handleFieldAdd(interaction);

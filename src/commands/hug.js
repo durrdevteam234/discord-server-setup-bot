@@ -36,15 +36,6 @@ module.exports = {
   name: 'hug',
 
   async execute(interaction) {
-    const settings = db.readData('settings.json') || {};
-    const currentGuildSettings = settings[interaction.guildId] || {};
-
-    if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false) {
-      return interaction.reply({ 
-        content: '❌ The Fun Module is currently disabled on this server!', 
-        flags: [MessageFlags.Ephemeral] 
-      }).catch(() => null);
-    }
     
     const target = interaction.options.getUser('user');
     if (!target) return interaction.reply({ content: '❌ User target not found.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
@@ -58,7 +49,7 @@ module.exports = {
     const randomGif = HUG_GIFS[Math.floor(Math.random() * HUG_GIFS.length)];
     
     let cuteStyle = 'off';
-    try { const cuteData = db.readData('cute.json') || {}; cuteStyle = cuteData[interaction.guildId] || 'off'; } catch (e) {}
+    try { cuteStyle = await db.getCuteStyle(interaction.guildId); } catch (e) {}
     const isCuteActive = cuteStyle !== 'off';
 
     const embed = new EmbedBuilder()

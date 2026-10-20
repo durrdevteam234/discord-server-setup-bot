@@ -89,7 +89,6 @@ async function pingDashboard(client) {
         guildCategories: await database.getGuildCategories().catch(() => [])
     };
 
-    console.log('[Dashboard Sync] Posting payload:', payloadObject);
 
     const payload = JSON.stringify(payloadObject);
     const dashboardUrl = new URL(resolveDashboardUrl());

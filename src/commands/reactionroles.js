@@ -1,3 +1,4 @@
+const { outranksRole } = require('../utils/hierarchy');
 const { 
   SlashCommandBuilder, 
   PermissionFlagsBits, 
@@ -99,6 +100,25 @@ module.exports = {
     return processedMap;
   },
 
+  // Emoji-reaction panels: the bot reacted to the panel but nothing handled the
+  // reactions, so these panels never gave or removed roles.
+  async handleReaction(reaction, user, added) {
+    if (user.bot || !reaction.message.guild) return;
+    const guild = reaction.message.guild;
+    const guildConfig = await database.findOne({ guildId: guild.id }).catch(() => null);
+    const panel = guildConfig?.reactionRolePanels?.find((p) => p.messageId === reaction.message.id && p.type === 'reaction');
+    if (!panel) return;
+
+    const { id: emojiId, name: emojiName } = reaction.emoji;
+    const node = panel.roles.find((r) => r.emoji && (emojiId ? r.emoji.includes(emojiId) : r.emoji === emojiName));
+    if (!node) return;
+
+    const member = await guild.members.fetch(user.id).catch(() => null);
+    if (!member) return;
+    if (added) await member.roles.add(node.roleId, 'Reaction role').catch(() => null);
+    else await member.roles.remove(node.roleId, 'Reaction role').catch(() => null);
+  },
+
   buildComponents(type, rolesMap) {
     if (type === 'button') {
       const rows = [];
@@ -146,11 +166,10 @@ module.exports = {
   },
 
   async execute(interaction, client) {
-    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : false;
     const guild = interaction.guild;
     const guildId = interaction.guildId;
     const callerUser = interaction.user;
-    const sub = isInteraction ? interaction.options.getSubcommand() : interaction.options.getString('subcommand');
+    const sub = interaction.options.getSubcommand();
 
     if (!guild) return;
 
@@ -182,6 +201,9 @@ module.exports = {
       const parsedMap = this.parseRolesInput(interaction, rawMap);
       if (parsedMap.length === 0) {
         return interaction.reply({ content: '❌ Could not map any valid server roles from your inputs.', ephemeral: true });
+      }
+      if (parsedMap.some((node) => !outranksRole(interaction.member, guild.roles.cache.get(node.roleId)))) {
+        return interaction.reply({ content: '❌ You can only add roles below your own highest role (and not bot-managed roles).', ephemeral: true });
       }
 
       const panelEmbed = new EmbedBuilder()
@@ -218,7 +240,7 @@ module.exports = {
       const title = interaction.options.getString('title');
       const description = interaction.options.getString('description');
 
-      const guildConfig = await database.findOne({ guildId: guildId }).catch(() => null) || {};
+      const guildConfig = (await database.findOne({ guildId: guildId }).catch(() => null)) || {};
       const panelIndex = guildConfig.reactionRolePanels?.findIndex(p => p.messageId === messageId);
 
       if (panelIndex === undefined || panelIndex === -1) {
@@ -253,10 +275,13 @@ module.exports = {
     if (sub === 'add-role') {
       const messageId = interaction.options.getString('message_id').trim();
       const role = interaction.options.getRole('role');
+      if (!outranksRole(interaction.member, role)) {
+        return interaction.reply({ content: '❌ You can only add roles below your own highest role (and not bot-managed roles).', ephemeral: true });
+      }
       const label = interaction.options.getString('label') || role.name;
       const emoji = interaction.options.getString('emoji') || null;
 
-      const guildConfig = await database.findOne({ guildId: guildId }).catch(() => null) || {};
+      const guildConfig = (await database.findOne({ guildId: guildId }).catch(() => null)) || {};
       const panelIndex = guildConfig.reactionRolePanels?.findIndex(p => p.messageId === messageId);
 
       if (panelIndex === undefined || panelIndex === -1) {
@@ -295,7 +320,7 @@ module.exports = {
       const messageId = interaction.options.getString('message_id').trim();
       const role = interaction.options.getRole('role');
 
-      const guildConfig = await database.findOne({ guildId: guildId }).catch(() => null) || {};
+      const guildConfig = (await database.findOne({ guildId: guildId }).catch(() => null)) || {};
       const panelIndex = guildConfig.reactionRolePanels?.findIndex(p => p.messageId === messageId);
 
       if (panelIndex === undefined || panelIndex === -1) {
@@ -327,7 +352,7 @@ module.exports = {
     if (sub === 'delete-panel') {
       const messageId = interaction.options.getString('message_id').trim();
 
-      const guildConfig = await database.findOne({ guildId: guildId }).catch(() => null) || {};
+      const guildConfig = (await database.findOne({ guildId: guildId }).catch(() => null)) || {};
       const panelIndex = guildConfig.reactionRolePanels?.findIndex(p => p.messageId === messageId);
 
       if (panelIndex === undefined || panelIndex === -1) {
@@ -363,7 +388,7 @@ module.exports = {
       return interaction.reply({ content: `🧪 [Trace Simulator Log] Parsed custom action node ID: \`${traceId}\`. Simulation successful!`, ephemeral: true });
     }
 
-    const guildConfig = await database.findOne({ guildId: guildId }).catch(() => null) || {};
+    const guildConfig = (await database.findOne({ guildId: guildId }).catch(() => null)) || {};
     const panel = guildConfig.reactionRolePanels?.find(p => p.messageId === interaction.message.id);
     if (!panel) return;
 

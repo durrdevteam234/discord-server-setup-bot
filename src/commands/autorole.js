@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { outranksRole } = require('../utils/hierarchy');
 const mongoose = require('mongoose');
 
 // ==========================================
@@ -31,16 +32,13 @@ function targetRoleID(input, guild) {
 // ==========================================
 // 3. CENTRALIZED SUBCOMMAND ROUTER
 // ==========================================
-async function runSubcommand(interactionOrMessage, subCommand, roleInput, isSlash = false) {
+async function runSubcommand(interactionOrMessage, subCommand, roleInput) {
     const guild = interactionOrMessage.guild;
     const guildId = guild.id;
 
     // Abstract responses to work uniformly across message strings and interactive payloads
     const reply = async (payload) => {
-        if (isSlash) {
-            return interactionOrMessage.deferred ? interactionOrMessage.editReply(payload) : interactionOrMessage.reply(payload);
-        }
-        return interactionOrMessage.channel.send(payload);
+        return interactionOrMessage.deferred ? interactionOrMessage.editReply(payload) : interactionOrMessage.reply(payload);
     };
 
     // SUBCOMMAND: ALL
@@ -134,8 +132,11 @@ module.exports = {
         
         // Fix: Safely extract the ID string directly so targetRoleID doesn't fail on Slash selections
         const roleOption = interaction.options.getRole('role');
+        if (roleOption && !outranksRole(interaction.member, roleOption)) {
+            return interaction.editReply({ content: '❌ You can only auto-assign roles below your own highest role (and not bot-managed roles).' });
+        }
         const roleInput = roleOption ? roleOption.id : null;
 
-        await runSubcommand(interaction, subCommand, roleInput, true);
+        await runSubcommand(interaction, subCommand, roleInput);
     }
 };

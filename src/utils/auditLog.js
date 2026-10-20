@@ -14,7 +14,7 @@ async function resolveModLogChannel(guild) {
     const channelId = config.unifiedLogChannelId || config.modLogChannelId || config.mod_logs_channel;
     if (channelId) {
       const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
-      if (channel && channel.isTextBased && channel.viewable) return channel;
+      if (channel && channel.isTextBased?.() && channel.viewable) return channel;
     }
   } catch (error) {
     console.warn('[auditLog] resolveModLogChannel config lookup failed:', error.message);
@@ -25,17 +25,18 @@ async function resolveModLogChannel(guild) {
   const fallbackId = guildSettings.unifiedLogChannelId || guildSettings.modLogChannelId || guildSettings.mod_logs_channel;
   if (fallbackId) {
     const channel = guild.channels.cache.get(fallbackId) || await guild.channels.fetch(fallbackId).catch(() => null);
-    if (channel && channel.isTextBased && channel.viewable) return channel;
+    if (channel && channel.isTextBased?.() && channel.viewable) return channel;
   }
 
   const channelNames = ['mod-logs', 'moderation-logs', 'server-logs', 'staff-logs', 'logs'];
   for (const name of channelNames) {
-    const found = guild.channels.cache.find(ch => ch && ch.isTextBased && ch.name.toLowerCase() === name.toLowerCase());
+    const found = guild.channels.cache.find(ch => ch && ch.isTextBased?.() && ch.name.toLowerCase() === name.toLowerCase());
     if (found) return found;
   }
 
-  const textChannel = guild.channels.cache.find(ch => ch && ch.isTextBased && /mod|moderation|staff|logs/i.test(ch.name));
-  return textChannel || null;
+  // Only exact log-channel names: a loose match posted mod logs into channels
+  // like #modern-art or #staff-applications.
+  return null;
 }
 
 async function resolveAuditLogChannel(guild) {
@@ -46,7 +47,7 @@ async function resolveAuditLogChannel(guild) {
     const channelId = config.auditChannelId || config.audit_channel || config.auditLogChannelId || config.auditLogChannel || config.unifiedLogChannelId || config.modLogChannelId || config.mod_logs_channel;
     if (channelId) {
       const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
-      if (channel && channel.isTextBased && channel.viewable) return channel;
+      if (channel && channel.isTextBased?.() && channel.viewable) return channel;
     }
   } catch (error) {
     console.warn('[auditLog] resolveAuditLogChannel config lookup failed:', error.message);
@@ -57,17 +58,18 @@ async function resolveAuditLogChannel(guild) {
   const fallbackId = guildSettings.auditChannelId || guildSettings.audit_channel || guildSettings.auditLogChannelId || guildSettings.auditLogChannel || guildSettings.unifiedLogChannelId || guildSettings.modLogChannelId || guildSettings.mod_logs_channel;
   if (fallbackId) {
     const channel = guild.channels.cache.get(fallbackId) || await guild.channels.fetch(fallbackId).catch(() => null);
-    if (channel && channel.isTextBased && channel.viewable) return channel;
+    if (channel && channel.isTextBased?.() && channel.viewable) return channel;
   }
 
   const channelNames = ['audit-logs', 'server-logs', 'staff-logs', 'mod-logs', 'moderation-logs', 'logs'];
   for (const name of channelNames) {
-    const found = guild.channels.cache.find(ch => ch && ch.isTextBased && ch.name.toLowerCase() === name.toLowerCase());
+    const found = guild.channels.cache.find(ch => ch && ch.isTextBased?.() && ch.name.toLowerCase() === name.toLowerCase());
     if (found) return found;
   }
 
-  const textChannel = guild.channels.cache.find(ch => ch && ch.isTextBased && /audit|server|staff|logs/i.test(ch.name));
-  return textChannel || null;
+  // Only exact log-channel names: a loose match posted mod logs into channels
+  // like #modern-art or #staff-applications.
+  return null;
 }
 
 /**

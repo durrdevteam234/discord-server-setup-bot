@@ -48,14 +48,12 @@ module.exports = {
             (await client.channels.fetch(oldId).catch(() => null));
 
           const remaining = channel && channel.members ? channel.members.size : 0;
-          const ownerLeft = oldState.id === rec.ownerId;
 
-          // Owner left OR the room is now empty -> tear it down.
-          if (ownerLeft || remaining === 0) {
+          // Only tear the room down once it is empty. Deleting it when the owner
+          // left kicked everyone else out and made the "claim room" button useless.
+          if (remaining === 0) {
             if (channel) {
-              await channel
-                .delete(ownerLeft ? 'SelfVoice: owner left the room' : 'SelfVoice: room is empty')
-                .catch(() => null);
+              await channel.delete('SelfVoice: room is empty').catch(() => null);
             }
             await SelfVoiceActive.deleteOne({ channelId: oldId }).catch(() => null);
           }

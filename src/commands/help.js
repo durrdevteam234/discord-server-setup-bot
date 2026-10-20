@@ -157,8 +157,6 @@ module.exports = {
   name: 'help',
 
   async execute(interaction, client) {
-    const isInteraction = typeof interaction.isChatInputCommand === 'function' ? interaction.isChatInputCommand() : false;
-
     const first = PAGES[0];
     const payload = { embeds: [buildEmbed(first, 0)], components: [buildMenu(first.key)] };
 
@@ -166,7 +164,7 @@ module.exports = {
     const response = await interaction.fetchReply().catch(() => null);
     if (!response) return;
 
-    const authorId = isInteraction ? interaction.user.id : interaction.author.id;
+    const authorId = interaction.user.id;
 
     const collector = response.createMessageComponentCollector({
       componentType: ComponentType.StringSelect,
@@ -185,8 +183,7 @@ module.exports = {
     collector.on('end', () => {
       const disabled = buildMenu('none');
       disabled.components[0].setDisabled(true);
-      if (isInteraction) interaction.editReply({ components: [disabled] }).catch(() => null);
-      else response.edit({ components: [disabled] }).catch(() => null);
+      interaction.editReply({ components: [disabled] }).catch(() => null);
     });
   },
 };

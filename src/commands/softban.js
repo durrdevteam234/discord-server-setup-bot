@@ -1,4 +1,5 @@
 'use strict';
+const { outranks } = require('../utils/hierarchy');
 
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { createCase } = require('../utils/moderationCases');
@@ -18,7 +19,7 @@ module.exports = {
     const user = interaction.options.getUser('user');
     const reason = interaction.options.getString('reason') || 'No reason provided';
     const member = await interaction.guild.members.fetch(user.id).catch(() => null);
-    if (member && !member.bannable) return interaction.editReply('I cannot softban this member because of role hierarchy.');
+    if (member && (!member.bannable || !outranks(interaction.member, member))) return interaction.editReply('I cannot softban this member because of role hierarchy.');
 
     try {
       await interaction.guild.members.ban(user.id, { deleteMessageSeconds: 604800, reason });

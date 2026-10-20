@@ -231,34 +231,26 @@ const {
     name: 'autoresponder',
   
     async execute(interaction, client) {
-      const isInteraction = typeof interaction.isChatInputCommand === 'function' ? interaction.isChatInputCommand() : false;
       const guild = interaction.guild;
       if (!guild) {
         return interaction.reply({ content: '❌ This command can only be used in a server.' }).catch(() => null);
       }
-  
-      const member = interaction.member || await guild.members.fetch(interaction.user.id).catch(() => null);
-  
+
+      const member = interaction.member || (await guild.members.fetch(interaction.user.id).catch(() => null));
+
       // Resolve subcommand for slash commands.
       let sub;
       let args = [];
-      if (isInteraction) {
-        sub = interaction.options.getSubcommand(false) || 'config';
-      } else {
-        // Prefix: raw string lives in getString(); first word is the subcommand.
-        const raw = (interaction.options.getString('subcommand') || '').trim();
-        args = raw.split(/ +/).filter(Boolean);
-        sub = (args.shift() || 'config').toLowerCase();
-      }
-  
+      sub = interaction.options.getSubcommand(false) || 'config';
+
       const reply = (opts) => {
         const payload = typeof opts === 'string' ? { content: opts } : opts;
-        if (isInteraction && !interaction.replied && !interaction.deferred) {
+        if (!interaction.replied && !interaction.deferred) {
           return interaction.reply({ ...payload, ephemeral: payload.ephemeral ?? false }).catch(() => null);
         }
         return interaction.reply(payload).catch(() => null);
       };
-  
+
       // ---------- variables (open to everyone) ----------
       if (sub === 'variables' || sub === 'vars') {
         const embed = new EmbedBuilder()
@@ -271,9 +263,9 @@ const {
         embed.setFooter({ text: 'Tip: {random:hi|hey|yo} picks a random option each time.' });
         return reply({ embeds: [embed] });
       }
-  
+
       const config = await getConfig(guild.id);
-  
+
       // ---------- list ----------
       if (sub === 'list') {
         if (!config.responders.length) {
@@ -289,7 +281,7 @@ const {
           .setFooter({ text: `Module is ${config.enabled ? 'ENABLED' : 'DISABLED'} • /autoresponder info <id> for details` });
         return reply({ embeds: [embed] });
       }
-  
+
       // ---------- config overview ----------
       if (sub === 'config') {
         const embed = new EmbedBuilder()
@@ -306,10 +298,10 @@ const {
           .setFooter({ text: 'Staff: /autoresponder setup • enable • disable' });
         return reply({ embeds: [embed] });
       }
-  
+
       // ---------- info ----------
       if (sub === 'info') {
-        const query = (isInteraction ? interaction.options.getString('id') : args.join(' ')).trim();
+        const query = (interaction.options.getString('id')).trim();
         const r = config.responders.find(x => x.id === query.toUpperCase() || x.trigger.toLowerCase() === query.toLowerCase());
         if (!r) return reply(`❌ No responder found matching \`${query}\`.`);
         const embed = new EmbedBuilder()
@@ -329,10 +321,10 @@ const {
           );
         return reply({ embeds: [embed] });
       }
-  
+
       // ---------- test ----------
       if (sub === 'test') {
-        const query = (isInteraction ? interaction.options.getString('id') : args.join(' ')).trim();
+        const query = (interaction.options.getString('id')).trim();
         const r = config.responders.find(x => x.id === query.toUpperCase() || x.trigger.toLowerCase() === query.toLowerCase());
         if (!r) return reply(`❌ No responder found matching \`${query}\`.`);
         const fakeMsg = { guild, author: interaction.user, member, channel: interaction.channel, client, content: r.trigger, id: interaction.id };
@@ -342,13 +334,13 @@ const {
         }
         return reply(`🧪 **Preview:**\n${rendered || '*empty*'}`);
       }
-  
+
       // ===== Everything below requires staff =====
       if (!isStaff(member)) {
         return reply({ embeds: [new EmbedBuilder().setColor(ERR).setTitle('🚫 Missing Permissions')
           .setDescription('You need the **Manage Server** or **Administrator** permission to configure auto responders.')] });
       }
-  
+
       // ---------- enable / disable module ----------
       if (sub === 'enable' || sub === 'disable') {
         config.enabled = sub === 'enable';
@@ -359,11 +351,11 @@ const {
             ? 'Responders will now fire for matching messages.'
             : 'All responders are paused until re-enabled.')] });
       }
-  
+
       // ---------- quick add ----------
       if (sub === 'add') {
-        const trigger = (isInteraction ? interaction.options.getString('trigger') : args.shift() || '').trim();
-        const response = (isInteraction ? interaction.options.getString('response') : args.join(' ')).trim();
+        const trigger = (interaction.options.getString('trigger')).trim();
+        const response = (interaction.options.getString('response')).trim();
         if (!trigger || !response) return reply('❌ Usage: `/autoresponder add <trigger> <response>`');
         if (config.responders.length >= config.maxPerGuild) return reply(`❌ Limit reached (${config.maxPerGuild}).`);
         const draft = blankDraft();
@@ -375,33 +367,33 @@ const {
         return reply({ embeds: [new EmbedBuilder().setColor(OK).setTitle('✅ Auto Responder Created')
           .setDescription(`Trigger \`${trigger}\` added with ID \`${draft.id}\`.${config.enabled ? '' : '\n\n⚠️ The module is currently **disabled** — enable it with `/autoresponder enable`.'}`)] });
       }
-  
+
       // ---------- remove ----------
       if (sub === 'remove' || sub === 'delete') {
-        const query = (isInteraction ? interaction.options.getString('id') : args.join(' ')).trim();
+        const query = (interaction.options.getString('id')).trim();
         const idx = config.responders.findIndex(x => x.id === query.toUpperCase() || x.trigger.toLowerCase() === query.toLowerCase());
         if (idx === -1) return reply(`❌ No responder found matching \`${query}\`.`);
         const [removed] = config.responders.splice(idx, 1);
         await config.save();
         return reply(`🗑️ Removed responder \`${removed.id}\` (trigger: **${removed.trigger}**).`);
       }
-  
+
       // ---------- toggle single ----------
       if (sub === 'toggle') {
-        const query = (isInteraction ? interaction.options.getString('id') : args.join(' ')).trim();
+        const query = (interaction.options.getString('id')).trim();
         const r = config.responders.find(x => x.id === query.toUpperCase() || x.trigger.toLowerCase() === query.toLowerCase());
         if (!r) return reply(`❌ No responder found matching \`${query}\`.`);
         r.enabled = !r.enabled;
         await config.save();
         return reply(`${r.enabled ? '🟢 Enabled' : '⚪ Disabled'} responder \`${r.id}\` (**${r.trigger}**).`);
       }
-  
+
       // ---------- setup / edit (wizard) ----------
       if (sub === 'setup' || sub === 'edit' || sub === 'create') {
         const key = `${guild.id}-${interaction.user.id}`;
         let editingId = null;
         if (sub === 'edit') {
-          const query = (isInteraction ? interaction.options.getString('id') : args.join(' ')).trim();
+          const query = (interaction.options.getString('id')).trim();
           const r = config.responders.find(x => x.id === query.toUpperCase() || x.trigger.toLowerCase() === query.toLowerCase());
           if (!r) return reply(`❌ No responder found matching \`${query}\`.`);
           editingId = r.id;
@@ -413,7 +405,7 @@ const {
         const s = sessions.get(key);
         return reply({ embeds: [draftEmbed(s.draft, !!editingId)], components: wizardRows(s.draft) });
       }
-  
+
       return reply('❓ Unknown subcommand. Try `/autoresponder config`.');
     },
   

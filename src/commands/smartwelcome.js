@@ -1,4 +1,5 @@
 'use strict';
+const { outranksRole } = require('../utils/hierarchy');
 
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, StringSelectMenuBuilder, ActionRowBuilder, EmbedBuilder } = require('discord.js');
 const mongoose = require('mongoose');
@@ -40,9 +41,13 @@ module.exports = {
       await SmartWelcome.findOneAndUpdate({ guildId: interaction.guildId }, { enabled: false });
       return interaction.reply({ content: 'Smart welcome profiles disabled.', ephemeral: true });
     }
-    const roles = ['interest-one', 'interest-two', 'interest-three']
+    const pickedRoles = ['interest-one', 'interest-two', 'interest-three']
       .map(name => interaction.options.getRole(name))
-      .filter(Boolean)
+      .filter(Boolean);
+    if (pickedRoles.some(role => !outranksRole(interaction.member, role))) {
+      return interaction.reply({ content: 'Interest roles must be below your own highest role (and not bot-managed roles).', ephemeral: true });
+    }
+    const roles = pickedRoles
       .map(role => ({ id: role.id, label: role.name.slice(0, 100) }));
     await SmartWelcome.findOneAndUpdate(
       { guildId: interaction.guildId },

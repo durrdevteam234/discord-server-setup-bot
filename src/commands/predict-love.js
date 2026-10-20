@@ -24,16 +24,6 @@ module.exports = {
   name: 'predict-love',
 
   async execute(interaction) {
-    const settings = db.readData('settings.json') || {};
-    const currentGuildSettings = settings[interaction.guildId] || {};
-
-    // Standard structural safety framework filter matching boolean configurations
-    if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false) {
-      return interaction.reply({ 
-        content: '❌ The Fun Module is currently disabled on this server!', 
-        flags: [MessageFlags.Ephemeral] 
-      }).catch(() => null);
-    }
     
     const a = interaction.options.getString('first');
     const b = interaction.options.getString('second');
@@ -59,7 +49,7 @@ module.exports = {
     const comment = LOVE_COMMENTS[commentIndex];
     
     let cuteStyle = 'off';
-    try { const cuteData = db.readData('cute.json') || {}; cuteStyle = cuteData[interaction.guildId] || 'off'; } catch (e) {}
+    try { cuteStyle = await db.getCuteStyle(interaction.guildId); } catch (e) {}
     const isCuteActive = cuteStyle !== 'off';
 
     const embed = new EmbedBuilder()

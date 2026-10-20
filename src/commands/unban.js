@@ -20,24 +20,16 @@ module.exports = {
   name: 'unban',
 
   async execute(interaction, client) {
-    // Standardize checking layer to see if it is a real interaction or text mock
-    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options && !interaction.isMock ? true : false);
-    
-    if (isInteraction) {
-      await interaction.deferReply().catch(() => null);
-    } else {
-      // Safely monitor prefix status updates to prevent multiple text outputs
-      interaction.processingMessage = await interaction.reply('⏳ Querying ban list registries...').catch(() => null);
-    }
+    await interaction.deferReply().catch(() => null);
 
     const guild = interaction.guild;
-    const author = isInteraction ? interaction.user : interaction.author; 
+    const author = interaction.user;
     const memberExecutor = interaction.member;
     const guildId = interaction.guildId;
 
     if (!memberExecutor.permissions.has(PermissionFlagsBits.BanMembers)) {
       const msg = '❌ You need Ban Members permission to revoke bans!';
-      return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+      return interaction.editReply({ content: msg });
     }
 
     try {
@@ -45,14 +37,14 @@ module.exports = {
       const reason = interaction.options.getString('reason') || 'No reason provided';
 
       if (!targetName) {
-        const msg = '❌ Please specify a username to unban! Example: `|unban john_doe`';
-        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+        const msg = '❌ Please specify a username to unban! Example: `/unban username:john_doe`';
+        return interaction.editReply({ content: msg });
       }
 
       const banList = await guild.bans.fetch({ cache: false }).catch(() => null);
       if (!banList || banList.size === 0) {
         const msg = '❌ There are no banned users registered on this server!';
-        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+        return interaction.editReply({ content: msg });
       }
 
       const targetNameLower = targetName.toLowerCase();
@@ -64,32 +56,12 @@ module.exports = {
 
       if (!banEntry) {
         const msg = `❌ Could not find a banned user named **${targetName}**! Ensure spelling matches exactly.`;
-        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+        return interaction.editReply({ content: msg });
       }
 
       const user = banEntry.user;
       await guild.members.unban(user.id, reason);
 
-      const guildConfig = (await db.findOne({ guildId })) || {};
-      const legacySettings = (await db.readData('settings.json')) || {};
-      const currentGuildSettings = { ...(legacySettings[guildId] || {}), ...(guildConfig || {}) };
-
-      if (currentGuildSettings.modLogsEnabled && currentGuildSettings.unifiedLogChannelId) {
-        const modLogsChannel = guild.channels.cache.get(currentGuildSettings.unifiedLogChannelId) || await guild.channels.fetch(currentGuildSettings.unifiedLogChannelId).catch(() => null);
-
-        if (modLogsChannel) {
-          const embedLog = new EmbedBuilder()
-            .setColor('#00FF00')
-            .setTitle('🛡️ Unified Moderation: User Unbanned')
-            .addFields(
-              { name: 'Target User', value: `${user.username} (${user.id})`, inline: true },
-              { name: 'Responsible Staff', value: `${author.username}`, inline: true },
-              { name: 'Reason Given', value: reason }
-            )
-            .setTimestamp();
-          await modLogsChannel.send({ embeds: [embedLog] }).catch(() => null);
-        }
-      }
 
       await logAction(guild, 'User Unbanned', author, `User: ${user.username}, Reason: ${reason}`);
 
@@ -98,14 +70,13 @@ module.exports = {
         .setTitle('✅ User Unbanned')
         .setDescription(`**${user.username}** has been successfully unbanned.\nReason: ${reason}`);
 
-      return isInteraction ? interaction.editReply({ embeds: [embed] }) : interaction.reply({ embeds: [embed] });
+      return interaction.editReply({ embeds: [embed] });
     } catch (error) {
       console.error('Unban error:', error);
       const msg = `❌ Error unbanning user: ${error.message}`;
-      return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+      return interaction.editReply({ content: msg });
     }
   },
 
-  // 🌟 FIXED: Unified properties alignment, safe text selection indices, and redirect handlers
   
 };

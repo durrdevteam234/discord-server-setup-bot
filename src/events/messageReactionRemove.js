@@ -16,6 +16,11 @@ module.exports = {
             return;
         }
 
+        const reactionRolesCmd = botClient.commands.get('reactionroles');
+        if (reactionRolesCmd && typeof reactionRolesCmd.handleReaction === 'function') {
+            await reactionRolesCmd.handleReaction(reaction, user, false).catch(() => null);
+        }
+
         const starboardCmd = botClient.commands.get('starboard');
         if (starboardCmd && typeof starboardCmd.handleReaction === 'function') {
             // Notice we pass false here since it's a reaction removal event

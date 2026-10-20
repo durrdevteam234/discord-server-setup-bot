@@ -189,17 +189,13 @@ module.exports = {
   name: 'selfvoice',
 
   async execute(interaction, client) {
-    const isInteraction =
-      typeof interaction.isChatInputCommand === 'function'
-        ? interaction.isChatInputCommand()
-        : false;
     const guild = interaction.guild;
     if (!guild) return;
     const guildId = guild.id;
     const member = interaction.member;
 
     // --------------------------------------------------------
-    // Parse subcommand + arguments for BOTH slash and prefix
+    // Parse subcommand + arguments
     // --------------------------------------------------------
     let sub;
     let argName = null;
@@ -207,27 +203,12 @@ module.exports = {
     let setKey = null;
     let setVal = null;
 
-    if (isInteraction) {
-      sub = interaction.options.getSubcommand();
-      argName = interaction.options.getString('name');
-      argLimit = interaction.options.getInteger('limit');
-      if (sub === 'set') {
-        setKey = interaction.options.getString('setting');
-        setVal = interaction.options.getString('value');
-      }
-    } else {
-      // Prefix path: mockInteraction.getString('subcommand') returns the full arg string
-      const raw = (interaction.options.getString('subcommand') || '').trim();
-      const parts = raw.split(/ +/).filter(Boolean);
-      sub = (parts[0] || 'create').toLowerCase();
-      if (sub === 'create') {
-        argName = parts.slice(1).join(' ') || null;
-      } else if (sub === 'set') {
-        setKey = (parts[1] || '').toLowerCase();
-        setVal = parts.slice(2).join(' ') || null;
-      } else if (sub === 'toggle') {
-        sub = parts[1] === 'off' || parts[1] === 'disable' ? 'disable' : 'enable';
-      }
+    sub = interaction.options.getSubcommand();
+    argName = interaction.options.getString('name');
+    argLimit = interaction.options.getInteger('limit');
+    if (sub === 'set') {
+      setKey = interaction.options.getString('setting');
+      setVal = interaction.options.getString('value');
     }
 
     const reply = (payload) => {

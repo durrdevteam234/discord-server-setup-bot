@@ -268,16 +268,15 @@ module.exports = {
 
         const currentGuildSettings = await getGuildSettings(interaction.guildId);
 
-        const coreUtilityCommands = [
-            'setup', 'cute', 'fun-module', 'help', 'setup-audit',
-            'mod-logs-toggle', 'reactionroles', 'autorole', 'automodrule', 'honeypot', 'smartwelcome', 'cases', 'softban',
-            'ticket', 'verification', 'leaderboard', 'rank', 'analytics',
-            'selfvoice', 'autoresponder', 'capabilities', 'stickies', 'channels', 'rules',
-            // new modules
-            'starboard', 'suggestions', 'giveaway', 'embed', 'birthdays', 'invites', 'poll',
+        // Only these commands belong to the Fun Module. Listing the core commands
+        // instead meant disabling fun also blocked /ban, /kick, /mute, /purge and others.
+        const funCommands = [
+            '8ball', 'capital-quiz', 'cat', 'coinflip', 'dadjoke', 'dice-duel', 'dog', 'flavor',
+            'fortune', 'fun-menu', 'hug', 'joke', 'meme', 'predict-love', 'rate', 'roast', 'roll',
+            'slap', 'spacefact', 'trivia', 'wouldyourather',
         ];
 
-        if (!coreUtilityCommands.includes(commandName.toLowerCase())) {
+        if (funCommands.includes(commandName.toLowerCase())) {
             if (
                 currentGuildSettings.funModule === 'disabled' ||
                 currentGuildSettings.funModule === false ||

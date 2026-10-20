@@ -9,7 +9,7 @@ const { pingBotList } = require('./utils/botListPinger');
 const database = require('./utils/database');
 const { startTopbotStats } = require('./utils/topbotStats');
 
-const { syncCommandsToBotNexus, pushStatsToBotNexus } = require('./sync-botnexus-commands');
+const { syncCommandsToBotNexus } = require('./sync-botnexus-commands');
 const { pingDashboard } = require('./utils/Dashboardstatspinger');
 
 const client = new Client({
@@ -223,7 +223,7 @@ client.once('ready', async () => {
       { text: 'yo uh, why is the moon blue..', type: ActivityType.Watching },
       { text: 'psst, hey you want some candy..', type: ActivityType.Listening },
       { text: 'your chats are so stupid man.', type: ActivityType.Watching },
-      { text: '|help for noobs.', type: ActivityType.Playing },
+      { text: '/help for noobs.', type: ActivityType.Playing },
       { text: 'i am the observer and i will always be observing', type: ActivityType.Watching },
       { text: "formal's new beat is peak", type: ActivityType.Listening },
       { text: 'in a coding match', type: ActivityType.Competing },
@@ -269,102 +269,22 @@ client.once('ready', async () => {
       console.log(`📊 [TELEMETRY] Sending stats: ${serverCount} servers, ${userCount} users`);
 
       pingBotList(serverCount, userCount, shardCount);
-      pushStatsToBotNexus(serverCount);
     } catch (syncErr) {
       // silently fail
     }
   };
 
+  // Bot lists rate-limit stat posts, and both pingBotList and pushStatsToBotNexus
+  // hit the same rsdash endpoint, so post once every 30 minutes. The dashboard
+  // gets one push a minute; it used to be pushed twice every 10 seconds, each
+  // time scanning whole collections in MongoDB.
   sendStatsUpdate();
-  pingDashboard(client).catch(() => null);
-  setInterval(sendStatsUpdate, 10 * 1000);
-  setInterval(() => pingDashboard(client).catch(() => null), 10 * 1000);
+  setInterval(sendStatsUpdate, 30 * 60 * 1000);
   startTopbotStats(client);
 
   console.log('💻 [DASHBOARD] Starting dashboard metrics...');
-  const fallbackDashboardUrl = 'https://servermiser.pntr.dev/api/bot-stats';
-  const configuredDashboardUrl = process.env.DASHBOARD_URL;
-  const dashboardUrl = (() => {
-    if (!configuredDashboardUrl) return fallbackDashboardUrl;
-    try {
-      const url = new URL(configuredDashboardUrl);
-      if (url.hostname.toLowerCase().includes('onrender.com') && url.hostname.toLowerCase().includes('discord-server-setup-bot')) {
-        console.warn('⚠️ [DASHBOARD] Ignoring Render bot URL in DASHBOARD_URL and using the dashboard host instead.');
-        return fallbackDashboardUrl;
-      }
-      return configuredDashboardUrl;
-    } catch (error) {
-      console.warn('⚠️ [DASHBOARD] Invalid DASHBOARD_URL configured; falling back to the dashboard host.');
-      return fallbackDashboardUrl;
-    }
-  })();
-  const statsApiKey = process.env.STATS_API_KEY;
-
-  async function pushDashboardStats() {
-    if (!statsApiKey) {
-      console.warn('⚠️ [DASHBOARD] STATS_API_KEY not set, skipping dashboard sync');
-      return;
-    }
-
-    try {
-      const totalGuilds = client.guilds.cache.size;
-      const totalMembers = client.guilds.cache.reduce((acc, g) => acc + (g.memberCount || 0), 0);
-      const rawPing = client && client.ws && Number.isFinite(client.ws.ping) ? client.ws.ping : 0;
-      const wsPing = Math.max(0, Math.round(rawPing));
-      const shardCount = client.shard ? client.shard.count : 1;
-
-      const uptimeMs = client.uptime || 0;
-      const totalMinutes = Math.floor(uptimeMs / 60000);
-      const days = Math.floor(totalMinutes / 1440);
-      const hours = Math.floor((totalMinutes % 1440) / 60);
-      const minutes = totalMinutes % 60;
-      const uptime = `${days}d ${hours}h ${minutes}m`;
-
-      const memoryUsage = process.memoryUsage();
-      const ramUsage = `${Math.round(memoryUsage.rss / 1024 / 1024)} MB`;
-
-      const [counters, guildCategories, totalXp, totalTickets, dailySetups] = await Promise.all([
-        database.getCounters().catch(() => ({})),
-        database.getGuildCategories().catch(() => []),
-        database.getTotalXp().catch(() => 0),
-        database.getTotalTickets().catch(() => 0),
-        database.getDailySetupCounts().catch(() => [0, 0, 0, 0, 0, 0, 0]),
-      ]);
-
-      const totalSetups = Number(counters.totalSetups || 0);
-      const successfulSetups = Number(counters.successfulSetups || 0);
-
-      const payload = {
-        totalGuilds,
-        totalMembers,
-        wsPing,
-        uptime,
-        ramUsage,
-        activeShards: `1 / ${shardCount}`,
-        securityCompliance: '100%',
-        totalTickets,
-        totalXp,
-        totalSetups,
-        setupSuccessRate: totalSetups > 0 ? `${((successfulSetups / totalSetups) * 100).toFixed(1)}%` : '0%',
-        ...(Array.isArray(guildCategories) && guildCategories.length > 0 ? { guildCategories } : {}),
-        ...(Array.isArray(dailySetups) && dailySetups.length === 7 ? { dailySetups } : {}),
-      };
-
-      await fetch(dashboardUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${statsApiKey}`,
-        },
-        body: JSON.stringify(payload),
-      });
-    } catch (error) {
-      // silently fail
-    }
-  }
-
-  pushDashboardStats();
-  setInterval(pushDashboardStats, 10 * 1000);
+  pingDashboard(client).catch(() => null);
+  setInterval(() => pingDashboard(client).catch(() => null), 60 * 1000);
 
   if (readyEventHandlers.length > 0) {
     console.log(`🔄 [READY EVENT] Executing ${readyEventHandlers.length} ready handler(s)...`);

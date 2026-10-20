@@ -6,37 +6,74 @@ const mongoose = require('mongoose');
 
 const xpCooldowns = new Map();
 
+// Bad words are matched as whole words (after undoing common leetspeak), never as
+// substrings of the message with spaces removed, which flagged "class", "hello",
+// "manga", "scrap", "this hit" and most normal chat.
+const BAD_WORDS = new Set([
+    'fuck', 'fucking', 'fucked', 'fk', 'fck', 'fuk', 'fuh', 'dih', 'dick',
+    'shit', 'shitty', 'foid',
+    'bitch', 'bitches', 'biatch', 'ass', 'asshole', 'bastard', 'damn',
+    'crap', 'hell', 'motherfucker', 'motherfukker', 'mfer', 'nigga', 'niga', 'nga', 'nigger',
+    'whore', 'slut', 'retard', 'cunt', 'rape', 'sexist', 'porn', 'sex',
+]);
+const LEET = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '@': 'a', '$': 's', '!': 'i' };
+
+function containsBadWord(content) {
+    return content.toLowerCase().split(/[\s.,;:?"'()\[\]{}<>\/\\-]+/).some((token) => {
+        const word = token.replace(/[013457@$!]/g, (c) => LEET[c]).replace(/[^a-z]/g, '');
+        return word.length > 0 && BAD_WORDS.has(word);
+    });
+}
+
+// The per-user tracking maps used by automod and XP would otherwise grow forever.
+setInterval(() => {
+    const cutoff = Date.now() - 10 * 60 * 1000;
+    for (const [key, time] of xpCooldowns) if (time < cutoff) xpCooldowns.delete(key);
+    for (const map of [global.linkCooldownsMap, global.mentionCooldownsMap, global.stickerCooldownsMap]) {
+        if (map) for (const [key, time] of map) if (time < cutoff) map.delete(key);
+    }
+    if (global.recentMessagesMap) global.recentMessagesMap.clear();
+}, 10 * 60 * 1000).unref();
+
+// One refresh at a time per channel: messages arriving together used to start
+// overlapping refreshes that each posted a new sticky (duplicates).
+const stickyRefreshing = new Map();
+
 async function refreshStickyMessage(message, client) {
+    if (!message?.guild || !message.channel || message.author.bot || message.webhookId) return;
+    if (client && message.author.id === client.user?.id) return;
+    const channelId = message.channel.id;
+    if (stickyRefreshing.has(channelId)) {
+        stickyRefreshing.set(channelId, true); // run once more when the current refresh ends
+        return;
+    }
+    stickyRefreshing.set(channelId, false);
     try {
-        if (!message?.guild || !message.channel || message.author.bot || message.webhookId) return;
-        if (client && message.author.id === client.user?.id) return;
+        do {
+            stickyRefreshing.set(channelId, false);
+            await repostSticky(message);
+        } while (stickyRefreshing.get(channelId));
+    } finally {
+        stickyRefreshing.delete(channelId);
+    }
+}
 
+async function repostSticky(message) {
+    try {
         const guildConfig = await db.findOne({ guildId: message.guild.id }).catch(() => null) || {};
-        const sticky = guildConfig.sticky || {};
+        const legacy = guildConfig.sticky?.channelId === message.channel.id ? guildConfig.sticky : null;
+        const sticky = guildConfig.stickies?.[message.channel.id] || legacy;
+        if (!sticky?.messageId) return;
+        const keyPrefix = guildConfig.stickies?.[message.channel.id] ? `stickies.${message.channel.id}` : 'sticky';
 
-        if (!sticky?.channelId || sticky.channelId !== message.channel.id || !sticky.messageId) return;
-        if (sticky.messageId === message.id) return;
+        const targetChannel = message.channel;
+        if (!targetChannel.isTextBased?.()) return;
 
-        const targetChannel = message.guild.channels.cache.get(sticky.channelId) || await message.guild.channels.fetch(sticky.channelId).catch(() => null);
-        if (!targetChannel || !targetChannel.isTextBased?.()) return;
+        const previousSticky = await targetChannel.messages.fetch(sticky.messageId).catch(() => null);
+        if (previousSticky) await previousSticky.delete().catch(() => null);
 
-        // Verify the old sticky message actually exists before trying to delete it
-        let previousSticky;
-        try {
-            previousSticky = await targetChannel.messages.fetch(sticky.messageId);
-        } catch (e) {
-            // Message was already deleted, continue to post new sticky
-        }
-
-        // Delete the old sticky if it still exists
-        if (previousSticky) {
-            await previousSticky.delete().catch(() => null);
-        }
-
-        // Rebuild the exact payload that was originally sent
-        let payload;
-        if (sticky.style === 'embed') {
-            payload = {
+        const payload = sticky.style === 'embed'
+            ? {
                 embeds: [
                     new discord.EmbedBuilder()
                         .setColor(0x5865F2)
@@ -44,34 +81,19 @@ async function refreshStickyMessage(message, client) {
                         .setFooter({ text: 'This is a sticky message' })
                 ],
                 allowedMentions: { parse: [] },
-            };
-        } else {
-            // Plain message - use the exact stored content
-            payload = {
-                content: sticky.text || 'Sticky message',
-                allowedMentions: { parse: [] },
-            };
-        }
+            }
+            : { content: sticky.text || 'Sticky message', allowedMentions: { parse: [] } };
 
-        // Send the new sticky message
         const newSticky = await targetChannel.send(payload).catch((err) => {
             console.error('[sticky] Failed to send refresh message:', err.message);
             return null;
         });
-        
-        if (!newSticky) {
-            console.error('[sticky] Failed to create new sticky message for guild', message.guild.id);
-            return;
-        }
+        if (!newSticky) return;
 
-        // Update the database with the new message ID
         await db.findOneAndUpdate(
             { guildId: message.guild.id },
-            { $set: { 'sticky.messageId': newSticky.id, 'sticky.updatedAt': new Date().toISOString() } },
-            { upsert: true }
-        ).catch((err) => {
-            console.error('[sticky] Failed to update database:', err.message);
-        });
+            { $set: { [`${keyPrefix}.messageId`]: newSticky.id, [`${keyPrefix}.updatedAt`]: new Date().toISOString() } }
+        );
     } catch (error) {
         console.error('[sticky] Refresh failed:', error.message);
     }
@@ -180,7 +202,6 @@ module.exports = {
                         let violatesFilter = null;
                         const content = message.content || '';
                         const contentLower = content.toLowerCase();
-                        const normalizedContent = contentLower.replace(/[^a-z]/g, '');
                         const now = Date.now();
                         const userKey = `${message.guild.id}-${message.author.id}`;
 
@@ -193,19 +214,8 @@ module.exports = {
                                 if (letters.length > 0 && letters === letters.toUpperCase()) violatesFilter = rule;
                             }
                             // 2. BAD WORDS
-                            if (rule.filterType === 'bad_words') {
-                                const blacklist = [
-                                    'fuck', 'fucking', 'fucked', 'fk', 'fck', 'fuk', 'fuh', 'dih', 'dick',
-                                    'shi', 'shit', 'shitty', 'sh1t', 'sh!t', 'foid',
-                                    'bitch', 'bitches', 'b1tch', 'biatch', 'ass', 'asshole', 'bastard', 'damn',
-                                    'crap', 'hell', 'motherfucker', 'motherfukker', 'mfer', 'nigga', 'niga', 'nga', 'nigger',
-                                    'whore', 'slut', 'retard', 'cunt', 'rape', 'sexist', 'porn', 'sex'
-                                ];
-
-                                const normalizedBlacklist = blacklist.map(word => word.toLowerCase().replace(/[^a-z]/g, ''));
-                                if (normalizedBlacklist.some(word => normalizedContent.includes(word))) {
-                                    violatesFilter = rule;
-                                }
+                            if (rule.filterType === 'bad_words' && containsBadWord(content)) {
+                                violatesFilter = rule;
                             }
                             // 3. CHAT CLEARING NEW LINES
                             if (rule.filterType === 'new_lines' && (content.match(/\n/g) || []).length > 8) {
@@ -222,7 +232,7 @@ module.exports = {
                             }
                             // 6. EMOJI SPAM
                             if (rule.filterType === 'emoji_spam') {
-                                const emojiMatch = content.match(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD00-\uDFFF]/g);
+                                const emojiMatch = content.match(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2600-\u26FF]|\uD83E[\uDD00-\uDFFF]/g);
                                 if (emojiMatch && emojiMatch.length > 6) violatesFilter = rule;
                             }
                             // 7. FAST MESSAGE SPAM
@@ -319,7 +329,7 @@ module.exports = {
                         } else {
                             if (violatesFilter.actions.includes('block_message')) {
                                 await message.delete().catch(() => null);
-                                await message.channel.send({ content: `⚠️ ${message.author}, flagged by AutoMod filter: **${violatesFilter.ruleName}**!` }).then(m => setTimeout(() => m.delete().catch(() => null), 4000));
+                                await message.channel.send({ content: `⚠️ ${message.author}, flagged by AutoMod filter: **${violatesFilter.ruleName}**!` }).then(m => setTimeout(() => m.delete().catch(() => null), 4000)).catch(() => null);
                             }
                             if (violatesFilter.actions.includes('timeout_user') && message.member?.moderatable) {
                                 await message.member.timeout(300000, `AutoMod Violation: ${violatesFilter.ruleName}`).catch(() => null);
@@ -344,6 +354,20 @@ module.exports = {
                 }
             } catch (err) {
                 console.error('[AutoMod Engine Scanner Error]:', err.message);
+            }
+
+            // ==========================================
+            // 🔄 BACKGROUND AUTOMATION INTEGRATION LOOPS
+            // Runs before the XP engine, which returns early when leveling is off
+            // or the user is on cooldown and used to skip auto-delete entirely.
+            // ==========================================
+            try {
+                const autoDeleteModule = client.commands.get('autodelete');
+                if (autoDeleteModule && typeof autoDeleteModule.trackAndQueueDeletion === 'function') {
+                    await autoDeleteModule.trackAndQueueDeletion(message);
+                }
+            } catch (automationErr) {
+                console.error('[Automation Background Integration Loop Error]:', automationErr.message);
             }
 
             // ==========================================
@@ -423,8 +447,7 @@ module.exports = {
 
                 let cuteStyle = 'off';
                 try {
-                    const cuteData = (await db.readData('cute.json')) || {};
-                    cuteStyle = cuteData[guildId] || 'off';
+                    cuteStyle = await db.getCuteStyle(guildId);
                 } catch (e) {}
                 const isCuteActive = cuteStyle !== 'off';
 
@@ -458,18 +481,6 @@ module.exports = {
                 } else {
                     await targetChannel.send({ content: pingContent, embeds: [embed] }).catch(() => null);
                 }
-            }
-
-            // ==========================================
-            // 🔄 BACKGROUND AUTOMATION INTEGRATION LOOPS
-            // ==========================================
-            try {
-                const autoDeleteModule = client.commands.get('autodelete') || require('./commands/moderation/autodelete.js');
-                if (autoDeleteModule && typeof autoDeleteModule.trackAndQueueDeletion === 'function') {
-                    await autoDeleteModule.trackAndQueueDeletion(message);
-                }
-            } catch (automationErr) {
-                console.error('[Automation Background Integration Loop Error]:', automationErr.message);
             }
 
         } catch (globalError) {

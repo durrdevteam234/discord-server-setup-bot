@@ -165,8 +165,11 @@ module.exports = {
         return interaction.reply({ content: '❌ Please choose a valid channel or category.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
       }
 
-      await target.delete().catch(() => null);
-      return interaction.reply({ content: `✅ Deleted ${target}.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
+      const deleted = await target.delete().then(() => true).catch(() => false);
+      if (!deleted) {
+        return interaction.reply({ content: `❌ I could not delete ${target}. Check my permissions.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
+      }
+      return interaction.reply({ content: `✅ Deleted **${target.name}**.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
     }
 
     if (subcommand === 'edit') {
@@ -176,7 +179,7 @@ module.exports = {
       const slowmode = interaction.options.getInteger('slowmode');
       const nsfw = interaction.options.getBoolean('nsfw');
 
-      if (!target || !target.isTextBased && !target.isVoiceBased && !target.type !== ChannelType.GuildCategory) {
+      if (!target) {
         return interaction.reply({ content: '❌ Please select a valid channel or category.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
       }
 
@@ -196,6 +199,14 @@ module.exports = {
       }
 
       return interaction.reply({ content: `✅ Updated ${edited}.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
+    }
+
+    // Editing permission overwrites needs Manage Roles in Discord itself; without this
+    // check, Manage Channels alone was enough to open private channels via the bot.
+    const editsPermissions = subcommand === 'customize'
+      || (subcommand === 'category' && interaction.options.getString('action') === 'customize' && interaction.options.getRole('role'));
+    if (editsPermissions && !interaction.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
+      return interaction.reply({ content: '❌ Changing channel permissions also needs the Manage Roles permission.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
     }
 
     if (subcommand === 'customize') {
@@ -274,8 +285,11 @@ module.exports = {
           return interaction.reply({ content: '❌ Please select a valid category.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
         }
 
-        await target.delete().catch(() => null);
-        return interaction.reply({ content: `✅ Deleted category ${target}.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
+        const deleted = await target.delete().then(() => true).catch(() => false);
+        if (!deleted) {
+          return interaction.reply({ content: '❌ I could not delete that category. Check my permissions.', flags: [MessageFlags.Ephemeral] }).catch(() => null);
+        }
+        return interaction.reply({ content: `✅ Deleted category **${target.name}**.`, flags: [MessageFlags.Ephemeral] }).catch(() => null);
       }
 
       if (action === 'customize') {

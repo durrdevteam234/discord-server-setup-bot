@@ -56,22 +56,12 @@ module.exports = {
 
     async execute(interaction) {
         // Aligned with the database framework configuration utility
-        const mainSettings = db.readData('settings.json') || {};
-        const currentGuildSettings = mainSettings[interaction.guildId] || {};
-
-        // Safety verification if accessed directly via dynamic slash deployment
-        if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false) {
-            return interaction.reply({ 
-                content: '🔒 The **Fun Module** features have been globally disabled by an administrator.', 
-                flags: [MessageFlags.Ephemeral] 
-            }).catch(() => null);
-        }
 
         // Randomly extract a country data profile
         const item = capitalPool[Math.floor(Math.random() * capitalPool.length)];
         
         let cuteStyle = 'off';
-        try { const cuteData = db.readData('cute.json') || {}; cuteStyle = cuteData[interaction.guildId] || 'off'; } catch (e) {}
+        try { cuteStyle = await db.getCuteStyle(interaction.guildId); } catch (e) {}
         const isCuteActive = cuteStyle !== 'off';
 
         const embed = new EmbedBuilder()

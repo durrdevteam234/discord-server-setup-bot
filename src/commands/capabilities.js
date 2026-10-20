@@ -193,8 +193,6 @@ module.exports = {
   name: 'capabilities',
 
   async execute(interaction, client) {
-    const isInteraction = typeof interaction.isChatInputCommand === 'function' ? interaction.isChatInputCommand() : false;
-
     const first = CATEGORIES[0];
     const payload = { embeds: [buildEmbed(first)], components: [buildMenu(first.key)] };
 
@@ -205,15 +203,11 @@ module.exports = {
     // was blowing up inside a swallowed .catch(() => null) — which is
     // why the dropdown never advanced past the first page.
     let response;
-    if (isInteraction) {
-      await interaction.reply(payload).catch(() => null);
-      response = await interaction.fetchReply().catch(() => null);
-    } else {
-      response = await interaction.reply(payload).catch(() => null);
-    }
+    await interaction.reply(payload).catch(() => null);
+    response = await interaction.fetchReply().catch(() => null);
     if (!response) return;
 
-    const authorId = isInteraction ? interaction.user.id : interaction.author.id;
+    const authorId = interaction.user.id;
 
     // interactionCreate.js intercepts `capabilities_select` interactions
     // globally and routes them to this module's handleInteraction (see
@@ -235,8 +229,7 @@ module.exports = {
     collector.on('end', async () => {
       const lastKey = collector.lastCollectedKey || first.key;
       const disabledRow = buildMenu(lastKey, true);
-      if (isInteraction) await interaction.editReply({ components: [disabledRow] }).catch(() => null);
-      else await response.edit({ components: [disabledRow] }).catch(() => null);
+      await interaction.editReply({ components: [disabledRow] }).catch(() => null);
     });
   },
 

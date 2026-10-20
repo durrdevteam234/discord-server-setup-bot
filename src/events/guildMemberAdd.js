@@ -41,57 +41,64 @@ module.exports = {
       }
 
       // ── Welcome Message ──────────────────────────────────────────
-      const settings = (await readData('settings.json')) || {};
-      const serverSettings = settings[guild.id] || {};
-      if (serverSettings.welcomeEnabled !== false) {
-        const channelId = serverSettings.welcomeChannelId;
-        if (channelId) {
-          // Cache first, fall back to a live fetch (cache can be empty
-          // right after a Render restart / cold start).
-          const targetChannel =
-            guild.channels.cache.get(channelId) ||
-            (await guild.channels.fetch(channelId).catch(() => null));
-          if (targetChannel) {
-            const template = serverSettings.joinMessage || '✨ Welcome to {server}, {user}! We are glad to have you here. ✨';
-            const finalMessage = resolveMessage(template, member, guild);
-            const imageEnabled = serverSettings.welcomeImage === true
-              || ['true', 'yes', 'on', '1'].includes(String(serverSettings.welcomeImage).toLowerCase());
-            if (imageEnabled) {
-              const image = await generateWelcomeImage({
-                username: member.displayName || member.user.username,
-                serverName: guild.name,
-                avatarURL: member.user.displayAvatarURL({ extension: 'png', size: 256 }),
-              });
-              if (serverSettings.welcomeEmbed !== false) {
-                const imageEmbed = new EmbedBuilder()
-                  .setColor('#8a6a2f')
+      // Its own try/catch: a failed welcome (e.g. image generation) used to skip
+      // invite tracking and smart welcome for the member as well.
+      try {
+        const settings = (await readData('settings.json')) || {};
+        const serverSettings = settings[guild.id] || {};
+        if (serverSettings.welcomeEnabled !== false) {
+          const channelId = serverSettings.welcomeChannelId;
+          if (channelId) {
+            // Cache first, fall back to a live fetch (cache can be empty
+            // right after a Render restart / cold start).
+            const targetChannel =
+              guild.channels.cache.get(channelId) ||
+              (await guild.channels.fetch(channelId).catch(() => null));
+            if (targetChannel) {
+              const template = serverSettings.joinMessage || '✨ Welcome to {server}, {user}! We are glad to have you here. ✨';
+              const finalMessage = resolveMessage(template, member, guild);
+              const imageEnabled = serverSettings.welcomeImage === true
+                || ['true', 'yes', 'on', '1'].includes(String(serverSettings.welcomeImage).toLowerCase());
+              if (imageEnabled) {
+                const image = await generateWelcomeImage({
+                  username: member.displayName || member.user.username,
+                  serverName: guild.name,
+                  avatarURL: member.user.displayAvatarURL({ extension: 'png', size: 256 }),
+                });
+                if (serverSettings.welcomeEmbed !== false) {
+                  const imageEmbed = new EmbedBuilder()
+                    .setColor('#8a6a2f')
+                    .setDescription(finalMessage)
+                    .setImage('attachment://welcome.png')
+                    .setTimestamp();
+                  await targetChannel.send({ embeds: [imageEmbed], files: [{ attachment: image, name: 'welcome.png' }] }).catch(error => {
+                    console.error(`[GuildMemberAdd] Welcome image embed failed in guild ${guild.id}:`, error.message);
+                  });
+                } else {
+                  await targetChannel.send({ content: finalMessage, files: [{ attachment: image, name: 'welcome.png' }] }).catch(error => {
+                    console.error(`[GuildMemberAdd] Plain welcome image failed in guild ${guild.id}:`, error.message);
+                  });
+                }
+              } else if (serverSettings.welcomeEmbed !== false) {
+                const embed = new EmbedBuilder()
+                  .setColor('#00FF00')
+                  .setTitle('✨ Welcome! ✨')
                   .setDescription(finalMessage)
-                  .setImage('attachment://welcome.png')
+                  .setThumbnail(member.user.displayAvatarURL({ size: 128 }))
+                  .setFooter({ text: `Member Count: ${guild.memberCount}` })
                   .setTimestamp();
-                await targetChannel.send({ embeds: [imageEmbed], files: [{ attachment: image, name: 'welcome.png' }] }).catch(error => {
-                  console.error(`[GuildMemberAdd] Welcome image embed failed in guild ${guild.id}:`, error.message);
-                });
+                await targetChannel.send({ embeds: [embed] }).catch(() => null);
               } else {
-                await targetChannel.send({ content: finalMessage, files: [{ attachment: image, name: 'welcome.png' }] }).catch(error => {
-                  console.error(`[GuildMemberAdd] Plain welcome image failed in guild ${guild.id}:`, error.message);
-                });
+                await targetChannel.send(finalMessage).catch(() => null);
               }
-            } else if (serverSettings.welcomeEmbed !== false) {
-              const embed = new EmbedBuilder()
-                .setColor('#00FF00')
-                .setTitle('✨ Welcome! ✨')
-                .setDescription(finalMessage)
-                .setThumbnail(member.user.displayAvatarURL({ size: 128 }))
-                .setFooter({ text: `Member Count: ${guild.memberCount}` })
-                .setTimestamp();
-              await targetChannel.send({ embeds: [embed] }).catch(() => null);
             } else {
-              await targetChannel.send(finalMessage).catch(() => null);
+              console.warn(`[GuildMemberAdd] Configured welcome channel ${channelId} not found in guild ${guild.id}`);
             }
-          } else {
-            console.warn(`[GuildMemberAdd] Configured welcome channel ${channelId} not found in guild ${guild.id}`);
           }
         }
+
+      } catch (error) {
+        console.error('[GuildMemberAdd] Welcome message failed:', error.message);
       }
 
       // ── Invite Tracking ──────────────────────────────────────────

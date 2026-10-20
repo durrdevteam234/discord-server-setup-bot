@@ -29,40 +29,30 @@ module.exports = {
   name: 'slap',
 
   async execute(interaction, client) {
-    // Correct checking layer to see if it is a real interaction or text mock
-    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options && !interaction.isMock ? true : false);
-
     const settings = (await db.readData('settings.json')) || {};
     const currentGuildSettings = settings[interaction.guildId] || {};
 
     if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false || currentGuildSettings.funModule === 'off') {
       const disabledMsg = '❌ The Fun Module is currently disabled on this server!';
-      return isInteraction 
-        ? interaction.reply({ content: disabledMsg, flags: [MessageFlags.Ephemeral] }).catch(() => null)
-        : interaction.reply({ content: disabledMsg }).catch(() => null);
+      return interaction.reply({ content: disabledMsg, flags: [MessageFlags.Ephemeral] }).catch(() => null);
     }
-    
+
     const target = interaction.options.getUser('user');
     if (!target) {
       const missingUserMsg = '❌ Could not resolve that user profile target.';
-      return isInteraction 
-        ? interaction.reply({ content: missingUserMsg, flags: [MessageFlags.Ephemeral] }).catch(() => null)
-        : interaction.reply({ content: missingUserMsg }).catch(() => null);
+      return interaction.reply({ content: missingUserMsg, flags: [MessageFlags.Ephemeral] }).catch(() => null);
     }
 
-    const caller = isInteraction ? interaction.user : interaction.author;
+    const caller = interaction.user;
     if (target.id === caller.id) {
       const selfSlapMsg = '💥 You swing and somehow wind up slapping your own face. Ouch! 🤕';
-      return isInteraction 
-        ? interaction.reply({ content: selfSlapMsg, flags: [MessageFlags.Ephemeral] }).catch(() => null)
-        : interaction.reply({ content: selfSlapMsg }).catch(() => null);
+      return interaction.reply({ content: selfSlapMsg, flags: [MessageFlags.Ephemeral] }).catch(() => null);
     }
 
     const randomAction = SLAP_ACTIONS[Math.floor(Math.random() * SLAP_ACTIONS.length)].replace('{target}', `**${target.username}**`);
     const randomGif = SLAP_GIFS[Math.floor(Math.random() * SLAP_GIFS.length)];
-    
-    const cuteData = (await db.readData('cute.json')) || {};
-    const cuteStyle = cuteData[interaction.guildId] || 'off';
+
+    const cuteStyle = await db.getCuteStyle(interaction.guildId);
     const isCuteActive = cuteStyle !== 'off';
 
     const embed = new EmbedBuilder()
@@ -70,10 +60,9 @@ module.exports = {
       .setTitle(isCuteActive ? '✨ 💥 COMEDIC CLOBBER STATE ✨' : '💥 Direct Hit!')
       .setDescription(`**${caller.username}** ${randomAction}`)
       .setImage(randomGif);
-      
+
     await interaction.reply({ embeds: [embed] }).catch(() => null);
   },
 
-  // 🌟 FIXED: Fixed array selection index to block runtime crashes completely
   
 };

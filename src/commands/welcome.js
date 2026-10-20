@@ -15,13 +15,12 @@ module.exports = {
   name: 'welcome',
 
   async execute(interaction, client) {
-    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : false;
     const guildId = interaction.guildId;
     const memberExecutor = interaction.member;
 
     if (!memberExecutor.permissions.has(PermissionFlagsBits.ManageGuild)) {
       const msg = '❌ You need Manage Server permissions!';
-      return isInteraction ? interaction.reply({ content: msg, ephemeral: true }) : interaction.reply(msg);
+      return interaction.reply({ content: msg, ephemeral: true });
     }
 
     try {
@@ -34,7 +33,7 @@ module.exports = {
       const imageOption = interaction.options.getBoolean('image');
 
       if (!targetChannel || isEnabled === null) {
-        const msg = '❌ Invalid Syntax! Use: `|welcome <#channel> <true/false> [join message] [leave message]`\n**Variables:** `{user}` `{server}` `{memberCount}`';
+        const msg = '❌ Choose a channel and whether the welcome system is enabled.\n**Variables:** `{user}` `{server}` `{memberCount}`';
         return interaction.reply({ content: msg, ephemeral: true }).catch(() => null);
       }
 

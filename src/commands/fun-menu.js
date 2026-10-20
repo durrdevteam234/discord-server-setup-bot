@@ -12,25 +12,10 @@ module.exports = {
     const guildId = interaction.guildId || interaction.guild?.id;
     if (!guildId) return;
 
-    // 1. Framework switch verification gate checks
-    const mainSettings = db.readData('settings.json') || {};
-    const currentGuildSettings = mainSettings[guildId] || {};
-
-    if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false) {
-      const errorPayload = { 
-        content: '🔒 The **Fun Module** features have been globally disabled by an administrator.', 
-        flags: [MessageFlags.Ephemeral] 
-      };
-      // Strips bitwise flags safely if accessed via prefix emulator bypass arrays
-      if (interaction.flagsToStrip) delete errorPayload.flags;
-      return interaction.reply(errorPayload).catch(() => null);
-    }
-
-    // 2. Dynamic Layout Extraction
+    // Dynamic Layout Extraction
     let cuteStyle = 'off';
     try {
-      const cuteData = db.readData('cute.json') || {};
-      cuteStyle = cuteData[guildId] || 'off';
+      cuteStyle = await db.getCuteStyle(guildId);
     } catch (e) {
       console.error("Error reading cute data in fun-menu:", e);
     }
@@ -44,7 +29,7 @@ module.exports = {
       .setTitle(titleText)
       .setDescription(
         'Welcome to the **Fun & Entertainment Hub**!\n' +
-        'All tools support both modern Slash Commands (`/`) and classic Prefix Commands (`|`).\n\n' +
+        'All tools are available as slash commands (`/`).\n\n' +
         '📌 **Available Commands Directory**\n' +
         '• 🎲 `dice-duel` ➡️ Challenge members to a live button duel.\n' +
         '• 📝 `trivia` ➡️ Test your wits with general knowledge tasks.\n' +

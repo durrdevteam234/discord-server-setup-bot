@@ -11,24 +11,16 @@ module.exports = {
   name: 'unmute',
 
   async execute(interaction, client) {
-    // Correct checking layer to see if it is a real interaction or text mock
-    const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.options && !interaction.isMock ? true : false);
-
-    if (isInteraction) {
-      await interaction.deferReply().catch(() => null);
-    } else {
-      // Keep track of the initial processing status message for text commands
-      interaction.processingMessage = await interaction.reply('⏳ Processing unmute transaction...').catch(() => null);
-    }
+    await interaction.deferReply().catch(() => null);
 
     const guild = interaction.guild;
-    const author = isInteraction ? interaction.user : interaction.author; 
+    const author = interaction.user;
     const memberExecutor = interaction.member;
     const guildId = interaction.guildId;
 
     if (!memberExecutor.permissions.has(PermissionFlagsBits.ModerateMembers)) {
       const msg = '❌ You need Moderate Members permission!';
-      return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+      return interaction.editReply({ content: msg });
     }
 
     try {
@@ -36,13 +28,13 @@ module.exports = {
 
       if (!user) {
         const msg = '❌ Please mention a valid user or provide a valid user ID.';
-        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+        return interaction.editReply({ content: msg });
       }
 
       const member = await guild.members.fetch(user.id).catch(() => null);
       if (!member) {
         const msg = '❌ This user is not in the server.';
-        return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+        return interaction.editReply({ content: msg });
       }
 
       await member.timeout(null);
@@ -53,24 +45,6 @@ module.exports = {
         await db.writeData('mutes.json', mutes);
       }
 
-      const guildConfig = (await db.findOne({ guildId })) || {};
-      const legacySettings = (await db.readData('settings.json')) || {};
-      const currentGuildSettings = { ...(legacySettings[guildId] || {}), ...(guildConfig || {}) };
-
-      if (currentGuildSettings.modLogsEnabled && currentGuildSettings.unifiedLogChannelId) {
-        const modLogsChannel = guild.channels.cache.get(currentGuildSettings.unifiedLogChannelId) || await guild.channels.fetch(currentGuildSettings.unifiedLogChannelId).catch(() => null);
-        if (modLogsChannel) {
-          const embedLog = new EmbedBuilder()
-            .setColor('#00FF00')
-            .setTitle('🛡️ Unified Moderation: User Unmuted')
-            .addFields(
-              { name: 'Target User', value: `${user.username} (${user.id})`, inline: true },
-              { name: 'Responsible Staff', value: `${author.username}`, inline: true }
-            )
-            .setTimestamp();
-          await modLogsChannel.send({ embeds: [embedLog] }).catch(() => null);
-        }
-      }
 
       await logAction(guild, 'User Unmuted', author, `User: ${user.username}`);
 
@@ -79,14 +53,13 @@ module.exports = {
         .setTitle('✅ User Unmuted')
         .setDescription(`${user.username} has been unmuted.`);
 
-      return isInteraction ? interaction.editReply({ embeds: [embed] }) : interaction.reply({ embeds: [embed] });
+      return interaction.editReply({ embeds: [embed] });
     } catch (error) {
       console.error('Unmute error:', error);
       const msg = `❌ Error unmuting user: ${error.message}`;
-      return isInteraction ? interaction.editReply({ content: msg }) : interaction.reply(msg);
+      return interaction.editReply({ content: msg });
     }
   },
 
-  // 🌟 FIXED: Safe argument string conversion and modular state tracking placeholders
   
 };

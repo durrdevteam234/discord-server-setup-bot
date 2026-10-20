@@ -32,20 +32,11 @@ module.exports = {
   name: 'joke',
 
   async execute(interaction) {
-    const settings = db.readData('settings.json') || {};
-    const currentGuildSettings = settings[interaction.guildId] || {};
-
-    if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false) {
-      return interaction.reply({ 
-        content: '❌ The Fun Module is currently disabled on this server!', 
-        flags: [MessageFlags.Ephemeral] 
-      }).catch(() => null);
-    }
     
     const randomJoke = JOKES[Math.floor(Math.random() * JOKES.length)];
     
     let cuteStyle = 'off';
-    try { const cuteData = db.readData('cute.json') || {}; cuteStyle = cuteData[interaction.guildId] || 'off'; } catch (e) {}
+    try { cuteStyle = await db.getCuteStyle(interaction.guildId); } catch (e) {}
     const isCuteActive = cuteStyle !== 'off';
 
     const embed = new EmbedBuilder()

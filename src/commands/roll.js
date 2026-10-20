@@ -14,16 +14,6 @@ module.exports = {
 
   async execute(interaction) {
     // 1. Unified database architecture lookup
-    const settings = db.readData('settings.json') || {};
-    const currentGuildSettings = settings[interaction.guildId] || {};
-
-    // Standard structural safety framework filter matching boolean configurations
-    if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false) {
-      return interaction.reply({ 
-        content: '❌ The Fun Module is currently disabled on this server!', 
-        flags: [MessageFlags.Ephemeral] 
-      }).catch(() => null);
-    }
 
     const sides = interaction.options.getInteger('sides') || 6;
 
@@ -39,7 +29,7 @@ module.exports = {
 
     // 3. Dynamic Font Style Layout Extraction
     let cuteStyle = 'off';
-    try { const cuteData = db.readData('cute.json') || {}; cuteStyle = cuteData[interaction.guildId] || 'off'; } catch (e) {}
+    try { cuteStyle = await db.getCuteStyle(interaction.guildId); } catch (e) {}
     const isCuteActive = cuteStyle !== 'off';
 
     // 4. Construct high-quality embed response

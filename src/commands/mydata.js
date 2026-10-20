@@ -58,7 +58,8 @@ module.exports = {
 
       const outputMessage = `📊 **Live MongoDB Atlas Export: \`${downloadFileName}\`**\nHere is your real-time database backup file:`;
 
-      return interaction.reply({ content: outputMessage, files: [fileAttachment] });
+      // Ephemeral: this file holds every server's data and must never be posted publicly.
+      return interaction.reply({ content: outputMessage, files: [fileAttachment], ephemeral: true });
     } catch (error) {
       console.error('[DATABASE EXPORT CRASH]', error);
       return interaction.reply({

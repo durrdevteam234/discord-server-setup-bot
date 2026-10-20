@@ -14,9 +14,9 @@ const { Schema, model, models } = require('mongoose');
 // Config
 // ─────────────────────────────────────────────────────────────
 
-const MAX_SLASH_OPTIONS = 10; 
-const MAX_OPTIONS = 25; 
-const BUTTON_THRESHOLD = 5; 
+const MAX_SLASH_OPTIONS = 10;
+const MAX_OPTIONS = 25;
+const BUTTON_THRESHOLD = 5;
 const BAR_LENGTH = 14;
 const BAR_FILLED = '█';
 const BAR_EMPTY = '░';
@@ -173,30 +173,32 @@ async function castVote(interaction, messageId, optionIndex) {
   if (!poll) {
     return interaction.reply({ content: '❌ This poll no longer exists.', flags: [MessageFlags.Ephemeral] });
   }
-  if (poll.closed) {
+  if (poll.closed || new Date(poll.endsAt).getTime() <= Date.now()) {
+    if (!poll.closed) closePoll(interaction.client, messageId).catch(() => null);
     return interaction.reply({ content: '🔒 This poll is closed.', flags: [MessageFlags.Ephemeral] });
   }
-
-  const userId = interaction.user.id;
-  const alreadyOnThisOption = poll.options[optionIndex].voters.includes(userId);
-
-  poll.options.forEach((opt) => {
-    opt.voters = opt.voters.filter((id) => id !== userId);
-  });
-
-  let feedback;
-  if (alreadyOnThisOption) {
-    feedback = `You removed your vote for **${poll.options[optionIndex].text}**.`;
-  } else {
-    poll.options[optionIndex].voters.push(userId);
-    feedback = `Your vote for **${poll.options[optionIndex].text}** has been recorded.`;
+  const option = poll.options[optionIndex];
+  if (!option) {
+    return interaction.reply({ content: '❌ That option no longer exists.', flags: [MessageFlags.Ephemeral] });
   }
 
-  await poll.save();
+  // Atomic updates: loading the poll, editing voters and saving it back lost votes
+  // when several people clicked at the same moment.
+  const userId = interaction.user.id;
+  const alreadyOnThisOption = option.voters.includes(userId);
+  await Poll.updateOne({ messageId }, { $pull: { 'options.$[].voters': userId } });
+  if (!alreadyOnThisOption) {
+    await Poll.updateOne({ messageId }, { $addToSet: { [`options.${optionIndex}.voters`]: userId } });
+  }
+  const updated = await Poll.findOne({ messageId });
+
+  const feedback = alreadyOnThisOption
+    ? `You removed your vote for **${option.text}**.`
+    : `Your vote for **${option.text}** has been recorded.`;
 
   await interaction.update({
-    embeds: [buildPollEmbed(poll)],
-    components: buildPollComponents(poll),
+    embeds: [buildPollEmbed(updated)],
+    components: buildPollComponents(updated),
   });
 
   await interaction.followUp({ content: `✅ ${feedback}`, flags: [MessageFlags.Ephemeral] });
@@ -257,27 +259,6 @@ const data = new SlashCommandBuilder()
           .setName('allow_members').setDescription('Should ordinary members be able to create polls?').setRequired(true)
       )
   );
-// ─────────────────────────────────────────────────────────────
-// Parsing & Subcommand Execution
-// ─────────────────────────────────────────────────────────────
-
-function isPrefixMode(interaction) {
-  return typeof interaction.isChatInputCommand === 'function' && interaction.isChatInputCommand() === false;
-}
-
-function parsePrefixCreateArgs(interaction) {
-  const raw = String(interaction.content || '');
-  const afterCommand = raw.replace(/^\S+\s*/, '').replace(/^create\s*/i, '');
-
-  const timeMatch = afterCommand.match(/--time=(\d+)/i);
-  const minutes = timeMatch ? parseInt(timeMatch[1], 10) : null;
-  const withoutFlag = afterCommand.replace(/--time=\d+/i, '').trim();
-
-  const quoted = [...withoutFlag.matchAll(/"([^"]+)"/g)].map((m) => m.trim());
-  const [question, ...options] = quoted;
-
-  return { question: question || null, options, minutes };
-}
 
 async function handleCreate(interaction) {
   const allowed = await canCreatePoll(interaction.member);
@@ -290,28 +271,13 @@ async function handleCreate(interaction) {
 
   let question, options, minutes;
 
-  if (isPrefixMode(interaction)) {
-    const parsed = parsePrefixCreateArgs(interaction);
-    question = parsed.question;
-    options = parsed.options;
-    minutes = parsed.minutes;
+  question = interaction.options.getString('question');
+  minutes = interaction.options.getInteger('minutes');
+  options = [];
 
-    if (!question || options.length < 2 || !minutes) {
-      return interaction.reply({
-        content:
-          '❌ You need a question, at least 2 options (all in quotes), and an expiration time.\n' +
-          '**Example:** `|poll create "Best pizza topping?" "Pepperoni" "Mushroom" --time=30`',
-      });
-    }
-  } else {
-    question = interaction.options.getString('question');
-    minutes = interaction.options.getInteger('minutes');
-    options = [];
-    
-    for (let i = 1; i <= MAX_SLASH_OPTIONS; i++) {
-      const val = interaction.options.getString(`option${i}`);
-      if (val) options.push(val.trim());
-    }
+  for (let i = 1; i <= MAX_SLASH_OPTIONS; i++) {
+    const val = interaction.options.getString(`option${i}`);
+    if (val) options.push(val.trim());
   }
 
   if (options.length < 2) {
@@ -384,18 +350,7 @@ async function handleSetup(interaction) {
   }
 
   let allowMembers;
-  if (isPrefixMode(interaction)) {
-    const raw = String(interaction.content || '').toLowerCase();
-    if (/\bon\b|\btrue\b|\byes\b/.test(raw)) allowMembers = true;
-    else if (/\boff\b|\bfalse\b|\bno\b/.test(raw)) allowMembers = false;
-    else {
-      return interaction.reply({
-        content: '❌ Usage: `|poll setup on` or `|poll setup off`',
-      });
-    }
-  } else {
-    allowMembers = interaction.options.getBoolean('allow_members');
-  }
+  allowMembers = interaction.options.getBoolean('allow_members');
 
   await GuildSettings.findOneAndUpdate(
     { guildId: interaction.guild.id },
@@ -423,12 +378,6 @@ async function handleSetup(interaction) {
 module.exports = {
   data,
   async execute(interaction) {
-    if (isPrefixMode(interaction)) {
-      const rawContent = String(interaction.content || '').toLowerCase();
-      if (/\bsetup\b/.test(rawContent)) return handleSetup(interaction);
-      return handleCreate(interaction);
-    }
-
     const sub = interaction.options.getSubcommand();
     if (sub === 'create') return handleCreate(interaction);
     if (sub === 'setup') return handleSetup(interaction);
@@ -436,6 +385,17 @@ module.exports = {
 
   castVote,
   closePoll,
+
+  // Poll end timers only lived in memory, so after a restart polls never closed.
+  init(client) {
+    client.once('ready', async () => {
+      const open = await Poll.find({ closed: false }).catch(() => []);
+      for (const poll of open) {
+        const delay = Math.max(0, new Date(poll.endsAt).getTime() - Date.now());
+        setTimeout(() => closePoll(client, poll.messageId).catch(console.error), delay);
+      }
+    });
+  },
 
   async handleInteraction(interaction, _activeClient) {
     const cid = interaction.customId || '';
@@ -473,7 +433,7 @@ module.exports = {
     }
 
     if (interaction.isStringSelectMenu() && cid.startsWith('poll_vote_select:')) {
-      const messageId = cid.split(':');
+      const messageId = cid.split(':')[1];
       const optionIndex = parseInt(interaction.values[0], 10);
       return castVote(interaction, messageId, optionIndex);
     }

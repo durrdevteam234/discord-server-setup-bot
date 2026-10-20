@@ -53,56 +53,49 @@ const {
     name: 'verification',
   
     async execute(interaction, client) {
-       const isInteraction = interaction.isChatInputCommand ? interaction.isChatInputCommand() : false;
       const guild = interaction.guild;
       const guildId = guild.id;
       const memberExecutor = interaction.member;
-  
+
       if (memberExecutor && !memberExecutor.permissions.has(PermissionFlagsBits.Administrator)) {
         const lockMsg = '❌ **Access Denied:** You need `Administrator` permissions to run verification setups.';
-        return isInteraction ? interaction.reply({ content: lockMsg, ephemeral: true }) : interaction.reply(lockMsg);
+        return interaction.reply({ content: lockMsg, ephemeral: true });
       }
-  
-      let subcommand = isInteraction ? interaction.options.getSubcommand() : interaction.options.getString('subcommand')?.toLowerCase();
-      
-      // Fast translation mapping fallback initialization vectors
-      if (!subcommand && !isInteraction) {
-         const textArgs = interaction.content?.split(/ +/);
-         subcommand = textArgs[1]?.toLowerCase();
-      }
-  
-      const doc = await VerificationModel.findOne({ guildId }).catch(() => null) || new VerificationModel({ guildId });
-  
+
+      let subcommand = interaction.options.getSubcommand();
+
+      const doc = (await VerificationModel.findOne({ guildId }).catch(() => null)) || new VerificationModel({ guildId });
+
       // ==========================================
       // ⚙️ WIZARD LAUNCH ENGINE: SETUP
       // ==========================================
       if (subcommand === 'setup' || !subcommand) {
-        if (isInteraction) await interaction.deferReply({ ephemeral: true });
-  
+        await interaction.deferReply({ ephemeral: true });
+
         // Save initial wizard states directly inside the safe database layer
         doc.wizardActive = true;
         doc.wizardStep = 1;
         doc.wizardUserId = interaction.user.id;
         await doc.save();
-  
+
         const availableRoles = guild.roles.cache.filter(r => r.id !== guild.roles.everyone.id && !r.managed).first(24);
-        if (availableRoles.length === 0) return interaction.reply('❌ This server lacks manually configurable roles. Run `|setup` first.').catch(() => null);
-  
+        if (availableRoles.length === 0) return interaction.reply('❌ This server lacks manually configurable roles. Run `/setup` first.').catch(() => null);
+
         const welcomeEmbed = new EmbedBuilder()
           .setTitle('🛡️ Verification Setup Wizard')
           .setDescription('**Step 1:** Select the target member role that users will receive once they pass verification.')
           .setColor('#5865F2');
-  
+
         const selectMenu = new ActionRowBuilder().addComponents(
           new StringSelectMenuBuilder()
             .setCustomId('verify_wizard_step1')
             .setPlaceholder('Choose the member assignment role...')
             .addOptions(availableRoles.map(role => ({ label: role.name.slice(0, 24), value: role.id })))
         );
-  
-        return isInteraction ? interaction.editReply({ embeds: [welcomeEmbed], components: [selectMenu] }) : interaction.reply({ embeds: [welcomeEmbed], components: [selectMenu] });
+
+        return interaction.editReply({ embeds: [welcomeEmbed], components: [selectMenu] });
       }
-  
+
       // ==========================================
       // ✏️ WIZARD LAUNCH ENGINE: EDIT
       // ==========================================
@@ -110,8 +103,8 @@ const {
         if (!doc.enabled) {
           return interaction.reply({ content: '❌ **Error:** No verification setup was found to edit. Run `/verification setup` first.', ephemeral: true }).catch(() => null);
         }
-        if (isInteraction) await interaction.deferReply({ ephemeral: true });
-  
+        await interaction.deferReply({ ephemeral: true });
+
         doc.wizardActive = true;
         doc.wizardStep = 1;
         doc.wizardUserId = interaction.user.id;
@@ -119,36 +112,34 @@ const {
         doc.tempLevel = doc.securityLevel;
         doc.tempMethod = doc.challengeMethod;
         await doc.save();
-  
+
         const availableRoles = guild.roles.cache.filter(r => r.id !== guild.roles.everyone.id && !r.managed).first(24);
-        
+
         const editEmbed = new EmbedBuilder()
           .setTitle('✏️ Edit Verification: Step 1 (Role)')
           .setDescription(`Current Role: <@&${doc.verifiedRoleId}>\n\nSelect a new role from the dropdown menu, or hit the **Skip Item** button to leave it unchanged.`)
           .setColor('#E67E22');
-  
+
         const selectMenu = new ActionRowBuilder().addComponents(
           new StringSelectMenuBuilder()
             .setCustomId('verify_wizard_step1')
             .setPlaceholder('Modify the member assignment role...')
             .addOptions(availableRoles.map(role => ({ label: role.name.slice(0, 24), value: role.id })))
         );
-  
+
         const skipButton = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId('verify_wizard_skip_step1').setLabel('Skip This Step').setStyle(ButtonStyle.Secondary)
         );
-  
-        return isInteraction 
-          ? interaction.editReply({ embeds: [editEmbed], components: [selectMenu, skipButton] }) 
-          : interaction.reply({ embeds: [editEmbed], components: [selectMenu, skipButton] });
+
+        return interaction.editReply({ embeds: [editEmbed], components: [selectMenu, skipButton] });
       }
-  
+
       // ==========================================
       // 🗑️ WIZARD LAUNCH ENGINE: DELETE & DISABLE
       // ==========================================
       if (subcommand === 'delete') {
-        if (isInteraction) await interaction.deferReply({ ephemeral: true });
-  
+        await interaction.deferReply({ ephemeral: true });
+
         const confirmEmbed = new EmbedBuilder()
           .setTitle('⚠️ Absolute Safety Confirmation Check')
           .setDescription(
@@ -157,17 +148,15 @@ const {
             `🚨 *Note: This operation cannot be reversed.*`
           )
           .setColor('#ED4245');
-  
+
         const buttonsRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId('verify_wizard_delete_confirm').setLabel('Yes, Delete Everything').setStyle(ButtonStyle.Danger),
           new ButtonBuilder().setCustomId('verify_wizard_delete_cancel').setLabel('Cancel Operation').setStyle(ButtonStyle.Secondary)
         );
-  
-        return isInteraction 
-          ? interaction.editReply({ embeds: [confirmEmbed], components: [buttonsRow] }) 
-          : interaction.reply({ embeds: [confirmEmbed], components: [buttonsRow] });
+
+        return interaction.editReply({ embeds: [confirmEmbed], components: [buttonsRow] });
       }
-  
+
       if (subcommand === 'disable') {
         await VerificationModel.findOneAndUpdate({ guildId }, { $set: { enabled: false, wizardActive: false } });
         return interaction.reply({ content: '🔴 Onboarding checking layers have been pulled offline.' }).catch(() => null);
@@ -192,7 +181,7 @@ const {
     }
 
     // 📡 FETCH PERSISTENT BLUEPRINT CONFIGURATIONS FROM MONGODB
-    const doc = await VerificationModel.findOne({ guildId }).catch(() => null) || new VerificationModel({ guildId });
+    const doc = (await VerificationModel.findOne({ guildId }).catch(() => null)) || new VerificationModel({ guildId });
 
     // 🔘 STEP 1 SUBMISSION: CHOOSE ASSIGNED ROLE
     if ((interaction.customId === 'verify_wizard_step1' && interaction.isStringSelectMenu()) || interaction.customId === 'verify_wizard_skip_step1') {
@@ -300,7 +289,7 @@ const {
       doc.verifiedRoleId = doc.tempRoleId;
       await doc.save();
 
-      const panelTargetChannel = guild.channels.cache.get(doc.panelChannelId) || await guild.channels.fetch(doc.panelChannelId).catch(() => null);
+      const panelTargetChannel = guild.channels.cache.get(doc.panelChannelId) || (await guild.channels.fetch(doc.panelChannelId).catch(() => null));
       if (panelTargetChannel) {
         const lvlColor = doc.securityLevel === 'low' ? '#2ECC71' : doc.securityLevel === 'medium' ? '#F1C40F' : '#E74C3C';
         const lvlEmoji = doc.securityLevel === 'low' ? '🟢' : doc.securityLevel === 'medium' ? '🟡' : '🔴';
@@ -395,15 +384,15 @@ const {
         }
   
         if (sLevel === 'medium' && cMethod === 'odd_one') {
-          const items = ['🍎', '🍏', '🍐', '🍊'];
-          const targetIcon = '🍊'; 
+          const items = ['🍎', '🍐', '🍊', '🥕'];
+          const targetIcon = '🥕';
           const oddRow = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder()
               .setCustomId(`verify_user_solve_medium_oddone_${targetIcon}`)
               .setPlaceholder('Identify the odd icon item out...')
               .addOptions(items.map(i => ({ label: `Icon Selection Item: ${i}`, value: i })))
           );
-          return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🧩 Odd-One-Out Puzzle').setDescription('One item option inside the dropdown listing array has a completely different fruit type. Identify it: \n\n` 🍎  |  🍏  |  Automated  |  🍊 `').setColor('#F1C40F')], components: [oddRow], ephemeral: true }).catch(() => null);
+          return interaction.reply({ embeds: [new EmbedBuilder().setTitle('🧩 Odd-One-Out Puzzle').setDescription('One of these is not a fruit. Pick it from the dropdown: \n\n` 🍎  |  🍐  |  🍊  |  🥕 `').setColor('#F1C40F')], components: [oddRow], ephemeral: true }).catch(() => null);
         }
   
         // --- 🔴 HIGH SECURITY CHALLENGES ---
@@ -443,7 +432,9 @@ const {
   
           const doubleRow = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder()
-              .setCustomId('verify_user_solve_high_double_choice')
+              // The answer rides in the custom ID like the other challenges; it used to
+              // be missing, and the checker compared the user's pick with itself.
+              .setCustomId(`verify_user_solve_high_double_${compoundKey}`)
               .setPlaceholder('Select the matching unified formula result token...')
               .addOptions([
                 { label: `Compound Token: ${sum} | Code: ${token}`, value: compoundKey },
@@ -464,11 +455,10 @@ const {
          
          const parsingTokens = interaction.customId.split('_');
          const isLowTerms = parsingTokens[3] === 'low' && parsingTokens[4] === 'terms';
-         const isDoubleAuth = parsingTokens[3] === 'high' && parsingTokens[4] === 'double';
          
          // 🛠️ CRITICAL FIXED: Pulls clean plain-string text tokens out of values[0] instead of passing array objects
          const userSelectionChoiceInput = isLowTerms ? 'accept' : String(interaction.values[0]); 
-         const targetValidationString = isLowTerms ? 'accept' : isDoubleAuth ? userSelectionChoiceInput : String(parsingTokens[parsingTokens.length - 1]);
+         const targetValidationString = isLowTerms ? 'accept' : String(parsingTokens[parsingTokens.length - 1]);
   
          const configRecord = await VerificationModel.findOne({ guildId }).catch(() => null);
          if (!configRecord) return;

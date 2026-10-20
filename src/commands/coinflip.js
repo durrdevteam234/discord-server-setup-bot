@@ -15,21 +15,12 @@ module.exports = {
         .setDescription('Flip an animated coin and see what it lands on.'),
 
     async execute(interaction) {
-        const mainSettings = db.readData('settings.json') || {};
-        const currentGuildSettings = mainSettings[interaction.guildId] || {};
-
-        if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false) {
-            return interaction.reply({ 
-                content: '🔒 The **Fun Module** features have been globally disabled by an administrator.', 
-                flags: [MessageFlags.Ephemeral] 
-            }).catch(() => null);
-        }
 
         const result = Math.random() < 0.5 ? 'Heads' : 'Tails';
         const randomCoinGif = COIN_GIFS[Math.floor(Math.random() * COIN_GIFS.length)];
         
         let cuteStyle = 'off';
-        try { const cuteData = db.readData('cute.json') || {}; cuteStyle = cuteData[interaction.guildId] || 'off'; } catch (e) {}
+        try { cuteStyle = await db.getCuteStyle(interaction.guildId); } catch (e) {}
         const isCuteActive = cuteStyle !== 'off';
 
         const embed = new EmbedBuilder()

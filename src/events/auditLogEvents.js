@@ -1,6 +1,6 @@
 const { Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AuditLogEvent } = require('discord.js');
 const mongoose = require('mongoose');
-const { isAuditLogsEnabled, resolveAuditLogChannel } = require('../utils/auditLog');
+const { isAuditLogsEnabled, resolveAuditLogChannel, isModLogsEnabled, resolveModLogChannel } = require('../utils/auditLog');
 
 // ============================================================
 // CONSOLIDATED AUDIT LOG EVENT HANDLERS

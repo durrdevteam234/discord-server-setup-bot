@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { outranksRole } = require('../utils/hierarchy');
 const database = require('../utils/database');
 const UserLevel = require('../utils/models/UserLevel');
 const { createCanvas, loadImage, GlobalFonts } = require('@napi-rs/canvas');
@@ -211,12 +212,6 @@ module.exports = {
         return record;
     },
 
-    // --- Prefix Command Handler ---
-    // NOTE: not currently invoked directly — prefix commands are routed
-    // through messageCreate.js's mockInteraction into execute() above.
-    // Kept here in case that routing changes.
-    
-
     // --- Handlers ---
 
     async handleRankCommand(interaction, targetUserId, client) {
@@ -233,7 +228,8 @@ module.exports = {
         const xp = userRecord?.xp || 0;
         const level = userRecord?.level || 0;
 
-        const rank = await UserLevel.countDocuments({ guildId: guild.id, xp: { $gt: xp } }).catch(() => 0);
+        // XP resets on every level-up, so rank by level first, then XP (same order as the leaderboard).
+        const rank = await UserLevel.countDocuments({ guildId: guild.id, $or: [{ level: { $gt: level } }, { level, xp: { $gt: xp } }] }).catch(() => 0);
 
         const xpForNextLevel = xpNeededForLevel(level);
         const xpProgress = xp; // xp resets to 0 on level-up in this schema, so xp IS the progress
@@ -335,6 +331,7 @@ module.exports = {
                             const level = parseInt(args[0]);
                             const role = msg.mentions.roles.first();
                             if (!level || !role) return msg.reply('❌ Invalid format.');
+                            if (!outranksRole(interaction.member, role)) return msg.reply('❌ You can only reward roles below your own highest role (and not bot-managed roles).');
                             await database.findOneAndUpdate({ guildId: interaction.guild.id }, { $push: { 'levelConfig.rewards': { level, roleId: role.id } } }, { upsert: true }).catch(() => null);
                             msg.reply(`✅ Added reward: **Level ${level}** -> ${role.name}`);
                         }).catch(() => interaction.followUp({ content: '❌ Timed out.', ephemeral: true }).catch(() => null));

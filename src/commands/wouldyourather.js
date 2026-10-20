@@ -32,21 +32,11 @@ const {
     name: 'wouldyourather',
   
     async execute(interaction) {
-      const settings = db.readData('settings.json') || {};
-      const currentGuildSettings = settings[interaction.guildId] || {};
-  
-      // 1. Core Framework Switch Verification
-      if (currentGuildSettings.funModule === 'disabled' || currentGuildSettings.funModule === false) {
-        return interaction.reply({ 
-          content: '❌ The Fun Module is currently disabled on this server!', 
-          flags: [MessageFlags.Ephemeral] 
-        }).catch(() => null);
-      }
       
       const scenario = SCENARIOS[Math.floor(Math.random() * SCENARIOS.length)];
       
       let cuteStyle = 'off';
-      try { const cuteData = db.readData('cute.json') || {}; cuteStyle = cuteData[interaction.guildId] || 'off'; } catch (e) {}
+      try { cuteStyle = await db.getCuteStyle(interaction.guildId); } catch (e) {}
       const isCuteActive = cuteStyle !== 'off';
   
       // 2. Track Votes using unique sets to prevent user duplicate votes

@@ -1,9 +1,9 @@
 const { SlashCommandBuilder, PermissionFlagsBits, MessageFlags, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
 const { Schema, model, models } = require('mongoose');
 
-const ACCENT_COLOR_ACTIVE = 0x5865f2; 
-const ACCENT_COLOR_ENDED = 0x2b2d31; 
-const runningGiveaways = new Map(); 
+const ACCENT_COLOR_ACTIVE = 0x5865f2;
+const ACCENT_COLOR_ENDED = 0x2b2d31;
+const runningGiveaways = new Map();
 
 const GiveawaySchema = new Schema({
   messageId: { type: String, required: true, unique: true },
@@ -43,37 +43,6 @@ const data = new SlashCommandBuilder()
     .addStringOption((opt) => opt.setName('message_id').setDescription('The target message ID of the giveaway announcement embed').setRequired(true))
   );
 
-function isPrefixMode(interaction) {
-  return typeof interaction.isChatInputCommand === 'function' && interaction.isChatInputCommand() === false;
-}
-
-function parsePrefixArgs(interaction) {
-  const raw = String(interaction.content || '');
-  const tokens = raw.trim().split(/\s+/);
-  const sub = tokens ? tokens.toLowerCase() : null;
-
-  let minutes = null;
-  if (sub === 'start' && tokens) {
-    const val = parseInt(tokens, 10);
-    if (!isNaN(val)) minutes = val;
-  }
-
-  let messageId = null;
-  if ((sub === 'end' || sub === 'reroll') && tokens) {
-    messageId = tokens;
-  }
-
-  let targetChannel = interaction.channel;
-  if (interaction.mentions?.channels?.size > 0) {
-    targetChannel = interaction.mentions.channels.first();
-  }
-
-  const quotedMatch = raw.match(/"([^"]+)"/);
-  const prize = quotedMatch ? quotedMatch : null;
-
-  return { sub, minutes, prize, messageId, targetChannel };
-}
-
 function buildGiveawayEmbed(config) {
   const unix = Math.floor(new Date(config.endsAt).getTime() / 1000);
   
@@ -97,9 +66,26 @@ function buildGiveawayComponents(messageId) {
   ];
 }
 
+function scheduleGiveaways(client, configs) {
+  for (const config of configs) {
+    if (runningGiveaways.has(config.messageId)) continue;
+    const delay = new Date(config.endsAt).getTime() - Date.now();
+    if (delay <= 0) {
+      drawWinners(client, config.messageId).catch(() => null);
+    } else if (delay <= 2147483647) {
+      const timer = setTimeout(() => drawWinners(client, config.messageId), delay);
+      runningGiveaways.set(config.messageId, timer);
+    }
+  }
+}
+
 async function drawWinners(client, messageId, forceEnd = false) {
-  const config = await Giveaway.findOne({ messageId });
-  if (!config || (config.ended && !forceEnd)) return null;
+  // Claim the giveaway atomically so the end timer and a manual /giveaway end
+  // can't both draw winners for the same giveaway.
+  const config = forceEnd
+    ? await Giveaway.findOne({ messageId })
+    : await Giveaway.findOneAndUpdate({ messageId, ended: false }, { $set: { ended: true } }, { new: true });
+  if (!config) return null;
 
   try {
     const guild = await client.guilds.fetch(config.guildId).catch(() => null);
@@ -130,7 +116,9 @@ async function drawWinners(client, messageId, forceEnd = false) {
       runningGiveaways.delete(messageId);
     }
 
-    const endedEmbed = EmbedBuilder.from(message?.embeds || buildGiveawayEmbed(config))
+    // message.embeds is an array; passing it whole produced an invalid embed, so the
+    // giveaway message silently never switched to its ended state.
+    const endedEmbed = EmbedBuilder.from(message?.embeds?.[0] || buildGiveawayEmbed(config))
       .setColor(ACCENT_COLOR_ENDED)
       .setDescription(`**Giveaway Concluded!**\n\n• **Hosted By:** <@${config.creatorId}>\n• **Winners Selected:** ${winners.length > 0 ? winners.join(', ') : '`No valid entries discovered.`'}`)
       .setFields({ name: 'Final Entries count', value: `\`${config.participants.length}\``, inline: true });
@@ -139,7 +127,7 @@ async function drawWinners(client, messageId, forceEnd = false) {
       await message.edit({ embeds: [endedEmbed], components: [] }).catch(() => null);
       
       if (winners.length > 0) {
-        await channel.send(`🎉 **Congratulations** ${winners.join(', ')}! You won the drop for **${config.prize}**!\n🔗 *Ref: https://discord.com{config.guildId}/${config.channelId}/${config.messageId}*`);
+        await channel.send(`🎉 **Congratulations** ${winners.join(', ')}! You won the drop for **${config.prize}**!\n🔗 *Ref: https://discord.com/channels/${config.guildId}/${config.channelId}/${config.messageId}*`);
       } else {
         await channel.send(`⚠️ The raffle pool for **${config.prize}** closed with no valid participants remaining.`);
       }
@@ -154,17 +142,14 @@ async function drawWinners(client, messageId, forceEnd = false) {
 
 async function handleStart(interaction, minutes, prize, targetChannel, winnersCount = 1) {
   const endsAt = new Date(Date.now() + minutes * 60 * 1000);
-  const prefixMode = isPrefixMode(interaction);
 
   if (!targetChannel.permissionsFor(interaction.guild.members.me).has(PermissionFlagsBits.SendMessages)) {
     return interaction.reply({ content: `❌ I lack the **Send Messages** permission block flag configurations within ${targetChannel}.`, flags: [MessageFlags.Ephemeral] });
   }
 
-  if (!prefixMode) await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+  await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
-  const placeholderMessage = prefixMode 
-    ? await targetChannel.send({ content: '⏳ Provisioning asset configuration data...' }) 
-    : await interaction.followUp({ content: '⏳ Deploying giveaway container...' });
+  const placeholderMessage = await interaction.followUp({ content: '⏳ Deploying giveaway container...' });
 
   const config = await Giveaway.create({
     messageId: placeholderMessage.id,
@@ -183,14 +168,10 @@ async function handleStart(interaction, minutes, prize, targetChannel, winnersCo
     components: buildGiveawayComponents(config.messageId)
   };
 
-  if (prefixMode) {
-    await placeholderMessage.edit(announcementPayload).catch(() => null);
-  } else {
-    const activeMsg = await targetChannel.send(announcementPayload);
-    config.messageId = activeMsg.id;
-    await config.save();
-    await placeholderMessage.edit({ content: `✅ Giveaway deployed into ${targetChannel}!` }).catch(() => null);
-  }
+  const activeMsg = await targetChannel.send(announcementPayload);
+  config.messageId = activeMsg.id;
+  await config.save();
+  await placeholderMessage.edit({ content: `✅ Giveaway deployed into ${targetChannel}!` }).catch(() => null);
 
   const remainingDelay = endsAt.getTime() - Date.now();
   if (remainingDelay <= 2147483647) {
@@ -222,24 +203,7 @@ module.exports = {
   async execute(interaction) {
     if (!interaction.member?.permissions?.has(PermissionFlagsBits.Administrator)) {
       const denyText = '❌ Access Denied: This utility requires **Administrator** security clearance.';
-      return isPrefixMode(interaction) ? interaction.reply({ content: denyText }) : interaction.reply({ content: denyText, flags: [MessageFlags.Ephemeral] });
-    }
-
-    if (isPrefixMode(interaction)) {
-      const parsed = parsePrefixArgs(interaction);
-      if (parsed.sub === 'start') {
-        if (!parsed.minutes || !parsed.prize) return interaction.reply({ content: '❌ Invalid args.\n**Usage:** `|giveaway start [mins] "[prize]" [#channel]`' });
-        return handleStart(interaction, parsed.minutes, parsed.prize, parsed.targetChannel);
-      }
-      if (parsed.sub === 'end') {
-        if (!parsed.messageId) return interaction.reply({ content: '❌ Specify the exact announcement message ID signature: `|giveaway end [id]`' });
-        return handleForceEnd(interaction, parsed.messageId);
-      }
-      if (parsed.sub === 'reroll') {
-        if (!parsed.messageId) return interaction.reply({ content: '❌ Specify the historical announcement message ID signature: `|giveaway reroll [id]`' });
-        return handleReroll(interaction, parsed.messageId);
-      }
-      return interaction.reply({ content: '❌ Unknown flag mapping subcommand token slot selected. Options: `start`, `end`, `reroll`.' });
+      return interaction.reply({ content: denyText, flags: [MessageFlags.Ephemeral] });
     }
 
     const sub = interaction.options.getSubcommand();
@@ -289,15 +253,13 @@ module.exports = {
         const liveProfiles = await Giveaway.find({ ended: false });
         console.log(`[Giveaway Engine] Synchronizing countdown sequences: Restored ${liveProfiles.length} active countdown instances.`);
 
-        for (const config of liveProfiles) {
-          const delay = new Date(config.endsAt).getTime() - Date.now();
-          if (delay <= 0) {
-            drawWinners(client, config.messageId).catch(() => null);
-          } else if (delay <= 2147483647) {
-            const timer = setTimeout(() => drawWinners(client, config.messageId), delay);
-            runningGiveaways.set(config.messageId, timer);
-          }
-        }
+        scheduleGiveaways(client, liveProfiles);
+        // setTimeout can't wait longer than ~24.8 days, so long giveaways are picked
+        // up by this hourly check once they get close enough.
+        setInterval(async () => {
+          const pending = await Giveaway.find({ ended: false }).catch(() => []);
+          scheduleGiveaways(client, pending);
+        }, 60 * 60 * 1000);
       } catch (err) {
         console.error('[Giveaway Engine Boot Recovery Crash]: Error matching tracking arrays:', err);
       }

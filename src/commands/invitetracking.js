@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ChannelType } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ChannelType, AuditLogEvent } = require('discord.js');
 const mongoose = require('mongoose');
 
 const inviteConfigSchema = new mongoose.Schema({
@@ -33,6 +33,10 @@ const InviteRecord = mongoose.models.InviteRecord || mongoose.model('InviteRecor
 const InviteJoin = mongoose.models.InviteJoin || mongoose.model('InviteJoin', inviteJoinSchema);
 
 const inviteCache = new Map();
+// Discord can send inviteDelete for a used-up invite before the member's join event,
+// so deleted invites are kept briefly for join attribution.
+const recentlyDeleted = new Map();
+const DELETED_INVITE_TTL_MS = 60 * 1000;
 const inviteWizard = new Map();
 
 function netInvites(record) {
@@ -63,6 +67,7 @@ async function handleMemberJoin(member, client) {
   const { guild } = member;
   const config = await InviteConfig.findOne({ guildId: guild.id }).catch(() => null);
   if (!config || !config.enabled) return;
+  if (member.user.bot) return handleBotJoin(member, config);
 
   const cachedGuild = inviteCache.get(guild.id) ?? new Map();
   const freshInvites = await guild.invites.fetch().catch(() => null);
@@ -78,10 +83,24 @@ async function handleMemberJoin(member, client) {
       inviterId = freshInvite.inviter?.id ?? cached.inviterId ?? null;
       break;
     }
-    if (!cached) {
+    // An invite the cache hasn't seen only counts if it has actually been used.
+    if (!cached && freshInvite.uses > 0) {
       usedCode = code;
       inviterId = freshInvite.inviter?.id ?? null;
       break;
+    }
+  }
+  // Discord deletes an invite when it reaches its max uses, so a single-use invite
+  // that was just used is missing from the fresh list instead of showing +1 use.
+  if (!usedCode) {
+    const deleted = recentlyDeleted.get(guild.id) ?? new Map();
+    const candidates = [...cachedGuild, ...deleted].filter(([code, info]) =>
+      !freshInvites.has(code) && info.maxUses && info.uses + 1 >= info.maxUses
+      && (!info.deletedAt || Date.now() - info.deletedAt < DELETED_INVITE_TTL_MS));
+    if (candidates.length === 1) {
+      [usedCode] = candidates[0];
+      inviterId = candidates[0][1].inviterId ?? null;
+      deleted.delete(usedCode);
     }
   }
 
@@ -120,8 +139,10 @@ async function handleMemberJoin(member, client) {
     isFake,
   }).catch(() => null);
 
-  const inviterMention = inviterId ? `<@${inviterId}>` : 'Unknown';
-  const codeStr = usedCode ?? 'Unknown';
+  // No invite changed: they came in through Server Discovery, the vanity link, or an
+  // app that adds members through OAuth (the guilds.join scope).
+  const inviterMention = inviterId ? `<@${inviterId}>` : (usedCode ? 'Unknown' : 'No invite (Discovery, vanity link or an app via OAuth)');
+  const codeStr = usedCode ?? 'none';
   const usedInvite = usedCode ? newGuildMap.get(usedCode) : null;
   const totalUses = usedInvite ? usedInvite.uses : '?';
   const maxUses = usedInvite?.maxUses;
@@ -162,7 +183,9 @@ async function handleMemberLeave(member, client) {
   if (joinRecord?.inviterId) {
     inviterRecord = await InviteRecord.findOneAndUpdate(
       { guildId: guild.id, inviterId: joinRecord.inviterId },
-      { $inc: { leaves: 1 } },
+      // A fake join was already subtracted via `fake`; counting its leave too
+      // took two invites off the inviter for one fake account.
+      { $inc: { leaves: joinRecord.isFake ? 0 : 1 } },
       { new: true }
     ).catch(() => null);
   }
@@ -202,7 +225,38 @@ function handleInviteCreate(invite) {
 function handleInviteDelete(invite) {
   const { guild, code } = invite;
   if (!guild) return;
+  const cached = inviteCache.get(guild.id)?.get(code);
   inviteCache.get(guild.id)?.delete(code);
+  if (cached) {
+    if (!recentlyDeleted.has(guild.id)) recentlyDeleted.set(guild.id, new Map());
+    const deleted = recentlyDeleted.get(guild.id);
+    deleted.set(code, { ...cached, deletedAt: Date.now() });
+    for (const [oldCode, info] of deleted) if (Date.now() - info.deletedAt > DELETED_INVITE_TTL_MS) deleted.delete(oldCode);
+  }
+}
+
+// Bots are added through OAuth, never through an invite link, so they must not be
+// matched to an invite or credited to anyone's invite count. The audit log says who
+// added the bot (needs the View Audit Log permission).
+async function handleBotJoin(member, config) {
+  const { guild } = member;
+  const logs = await guild.fetchAuditLogs({ type: AuditLogEvent.BotAdd, limit: 5 }).catch(() => null);
+  const entry = logs?.entries.find((e) => e.target?.id === member.id && Date.now() - e.createdTimestamp < 5 * 60 * 1000);
+  const addedBy = entry?.executor ? `<@${entry.executor.id}>` : 'Unknown (I need View Audit Log to see who)';
+
+  await InviteJoin.create({ guildId: guild.id, userId: member.id, inviterId: null, inviteCode: 'oauth', isFake: false }).catch(() => null);
+
+  const embed = new EmbedBuilder()
+    .setColor(0x5865f2)
+    .setTitle('🤖 Bot Added')
+    .setDescription(`${member} was added to the server through OAuth.`)
+    .addFields(
+      { name: 'Added By', value: addedBy, inline: true },
+      { name: 'Invite Code', value: 'None (OAuth)', inline: true }
+    )
+    .setThumbnail(member.user.displayAvatarURL())
+    .setTimestamp();
+  await postLogEmbed(guild, config.channelId, embed);
 }
 
 const data = new SlashCommandBuilder()

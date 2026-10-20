@@ -17,7 +17,6 @@ module.exports = {
    * Handles native app interactions and your custom text message create adapter parameters.
    */
   async execute(interaction, client) {
-    const isSlash = interaction.isChatInputCommand ? interaction.isChatInputCommand() : true;
     const author = interaction.user;
 
     // Use a safe runtime defer framework to prevent sudden client payload drop timeouts
@@ -25,20 +24,12 @@ module.exports = {
       await interaction.deferReply().catch(() => null);
     }
 
-    // Extract the raw text question across mock frameworks and slash arrays
-    let question = null;
-    if (interaction.options && typeof interaction.options.getSubcommand !== 'function') {
-      // Fetched via prefix message create adapter mapping configurations
-      question = interaction.options.getString('question');
-    } else if (interaction.options) {
-      // Fetched via native application interaction options UI row
-      question = interaction.options.getString('question');
-    }
+    const question = interaction.options.getString('question');
 
     // Fallback: If no query string was parsed, deliver syntax usage context menu
     if (!question || question.trim().length === 0) {
-      const usageNotice = '❌ **Invalid Syntax:** Please provide a question! Example: `|8ball will I win this game?`';
-      return isSlash && interaction.deferred
+      const usageNotice = '❌ **Invalid Syntax:** Please provide a question! Example: `/8ball question:will I win this game?`';
+      return interaction.deferred
         ? interaction.editReply({ content: usageNotice })
         : interaction.reply({ content: usageNotice, ephemeral: true });
     }
@@ -89,13 +80,9 @@ module.exports = {
       .setTimestamp();
 
     // Deploy data packet payload structure safely back to the chat room channel thread
-    if (isSlash && (interaction.deferred || interaction.replied)) {
+    if ((interaction.deferred || interaction.replied)) {
       return await interaction.editReply({ embeds: [crystalBallEmbed] });
-    } else if (isSlash) {
+    } else
       return await interaction.reply({ embeds: [crystalBallEmbed] });
-    } else {
-      // Fail-safe catch block for nested manual function calls
-      return await interaction.channel.send({ embeds: [crystalBallEmbed] });
-    }
   }
 };

@@ -100,8 +100,8 @@ const wizardSessions = new Map();
 // ─── Subcommand Handlers ─────────────────────────────────────────────────────
 
 async function handleSetup(interaction) {
-  // Allow direct set via prefix or slash with an argument
-  const direct = interaction.options?.getChannel?.('channel');
+  // Allow setting the channel directly with the command's argument
+  const direct = interaction.options.getChannel('channel');
   if (direct) {
     const config = await getOrCreateConfig(interaction.guildId);
     config.channelId = direct.id;
@@ -488,7 +488,20 @@ async function execute(interaction, client) {
 
 // ─── handleReaction ──────────────────────────────────────────────────────────
 
-async function handleReaction(reaction, user, added, client) {
+// Reactions on the same message are processed one at a time; two stars arriving
+// together at the threshold both created a starboard post.
+const reactionQueues = new Map();
+
+function handleReaction(reaction, user, added, client) {
+  const key = reaction.message.id;
+  const run = (reactionQueues.get(key) || Promise.resolve())
+    .then(() => processReaction(reaction, user, added, client));
+  reactionQueues.set(key, run);
+  run.finally(() => { if (reactionQueues.get(key) === run) reactionQueues.delete(key); });
+  return run;
+}
+
+async function processReaction(reaction, user, added, client) {
   try {
     if (user.bot) return;
     if (!reaction.message.guild) return;
@@ -542,6 +555,13 @@ async function handleReaction(reaction, user, added, client) {
 
     const starboardChannel = await client.channels.fetch(config.channelId).catch(() => null);
     if (!starboardChannel) return;
+
+    // Don't repost NSFW messages to a non-NSFW starboard, or messages from channels
+    // @everyone can't see (e.g. staff-only) to a starboard @everyone can see.
+    const everyone = message.guild.roles.everyone;
+    if (message.channel?.nsfw && !starboardChannel.nsfw) return;
+    if (!message.channel?.permissionsFor(everyone)?.has(PermissionFlagsBits.ViewChannel)
+      && starboardChannel.permissionsFor(everyone)?.has(PermissionFlagsBits.ViewChannel)) return;
 
     let entry = await StarboardEntry.findOne({ originalMsgId: message.id });
 
