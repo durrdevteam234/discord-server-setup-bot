@@ -1,5 +1,5 @@
 const { Events, EmbedBuilder, AttachmentBuilder } = require('discord.js');
-const { readData } = require('../utils/database');
+const { readData, findOne } = require('../utils/database');
 const { generateWelcomeImage } = require('../utils/welcomeImage');
 
 function resolveMessage(template, member, guild) {
@@ -19,6 +19,14 @@ module.exports = {
       // ── Leave Message ────────────────────────────────────────────
       try {
         const settings = (await readData('settings.json')) || {};
+        // /setup saves the welcome channel on the guild config rather than in
+        // settings.json (where /welcome saves it), so fall back to that one.
+        if (!settings[guild.id]?.welcomeChannelId) {
+          const guildConfig = await findOne({ guildId: guild.id }).catch(() => null);
+          if (guildConfig?.welcomeChannelId) {
+            settings[guild.id] = { ...(settings[guild.id] || {}), welcomeChannelId: guildConfig.welcomeChannelId };
+          }
+        }
         const serverSettings = settings[guild.id] || {};
         if (serverSettings.welcomeEnabled !== false) {
           const channelId = serverSettings.welcomeChannelId;
