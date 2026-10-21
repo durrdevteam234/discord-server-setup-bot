@@ -300,7 +300,8 @@ client.once('ready', async () => {
   }
 });
 
-const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
+// Strip quotes pasted around the value in a hosting panel; they make the URI invalid.
+const MONGO_URI = (process.env.MONGO_URI || process.env.MONGODB_URI || '').trim().replace(/^["']|["']$/g, '');
 if (MONGO_URI) {
   // A failed first connection used to be final: the bot ran with no database
   // (no welcomes, analytics, tickets...) until someone restarted it. Retry
