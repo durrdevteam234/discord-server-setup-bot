@@ -302,12 +302,25 @@ client.once('ready', async () => {
 
 const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
 if (MONGO_URI) {
-  console.log('📊 [DATABASE] Connecting to MongoDB...');
-  mongoose.connect(MONGO_URI).then(() => {
-    console.log('✅ [DATABASE] MongoDB connected.');
-  }).catch(err => {
-    console.error('❌ [DATABASE] MongoDB connection failed:', err.message);
-  });
+  // A failed first connection used to be final: the bot ran with no database
+  // (no welcomes, analytics, tickets...) until someone restarted it. Retry
+  // every 30 seconds instead, and say clearly why it's failing.
+  const connectMongo = () => {
+    console.log('📊 [DATABASE] Connecting to MongoDB...');
+    mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 15000 }).then(() => {
+      console.log('✅ [DATABASE] MongoDB connected.');
+    }).catch(err => {
+      console.error('❌ [DATABASE] MongoDB connection failed:', err.message);
+      if (/whitelist|IP|ECONNREFUSED|timed out|Server selection/i.test(err.message)) {
+        console.error('   ↳ Usually means MongoDB Atlas is blocking this host. In Atlas → Network Access, allow this server\'s IP (or 0.0.0.0/0).');
+      } else if (/auth|password|bad auth/i.test(err.message)) {
+        console.error('   ↳ The username or password in MONGO_URI is wrong.');
+      }
+      console.error('   ↳ Retrying in 30 seconds.');
+      setTimeout(connectMongo, 30000);
+    });
+  };
+  connectMongo();
 } else {
   console.warn('⚠️ [DATABASE] No MONGO_URI / MONGODB_URI found.');
 }
