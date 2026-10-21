@@ -158,19 +158,5 @@ module.exports = [
         scheduleSync(newGuild);
       }
     },
-  },
-  {
-    name: Events.RoleCreate,
-    once: false,
-    async execute(role) {
-      scheduleSync(role.guild);
-    },
-  },
-  {
-    name: Events.RoleDelete,
-    once: false,
-    async execute(role) {
-      scheduleSync(role.guild);
-    },
-  },
+  }
 ];
