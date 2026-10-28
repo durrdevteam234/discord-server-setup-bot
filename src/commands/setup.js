@@ -1,8 +1,9 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ChannelType } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ChannelType, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
 const { logAction } = require('../utils/auditLog');
 const database = require('../utils/database'); // Points to your live MongoDB model connection
 const { formatCute } = require('../utils/textFormatter.js'); 
 const mongoose = require('mongoose');
+const { exportLayout, readLayoutAttachment, planImport, applyImport } = require('../utils/layoutFile');
 
 const setupTemplateSchema = new mongoose.Schema({
   guildId: { type: String, required: true },
@@ -76,6 +77,74 @@ async function handleRestore(interaction) {
   return interaction.editReply({ content: restored.length ? `Restored **${restored.join(', ')}** from setup template **${name}**.` : 'Nothing was restored from that template.' });
 }
 
+async function handleExport(interaction) {
+  const layout = exportLayout(interaction.guild);
+  const safeName = interaction.guild.name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'server';
+  const file = new AttachmentBuilder(Buffer.from(JSON.stringify(layout, null, 2)), { name: `${safeName}-layout.json` });
+  return interaction.reply({
+    content: `📦 Here's this server's layout: **${layout.roles.length} roles** and **${layout.channels.length} channels** (with permissions).
+Keep the file somewhere safe. Use \`/setup import\` on any server to rebuild it.`,
+    files: [file],
+    ephemeral: true,
+  });
+}
+
+async function handleImport(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+  let layout;
+  try {
+    layout = await readLayoutAttachment(interaction.options.getAttachment('file'));
+  } catch (error) {
+    return interaction.editReply({ content: `❌ ${error.message}` });
+  }
+
+  const plan = planImport(interaction.guild, layout);
+  const adding = plan.roles.length + plan.categories.length + plan.channels.length;
+  if (!adding) return interaction.editReply({ content: '✅ This server already has everything in that file. Nothing to add.' });
+
+  const preview = new EmbedBuilder()
+    .setColor('#5865F2')
+    .setTitle('📥 Import server layout')
+    .setDescription(`From **${layout.source}**${layout.exportedAt ? ` (saved <t:${Math.floor(new Date(layout.exportedAt).getTime() / 1000)}:R>)` : ''}.
+Nothing on this server will be changed or deleted. I'll only add what's missing.`)
+    .addFields(
+      { name: 'Roles to add', value: `${plan.roles.length}`, inline: true },
+      { name: 'Categories to add', value: `${plan.categories.length}`, inline: true },
+      { name: 'Channels to add', value: `${plan.channels.length}`, inline: true },
+      { name: 'Already here (skipped)', value: `${plan.skipped}`, inline: true },
+    );
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('layout-import-confirm').setLabel('Build it').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('layout-import-cancel').setLabel('Cancel').setStyle(ButtonStyle.Secondary),
+  );
+  const message = await interaction.editReply({ embeds: [preview], components: [row] });
+
+  const choice = await message.awaitMessageComponent({
+    componentType: ComponentType.Button,
+    filter: (button) => button.user.id === interaction.user.id,
+    time: 120000,
+  }).catch(() => null);
+  if (!choice || choice.customId === 'layout-import-cancel') {
+    return interaction.editReply({ content: choice ? 'Import cancelled.' : 'Import timed out. Run `/setup import` again.', embeds: [], components: [] });
+  }
+  await choice.update({ content: '🏗️ Building... this can take a minute for big layouts.', embeds: [], components: [] });
+
+  const result = await applyImport(interaction.guild, plan, {
+    reason: `Layout import by ${interaction.user.tag}`,
+    onProgress: (text) => interaction.editReply({ content: `🏗️ ${text}` }),
+  });
+  try { await logAction(interaction.guild, 'Layout Imported', interaction.user, `From: ${layout.source}, roles: ${result.roles}, channels: ${result.channels}`); } catch (e) {}
+
+  const failed = result.failed.length
+    ? `
+⚠️ Couldn't create ${result.failed.length}: ${result.failed.slice(0, 10).join(', ')}${result.failed.length > 10 ? ', ...' : ''}. Check that my role is high enough and I have Manage Roles and Manage Channels.`
+    : '';
+  const trimmed = result.trimmed.length
+    ? `\nℹ️ I left some permissions off ${result.trimmed.slice(0, 10).join(', ')}${result.trimmed.length > 10 ? ', ...' : ''} because I don't have them myself. An admin can add them in Server Settings.`
+    : '';
+  return interaction.editReply({ content: `✅ Done! Added **${result.roles} roles** and **${result.channels} channels**.${failed}${trimmed}` });
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('setup')
@@ -117,6 +186,13 @@ module.exports = {
       .addStringOption(option => option.setName('section').setDescription('Data to restore').setRequired(true).addChoices(
         { name: 'Roles', value: 'roles' }, { name: 'Channels', value: 'channels' }, { name: 'Automessages', value: 'automessages' }, { name: 'Reaction-role panels', value: 'reactionroles' }, { name: 'Saved settings', value: 'config' }
       )))
+    .addSubcommand(sub => sub
+      .setName('export')
+      .setDescription('Download this server\'s roles, channels and permissions as a file'))
+    .addSubcommand(sub => sub
+      .setName('import')
+      .setDescription('Rebuild a server layout from a file made with /setup export')
+      .addAttachmentOption(option => option.setName('file').setDescription('The .json layout file').setRequired(true)))
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
   name: 'setup',
 
@@ -131,13 +207,15 @@ module.exports = {
 
     const subcommand = interaction.options.getSubcommand();
     if (subcommand === 'backup') return handleBackup(interaction);
+    if (subcommand === 'export') return handleExport(interaction);
     // Provisioning creates an Administrator role (and can delete every channel), and
     // restore can recreate roles with any saved permissions, so both need Administrator,
     // not just Manage Server.
     if (!memberExecutor.permissions.has(PermissionFlagsBits.Administrator)) {
-      return interaction.reply({ content: '❌ Provisioning and restoring templates require **Administrator**.', ephemeral: true });
+      return interaction.reply({ content: '❌ Provisioning, restoring and importing layouts require **Administrator**.', ephemeral: true });
     }
     if (subcommand === 'restore') return handleRestore(interaction);
+    if (subcommand === 'import') return handleImport(interaction);
     await interaction.deferReply({ ephemeral: true });
 
     const template = interaction.options.getString('template');
